@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 
 const ENLACES = [
+  { href: '/venta', etiqueta: 'Vender' },
   { href: '/dashboard', etiqueta: 'Resumen del día' },
   { href: '/productos', etiqueta: 'Productos' },
 ];
