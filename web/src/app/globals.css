@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+:root {
+  /* Papel: fondo cálido, no el cream+terracota genérico */
+  --papel: #f6f3ec;
+  --papel-linea: #e4ddc9;
+  --tinta: #1c2b3a; /* azul-noche, texto y acciones principales */
+  --tinta-suave: #4c5c6b;
+  --ambar: #d98c2b; /* alertas de stock, montos por cobrar */
+  --verde-ganancia: #2f6f4f; /* ganancia real */
+  --rojo-perdida: #b6462f; /* mermas / pérdidas */
+
+  --background: var(--papel);
+  --foreground: var(--tinta);
+}
+
+@theme inline {
+  --color-papel: var(--papel);
+  --color-papel-linea: var(--papel-linea);
+  --color-tinta: var(--tinta);
+  --color-tinta-suave: var(--tinta-suave);
+  --color-ambar: var(--ambar);
+  --color-verde-ganancia: var(--verde-ganancia);
+  --color-rojo-perdida: var(--rojo-perdida);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-display: var(--font-space-grotesk);
+  --font-sans: var(--font-inter);
+  --font-ticket: var(--font-ibm-plex-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+/* Borde tipo ticket perforado, para separar secciones del "recibo" */
+.borde-perforado {
+  border-top: 1px dashed var(--papel-linea);
+}
