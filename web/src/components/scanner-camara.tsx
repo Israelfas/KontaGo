@@ -34,16 +34,32 @@ export function ScannerCamara({ onDetectado, onCerrar, confirmacion }: ScannerCa
   const ultimoDetectadoRef = useRef<{ codigo: string; en: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-      // TRY_HARDER: análisis más exhaustivo por cuadro (más costo de CPU,
-      // pero mucho más tolerante a códigos borrosos, en ángulo, o leídos
-      // desde la pantalla de otro dispositivo en vez de papel impreso).
-      const hints = new Map();
-      hints.set(DecodeHintType.TRY_HARDER, true);
-      const reader = new BrowserMultiFormatReader(hints);
-      let cancelado = false;
-      let timeoutId: ReturnType<typeof setTimeout> | null = null;
-      function manejarDeteccion(resultado: { getText(): string } | undefined) {
+  useEffect(() => {
+    // Bug conocido de Chromium en Android: al abrir la cámara, el
+    // navegador intenta configurar automáticamente opciones de foto
+    // (autoenfoque, etc.) vía una API interna, y en varios modelos eso
+    // falla con "setPhotoOptions failed". Es inofensivo para el escaneo,
+    // pero si no se atrapa, tira abajo toda la app React. Lo ignoramos
+    // puntualmente sin afectar otros errores reales.
+    function ignorarBugSetPhotoOptions(evento: PromiseRejectionEvent) {
+      const mensaje =
+        evento.reason instanceof Error ? evento.reason.message : String(evento.reason);
+      if (mensaje.includes('setPhotoOptions')) {
+        evento.preventDefault();
+      }
+    }
+    window.addEventListener('unhandledrejection', ignorarBugSetPhotoOptions);
+
+    // TRY_HARDER: análisis más exhaustivo por cuadro (más costo de CPU,
+    // pero mucho más tolerante a códigos borrosos, en ángulo, o leídos
+    // desde la pantalla de otro dispositivo en vez de papel impreso).
+    const hints = new Map();
+    hints.set(DecodeHintType.TRY_HARDER, true);
+    const reader = new BrowserMultiFormatReader(hints);
+    let cancelado = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    function manejarDeteccion(resultado: { getText(): string } | undefined) {
       if (cancelado || !resultado) return;
 
       const codigo = resultado.getText();
@@ -123,6 +139,7 @@ export function ScannerCamara({ onDetectado, onCerrar, confirmacion }: ScannerCa
       cancelado = true;
       if (timeoutId) clearTimeout(timeoutId);
       controlsRef.current?.stop();
+      window.removeEventListener('unhandledrejection', ignorarBugSetPhotoOptions);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- solo debe iniciar/detener la cámara al montar/desmontar
   }, []);
