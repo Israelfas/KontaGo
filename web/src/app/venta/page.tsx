@@ -3,6 +3,7 @@
 import { useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
+import { ScannerCamara } from '@/components/scanner-camara';
 import { useAuth } from '@/lib/auth-context';
 import { buscarPorCodigoBarras, crearVenta, ApiError } from '@/lib/api';
 import { formatearCentavos } from '@/lib/formato';
@@ -24,6 +25,8 @@ function ContenidoVenta() {
   const [errorVenta, setErrorVenta] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
   const [ventaConfirmada, setVentaConfirmada] = useState<Venta | null>(null);
+  const [camaraActiva, setCamaraActiva] = useState(false);
+  const [confirmacionEscaneo, setConfirmacionEscaneo] = useState<string | null>(null);
 
   const inputCodigoRef = useRef<HTMLInputElement>(null);
 
@@ -57,6 +60,8 @@ function ContenidoVenta() {
         return [...prev, { producto, cantidad: 1 }];
       });
       setCodigoInput('');
+      setConfirmacionEscaneo(producto.nombre);
+      setTimeout(() => setConfirmacionEscaneo(null), 1200);
     } catch (err) {
       setErrorBusqueda(
         err instanceof ApiError ? err.message : 'No se pudo buscar el producto',
@@ -194,6 +199,23 @@ function ContenidoVenta() {
           <p className="mt-2 text-sm text-rojo-perdida">{errorBusqueda}</p>
         )}
       </form>
+        
+        <div className="mt-3">
+        {camaraActiva ? (
+          <ScannerCamara
+            onDetectado={(codigo) => buscarYAgregar(codigo)}
+            onCerrar={() => setCamaraActiva(false)}
+            confirmacion={confirmacionEscaneo}
+          />
+        ) : (
+          <button
+            onClick={() => setCamaraActiva(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-papel-linea py-3 text-sm text-tinta-suave transition-colors hover:border-tinta hover:text-tinta"
+          >
+            📷 Escanear con la cámara
+          </button>
+        )}
+      </div>
 
       {carrito.length === 0 ? (
         <p className="mt-8 text-sm text-tinta-suave">
