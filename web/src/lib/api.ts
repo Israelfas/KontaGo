@@ -1,4 +1,12 @@
-import type { Producto, ResumenDelDia, TokenPair, Venta } from './tipos';
+import type {
+  AlertasProductos,
+  MotivoMerma,
+  Producto,
+  ResumenDelDia,
+  ResumenMovimientosDelDia,
+  TokenPair,
+  Venta,
+} from './tipos';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
@@ -128,4 +136,54 @@ export function crearVenta(token: string, dto: CrearVentaInput): Promise<Venta> 
 
 export function obtenerResumenDelDia(token: string): Promise<ResumenDelDia> {
   return apiFetch<ResumenDelDia>('/ventas/resumen-dia', { token });
+}
+
+// --- Inventario ---
+
+export interface RegistrarAbastecimientoInput {
+  productoId: string;
+  cantidad: number;
+  costoUnitarioCentavos: number;
+  proveedor?: string;
+}
+
+export function registrarAbastecimiento(
+  token: string,
+  dto: RegistrarAbastecimientoInput,
+) {
+  return apiFetch('/inventario/abastecimiento', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(dto),
+  });
+}
+
+export interface RegistrarMermaInput {
+  productoId: string;
+  cantidad: number;
+  motivo: MotivoMerma;
+}
+
+export function registrarMerma(token: string, dto: RegistrarMermaInput) {
+  return apiFetch('/inventario/merma', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(dto),
+  });
+}
+
+export function obtenerResumenInventarioDelDia(
+  token: string,
+): Promise<ResumenMovimientosDelDia> {
+  return apiFetch<ResumenMovimientosDelDia>('/inventario/resumen-dia', {
+    token,
+  });
+}
+
+export function obtenerAlertas(
+  token: string,
+  diasVencimiento?: number,
+): Promise<AlertasProductos> {
+  const query = diasVencimiento ? `?diasVencimiento=${diasVencimiento}` : '';
+  return apiFetch<AlertasProductos>(`/productos/alertas${query}`, { token });
 }

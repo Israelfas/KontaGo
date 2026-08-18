@@ -2,6 +2,8 @@
 
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import { AuthShell } from '@/components/auth-shell';
+import { Button, ErrorState } from '@/components/ui';
 import { useAuth } from '@/lib/auth-context';
 import { ApiError } from '@/lib/api';
 
@@ -12,8 +14,8 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
-  async function manejarSubmit(e: FormEvent) {
-    e.preventDefault();
+  async function manejarSubmit(evento: FormEvent) {
+    evento.preventDefault();
     setError(null);
     setEnviando(true);
     try {
@@ -26,72 +28,66 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-papel px-6">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <h1 className="font-display text-2xl font-bold tracking-tight text-tinta">
-            Konta<span className="text-ambar">Go</span>
-          </h1>
-          <p className="mt-1 text-sm text-tinta-suave">
-            El celular reemplaza la caja registradora.
-          </p>
-        </div>
-
-        <form
-          onSubmit={manejarSubmit}
-          className="rounded-lg border border-papel-linea bg-white/50 p-6"
-        >
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-tinta-suave">
-                Email
-              </label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-md border border-papel-linea bg-white px-3 py-2 text-sm text-tinta outline-none focus:border-tinta"
-                placeholder="admin@tutienda.com"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-tinta-suave">
-                Contraseña
-              </label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-md border border-papel-linea bg-white px-3 py-2 text-sm text-tinta outline-none focus:border-tinta"
-                placeholder="••••••••"
-              />
-            </div>
-          </div>
-
-          {error && (
-            <p className="mt-4 rounded-md bg-rojo-perdida/10 px-3 py-2 text-sm text-rojo-perdida">
-              {error}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={enviando}
-            className="mt-6 w-full rounded-md bg-tinta py-2.5 text-sm font-medium text-papel transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
-            {enviando ? 'Ingresando…' : 'Ingresar'}
-          </button>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-tinta-suave">
+    <AuthShell
+      eyebrow="Bienvenido de vuelta"
+      title="Entrá a tu operación"
+      description="Todo lo que necesitás para atender, cobrar y controlar tu tienda en un solo lugar."
+      footer={
+        <>
           ¿Todavía no tenés tienda?{' '}
-          <Link href="/registro" className="font-medium text-tinta underline">
+          <Link
+            href="/registro"
+            className="font-semibold text-tinta underline decoration-ambar decoration-2 underline-offset-4 hover:text-ambar"
+          >
             Registrá tu negocio
           </Link>
-        </p>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <form onSubmit={manejarSubmit} className="app-card p-5 sm:p-6">
+        <div className="space-y-4">
+          <div>
+            <label className="field-label" htmlFor="email">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(evento) => setEmail(evento.target.value)}
+              className="field"
+              placeholder="admin@tutienda.com"
+            />
+          </div>
+          <div>
+            <label className="field-label" htmlFor="password">
+              Contraseña
+            </label>
+            <input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(evento) => setPassword(evento.target.value)}
+              className="field"
+              placeholder="••••••••"
+            />
+          </div>
+        </div>
+
+        {error && (
+          <div className="mt-4">
+            <ErrorState>{error}</ErrorState>
+          </div>
+        )}
+
+        <Button type="submit" disabled={enviando} className="mt-6 w-full">
+          {enviando ? 'Ingresando…' : 'Ingresar a KontaGo'}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }
