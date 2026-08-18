@@ -1,8 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { LessThanOrEqual, Repository } from 'typeorm';
 import { Producto } from './entities/producto.entity';
 import { CrearProductoDto } from './dto/crear-producto.dto';
+import { AlertasProductosDto } from './dto/alertas-productos.dto';
 
 @Injectable()
 export class ProductosService {
@@ -57,5 +58,43 @@ export class ProductosService {
       where: { tenantId, activo: true },
       order: { nombre: 'ASC' },
     });
+  }
+
+  /**
+   * Alertas configurables (sección 3.5 del spec):
+   * - Stock bajo: el umbral es por producto (stockMinimo), no global.
+   *   Un producto con stockMinimo=0 nunca alerta (0 = "no me importa
+   *   este umbral para este producto", el default al crear un producto).
+   * - Por vencer: productos con fecha de vencimiento dentro de los
+   *   próximos `diasVencimiento` días. Es "tiempo configurable por el
+   *   usuario" vía parámetro, con 7 días de default.
+   */
+  async obtenerAlertas(
+    tenantId: string,
+    diasVencimiento = 7,
+  ): Promise<AlertasProductosDto> {
+    const todosActivos = await this.productoRepo.find({
+      where: { tenantId, activo: true },
+      order: { nombre: 'ASC' },
+    });
+
+    const stockBajo = todosActivos.filter(
+      (p) => p.stockMinimo > 0 && p.stock <= p.stockMinimo,
+    );
+
+    const limiteVencimiento = new Date();
+    limiteVencimiento.setDate(limiteVencimiento.getDate() + diasVencimiento);
+    limiteVencimiento.setHours(23, 59, 59, 999);
+
+    const porVencer = await this.productoRepo.find({
+      where: {
+        tenantId,
+        activo: true,
+        fechaVencimiento: LessThanOrEqual(limiteVencimiento),
+      },
+      order: { fechaVencimiento: 'ASC' },
+    });
+
+    return { stockBajo, porVencer };
   }
 }

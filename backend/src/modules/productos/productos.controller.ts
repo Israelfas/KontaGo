@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -33,5 +41,14 @@ export class ProductosController {
       user.tenantId,
       codigoBarras,
     );
+  }
+
+  @Get('alertas')
+  alertas(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('diasVencimiento') diasVencimiento?: string,
+  ) {
+    const dias = diasVencimiento ? parseInt(diasVencimiento, 10) : undefined;
+    return this.productosService.obtenerAlertas(user.tenantId, dias);
   }
 }

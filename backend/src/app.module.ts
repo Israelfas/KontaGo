@@ -6,6 +6,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ProductosModule } from './modules/productos/productos.module';
 import { VentasModule } from './modules/ventas/ventas.module';
+import { InventarioModule } from './modules/inventario/inventario.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -36,6 +37,7 @@ import { AppService } from './app.service';
     AuthModule,
     ProductosModule,
     VentasModule,
+    InventarioModule,
   ],
   controllers: [AppController],
   providers: [AppService],
