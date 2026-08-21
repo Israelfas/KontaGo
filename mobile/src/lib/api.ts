@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import type {
   AlertasProductos,
   MotivoMerma,
@@ -8,7 +9,13 @@ import type {
   Venta,
 } from './tipos';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+// A diferencia del web (que corre en el mismo host que el backend en dev),
+// un celular físico necesita la IP de LAN de la PC, no "localhost" — eso
+// apuntaría al propio celular. Se configura en app.json > expo.extra.apiUrl
+// (ver README de mobile/ para instrucciones).
+const API_URL =
+  (Constants.expoConfig?.extra?.apiUrl as string | undefined) ??
+  'http://localhost:3000';
 
 export class ApiError extends Error {
   constructor(
@@ -23,7 +30,7 @@ export class ApiError extends Error {
 /**
  * Wrapper central de fetch. Todas las llamadas al backend pasan por acá,
  * así el manejo de errores, el header de auth y la base URL están en un
- * solo lugar.
+ * solo lugar. Idéntico en espíritu al de web/src/lib/api.ts.
  */
 async function apiFetch<T>(
   path: string,
@@ -41,23 +48,24 @@ async function apiFetch<T>(
   });
 
   if (!response.ok) {
-    // El backend siempre devuelve { message, error, statusCode } en errores.
     const body = await response.json().catch(() => null);
     const mensaje = Array.isArray(body?.message)
-      ? body.message.join(', ') // errores de validación vienen como array
+      ? body.message.join(', ')
       : (body?.message ?? `Error ${response.status}`);
     throw new ApiError(mensaje, response.status);
   }
 
-  // Algunos endpoints (204) no devuelven body.
   if (response.status === 204) {
     return undefined as T;
   }
 
-  // Leemos como texto primero: un body vacío (ej. la ruta de escanear
-  // código de barras responde "null" cuando no encuentra el producto,
-  // pero en algunas condiciones de red esto puede llegar vacío) no
-  // debería tumbar la app con un error de parseo de JSON.
+  // Leemos como texto primero en vez de llamar response.json() directo:
+  // en algunos casos (respuesta con body vacío o cortada, común al leer
+  // desde un dispositivo físico sobre WiFi) response.json() explota con
+  // "Unexpected end of input" en vez de simplemente no tener nada que
+  // parsear. Un cuerpo vacío es un caso legítimo (ej. la ruta de
+  // escanear código de barras responde el JSON "null" cuando no
+  // encuentra el producto) y no debería tratarse como una falla.
   const texto = await response.text();
   if (!texto) {
     return undefined as T;

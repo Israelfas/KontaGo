@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
+import { Button, ErrorState, LoadingState, MetricCard, PageHeader } from '@/components/ui';
+import { ReceiptIcon, SparklesIcon } from '@/components/icons';
 import { useAuth } from '@/lib/auth-context';
 import { obtenerResumenDelDia, ApiError } from '@/lib/api';
 import { formatearCentavos } from '@/lib/formato';
@@ -14,14 +16,22 @@ function ContenidoDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
 
-  useEffect(() => {
+  function cargar() {
     if (!token) return;
+    setCargando(true);
+    setError(null);
     obtenerResumenDelDia(token)
       .then(setResumen)
       .catch((err) =>
         setError(err instanceof ApiError ? err.message : 'No se pudo cargar el resumen'),
       )
       .finally(() => setCargando(false));
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const fechaLegible = resumen
@@ -30,64 +40,60 @@ function ContenidoDashboard() {
         day: 'numeric',
         month: 'long',
       })
-    : '';
+    : undefined;
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10">
-      <h1 className="font-display text-2xl font-bold tracking-tight text-tinta">
-        Resumen del día
-      </h1>
-      <p className="mt-1 text-sm text-tinta-suave capitalize">{fechaLegible}</p>
+    <div className="app-page">
+      <div className="app-container">
+        <PageHeader
+          eyebrow="Cierre del día"
+          title="Resumen del día"
+          description={fechaLegible ? fechaLegible[0].toUpperCase() + fechaLegible.slice(1) : undefined}
+        />
 
-      {cargando && (
-        <p className="mt-8 font-ticket text-sm text-tinta-suave">Cargando…</p>
-      )}
+        <div className="mt-8">
+          {cargando && <LoadingState label="Cargando resumen…" />}
 
-      {error && (
-        <p className="mt-8 rounded-md bg-rojo-perdida/10 px-4 py-3 text-sm text-rojo-perdida">
-          {error}
-        </p>
-      )}
+          {error && !cargando && (
+            <ErrorState action={<Button variant="secondary" onClick={cargar}>Reintentar</Button>}>
+              {error}
+            </ErrorState>
+          )}
 
-      {resumen && (
-        <div className="mt-8 max-w-sm rounded-lg border border-papel-linea bg-white/60 p-6 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wide text-tinta-suave">
-              Ventas de hoy
-            </span>
-            <span className="font-ticket text-sm text-tinta">
-              {resumen.cantidadVentas}
-            </span>
-          </div>
+          {resumen && !cargando && !error && (
+            <div className="space-y-6">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <MetricCard
+                  label="Ventas de hoy"
+                  value={resumen.cantidadVentas}
+                  icon={<ReceiptIcon className="h-5 w-5" />}
+                />
+                <MetricCard
+                  label="Ingreso bruto"
+                  value={formatearCentavos(resumen.ingresoBrutoCentavos)}
+                />
+                <MetricCard
+                  label="Ganancia real"
+                  value={formatearCentavos(resumen.gananciaCentavos)}
+                  icon={<SparklesIcon className="h-5 w-5" />}
+                  tone="success"
+                />
+              </div>
 
-          <div className="borde-perforado my-4" />
+              <p className="max-w-md text-xs text-tinta-suave">
+                La ganancia es el margen (venta − costo) de cada producto vendido, no el
+                ingreso bruto.
+              </p>
 
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-tinta-suave">Ingreso bruto</span>
-            <span className="font-ticket text-base text-tinta">
-              {formatearCentavos(resumen.ingresoBrutoCentavos)}
-            </span>
-          </div>
-
-          <div className="mt-2 flex items-center justify-between">
-            <span className="text-sm font-medium text-tinta">Ganancia real</span>
-            <span className="font-ticket text-xl font-semibold text-verde-ganancia">
-              {formatearCentavos(resumen.gananciaCentavos)}
-            </span>
-          </div>
-
-          <p className="mt-4 text-xs text-tinta-suave">
-            La ganancia es el margen (venta − costo) de cada producto vendido,
-            no el ingreso bruto.
-          </p>
+              {resumen.cantidadVentas === 0 && (
+                <p className="text-sm text-tinta-suave">
+                  Todavía no registraste ninguna venta hoy.
+                </p>
+              )}
+            </div>
+          )}
         </div>
-      )}
-
-      {resumen && resumen.cantidadVentas === 0 && (
-        <p className="mt-4 text-sm text-tinta-suave">
-          Todavía no registraste ninguna venta hoy.
-        </p>
-      )}
+      </div>
     </div>
   );
 }

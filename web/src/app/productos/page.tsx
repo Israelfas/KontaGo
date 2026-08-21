@@ -3,6 +3,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
+import { Button, EmptyState, ErrorState, LoadingState, PageHeader } from '@/components/ui';
+import { BoxIcon, PlusIcon } from '@/components/icons';
 import { useAuth } from '@/lib/auth-context';
 import { listarProductos, crearProducto, ApiError } from '@/lib/api';
 import { formatearCentavos } from '@/lib/formato';
@@ -10,11 +12,12 @@ import type { Producto } from '@/lib/tipos';
 
 function FormularioNuevoProducto({
   onCreado,
+  onCerrar,
 }: {
   onCreado: (p: Producto) => void;
+  onCerrar: () => void;
 }) {
   const { token } = useAuth();
-  const [abierto, setAbierto] = useState(false);
   const [codigoBarras, setCodigoBarras] = useState('');
   const [nombre, setNombre] = useState('');
   const [precioVenta, setPrecioVenta] = useState('');
@@ -41,12 +44,7 @@ function FormularioNuevoProducto({
         stockInicial: stockInicial ? parseInt(stockInicial, 10) : undefined,
       });
       onCreado(producto);
-      setCodigoBarras('');
-      setNombre('');
-      setPrecioVenta('');
-      setCostoUnitario('');
-      setStockInicial('');
-      setAbierto(false);
+      onCerrar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo crear el producto');
     } finally {
@@ -54,114 +52,139 @@ function FormularioNuevoProducto({
     }
   }
 
-  if (!abierto) {
-    return (
-      <button
-        onClick={() => setAbierto(true)}
-        className="rounded-md bg-tinta px-4 py-2 text-sm font-medium text-papel transition-opacity hover:opacity-90"
-      >
-        + Nuevo producto
-      </button>
-    );
-  }
-
   return (
-    <form
-      onSubmit={manejarSubmit}
-      className="rounded-lg border border-papel-linea bg-white/60 p-5"
-    >
+    <form onSubmit={manejarSubmit} className="app-card p-5 sm:p-6">
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2">
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-tinta-suave">
+          <label className="field-label" htmlFor="producto-codigo">
             Código de barras
           </label>
           <input
+            id="producto-codigo"
             required
             value={codigoBarras}
             onChange={(e) => setCodigoBarras(e.target.value)}
-            className="w-full rounded-md border border-papel-linea bg-white px-3 py-2 font-ticket text-sm text-tinta outline-none focus:border-tinta"
+            className="field font-ticket"
             placeholder="7791234567890"
           />
         </div>
         <div className="col-span-2">
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-tinta-suave">
+          <label className="field-label" htmlFor="producto-nombre">
             Nombre
           </label>
           <input
+            id="producto-nombre"
             required
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
-            className="w-full rounded-md border border-papel-linea bg-white px-3 py-2 text-sm text-tinta outline-none focus:border-tinta"
+            className="field"
             placeholder="Coca Cola 500ml"
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-tinta-suave">
+          <label className="field-label" htmlFor="producto-precio">
             Precio de venta
           </label>
           <input
+            id="producto-precio"
             required
             type="number"
             step="0.01"
             min="0"
             value={precioVenta}
             onChange={(e) => setPrecioVenta(e.target.value)}
-            className="w-full rounded-md border border-papel-linea bg-white px-3 py-2 font-ticket text-sm text-tinta outline-none focus:border-tinta"
-            placeholder="1500.00"
+            className="field font-ticket"
+            placeholder="1.50"
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-tinta-suave">
+          <label className="field-label" htmlFor="producto-costo">
             Costo unitario
           </label>
           <input
+            id="producto-costo"
             type="number"
             step="0.01"
             min="0"
             value={costoUnitario}
             onChange={(e) => setCostoUnitario(e.target.value)}
-            className="w-full rounded-md border border-papel-linea bg-white px-3 py-2 font-ticket text-sm text-tinta outline-none focus:border-tinta"
-            placeholder="900.00"
+            className="field font-ticket"
+            placeholder="0.90"
           />
         </div>
         <div className="col-span-2">
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-tinta-suave">
+          <label className="field-label" htmlFor="producto-stock">
             Stock inicial
           </label>
           <input
+            id="producto-stock"
             type="number"
             min="0"
             value={stockInicial}
             onChange={(e) => setStockInicial(e.target.value)}
-            className="w-full rounded-md border border-papel-linea bg-white px-3 py-2 font-ticket text-sm text-tinta outline-none focus:border-tinta"
+            className="field font-ticket"
             placeholder="20"
           />
         </div>
       </div>
 
       {error && (
-        <p className="mt-4 rounded-md bg-rojo-perdida/10 px-3 py-2 text-sm text-rojo-perdida">
+        <p className="mt-4 rounded-lg bg-rojo-perdida/10 px-3 py-2 text-sm text-rojo-perdida">
           {error}
         </p>
       )}
 
-      <div className="mt-4 flex gap-2">
-        <button
-          type="submit"
-          disabled={enviando}
-          className="rounded-md bg-tinta px-4 py-2 text-sm font-medium text-papel transition-opacity hover:opacity-90 disabled:opacity-50"
-        >
+      <div className="mt-5 flex gap-2">
+        <Button type="submit" variant="primary" disabled={enviando}>
           {enviando ? 'Guardando…' : 'Guardar producto'}
-        </button>
-        <button
-          type="button"
-          onClick={() => setAbierto(false)}
-          className="rounded-md px-4 py-2 text-sm text-tinta-suave hover:bg-papel-linea/60"
-        >
+        </Button>
+        <Button type="button" variant="ghost" onClick={onCerrar}>
           Cancelar
-        </button>
+        </Button>
       </div>
     </form>
+  );
+}
+
+function TablaProductos({ productos }: { productos: Producto[] }) {
+  return (
+    <div className="table-shell">
+      <table className="w-full text-left text-sm">
+        <thead>
+          <tr className="table-header">
+            <th className="px-4 py-3">Producto</th>
+            <th className="px-4 py-3">Código</th>
+            <th className="px-4 py-3 text-right">Precio</th>
+            <th className="px-4 py-3 text-right">Stock</th>
+          </tr>
+        </thead>
+        <tbody>
+          {productos.map((p) => {
+            const stockBajo = p.stock <= p.stockMinimo && p.stockMinimo > 0;
+            return (
+              <tr key={p.id} className="border-t border-papel-linea">
+                <td className="px-4 py-3 text-tinta">{p.nombre}</td>
+                <td className="px-4 py-3 font-ticket text-xs text-tinta-suave">
+                  {p.codigoBarras}
+                </td>
+                <td className="px-4 py-3 text-right font-ticket text-tinta">
+                  {formatearCentavos(p.precioVentaCentavos)}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  {stockBajo ? (
+                    <span className="status-pill status-pill-warning font-ticket">
+                      {p.stock}
+                    </span>
+                  ) : (
+                    <span className="font-ticket text-tinta">{p.stock}</span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -170,82 +193,72 @@ function ContenidoProductos() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [formularioAbierto, setFormularioAbierto] = useState(false);
 
-  useEffect(() => {
+  function cargar() {
     if (!token) return;
+    setCargando(true);
+    setError(null);
     listarProductos(token)
       .then(setProductos)
       .catch((err) =>
-        setError(err instanceof ApiError ? err.message : 'No se pudo cargar el inventario'),
+        setError(err instanceof ApiError ? err.message : 'No se pudo cargar el catálogo'),
       )
       .finally(() => setCargando(false));
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10">
-      <div className="flex items-center justify-between">
-        <h1 className="font-display text-2xl font-bold tracking-tight text-tinta">
-          Productos
-        </h1>
-        <FormularioNuevoProducto
-          onCreado={(p) => setProductos((prev) => [p, ...prev])}
+    <div className="app-page">
+      <div className="app-container">
+        <PageHeader
+          eyebrow="Catálogo"
+          title="Productos"
+          description="Gestioná los artículos de tu tienda: precio, costo y stock."
+          action={
+            !formularioAbierto && (
+              <Button variant="primary" onClick={() => setFormularioAbierto(true)}>
+                <PlusIcon className="h-4 w-4" />
+                Nuevo producto
+              </Button>
+            )
+          }
         />
-      </div>
 
-      {cargando && (
-        <p className="mt-8 font-ticket text-sm text-tinta-suave">Cargando…</p>
-      )}
+        <div className="mt-8 space-y-6">
+          {formularioAbierto && (
+            <FormularioNuevoProducto
+              onCreado={(p) => setProductos((prev) => [p, ...prev])}
+              onCerrar={() => setFormularioAbierto(false)}
+            />
+          )}
 
-      {error && (
-        <p className="mt-8 rounded-md bg-rojo-perdida/10 px-4 py-3 text-sm text-rojo-perdida">
-          {error}
-        </p>
-      )}
+          {cargando && <LoadingState label="Cargando catálogo…" />}
 
-      {!cargando && !error && productos.length === 0 && (
-        <p className="mt-8 text-sm text-tinta-suave">
-          Todavía no cargaste ningún producto. Usá &ldquo;+ Nuevo producto&rdquo; para
-          empezar.
-        </p>
-      )}
+          {error && !cargando && (
+            <ErrorState action={<Button variant="secondary" onClick={cargar}>Reintentar</Button>}>
+              {error}
+            </ErrorState>
+          )}
 
-      {productos.length > 0 && (
-        <div className="mt-8 overflow-hidden rounded-lg border border-papel-linea">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-papel-linea/40 text-xs uppercase tracking-wide text-tinta-suave">
-              <tr>
-                <th className="px-4 py-3 font-medium">Producto</th>
-                <th className="px-4 py-3 font-medium">Código</th>
-                <th className="px-4 py-3 text-right font-medium">Precio</th>
-                <th className="px-4 py-3 text-right font-medium">Stock</th>
-              </tr>
-            </thead>
-            <tbody>
-              {productos.map((p) => {
-                const stockBajo = p.stock <= p.stockMinimo && p.stockMinimo > 0;
-                return (
-                  <tr key={p.id} className="border-t border-papel-linea">
-                    <td className="px-4 py-3 text-tinta">{p.nombre}</td>
-                    <td className="px-4 py-3 font-ticket text-xs text-tinta-suave">
-                      {p.codigoBarras}
-                    </td>
-                    <td className="px-4 py-3 text-right font-ticket text-tinta">
-                      {formatearCentavos(p.precioVentaCentavos)}
-                    </td>
-                    <td
-                      className={`px-4 py-3 text-right font-ticket ${
-                        stockBajo ? 'font-semibold text-ambar' : 'text-tinta'
-                      }`}
-                    >
-                      {p.stock}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          {!cargando && !error && productos.length === 0 && (
+            <EmptyState
+              icon={<BoxIcon className="h-6 w-6" />}
+              title="Todavía no hay productos"
+              description='Usá "Nuevo producto" para empezar a cargar tu catálogo.'
+            />
+          )}
+
+          {!cargando && !error && productos.length > 0 && (
+            <TablaProductos productos={productos} />
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

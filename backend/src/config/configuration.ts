@@ -24,6 +24,23 @@ export default () => ({
     port: parseInt(process.env.REDIS_PORT || '6379', 10),
   },
 
+  smtp: {
+    host: process.env.SMTP_HOST || '',
+    port: parseInt(process.env.SMTP_PORT || '587', 10),
+    // true para el puerto 465 (SSL implícito); false + STARTTLS para 587/25.
+    secure: process.env.SMTP_SECURE === 'true',
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || '',
+    from: process.env.SMTP_FROM || 'KontaGo <no-reply@kontago.local>',
+  },
+
+  alertas: {
+    diasVencimientoDefault: parseInt(
+      process.env.ALERTAS_DIAS_VENCIMIENTO || '7',
+      10,
+    ),
+  },
+
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET || 'change-me-access-secret',
     // Segundos (número), no string ('15m'): así @nestjs/jwt tipa expiresIn

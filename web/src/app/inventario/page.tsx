@@ -3,6 +3,16 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
+import {
+  Button,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  MetricCard,
+  PageHeader,
+  SectionHeader,
+} from '@/components/ui';
+import { AlertIcon, BoxIcon, MinusIcon, PlusIcon } from '@/components/icons';
 import { useAuth } from '@/lib/auth-context';
 import {
   listarProductos,
@@ -23,7 +33,7 @@ import {
 
 // --- Resumen del día (egreso por abastecimiento + pérdida por merma) ---
 
-function TarjetaResumenInventario({
+function TarjetasResumenInventario({
   resumen,
 }: {
   resumen: ResumenMovimientosDelDia | null;
@@ -31,31 +41,24 @@ function TarjetaResumenInventario({
   if (!resumen) return null;
 
   return (
-    <div className="grid grid-cols-2 gap-4">
-      <div className="rounded-lg border border-papel-linea bg-white/60 p-5">
-        <span className="text-xs font-medium uppercase tracking-wide text-tinta-suave">
-          Gastado en abastecimiento hoy
-        </span>
-        <p className="mt-2 font-ticket text-xl font-semibold text-tinta">
-          {formatearCentavos(resumen.egresoCentavos)}
-        </p>
-        <p className="mt-1 text-xs text-tinta-suave">
-          {resumen.cantidadAbastecimientos}{' '}
-          {resumen.cantidadAbastecimientos === 1 ? 'movimiento' : 'movimientos'}
-        </p>
-      </div>
-      <div className="rounded-lg border border-papel-linea bg-white/60 p-5">
-        <span className="text-xs font-medium uppercase tracking-wide text-tinta-suave">
-          Pérdida por merma hoy
-        </span>
-        <p className="mt-2 font-ticket text-xl font-semibold text-rojo-perdida">
-          {formatearCentavos(resumen.perdidaCentavos)}
-        </p>
-        <p className="mt-1 text-xs text-tinta-suave">
-          {resumen.cantidadMermas}{' '}
-          {resumen.cantidadMermas === 1 ? 'movimiento' : 'movimientos'}
-        </p>
-      </div>
+    <div className="grid gap-4 sm:grid-cols-2">
+      <MetricCard
+        label="Gastado en abastecimiento hoy"
+        value={formatearCentavos(resumen.egresoCentavos)}
+        detail={`${resumen.cantidadAbastecimientos} ${
+          resumen.cantidadAbastecimientos === 1 ? 'movimiento' : 'movimientos'
+        }`}
+        icon={<PlusIcon className="h-5 w-5" />}
+      />
+      <MetricCard
+        label="Pérdida por merma hoy"
+        value={formatearCentavos(resumen.perdidaCentavos)}
+        detail={`${resumen.cantidadMermas} ${
+          resumen.cantidadMermas === 1 ? 'movimiento' : 'movimientos'
+        }`}
+        icon={<MinusIcon className="h-5 w-5" />}
+        tone="danger"
+      />
     </div>
   );
 }
@@ -63,20 +66,23 @@ function TarjetaResumenInventario({
 // --- Selector de producto compartido por ambos formularios ---
 
 function SelectorProducto({
+  id,
   productos,
   value,
   onChange,
 }: {
+  id: string;
   productos: Producto[];
   value: string;
   onChange: (id: string) => void;
 }) {
   return (
     <select
+      id={id}
       required
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-md border border-papel-linea bg-white px-3 py-2 text-sm text-tinta outline-none focus:border-tinta"
+      className="field"
     >
       <option value="" disabled>
         Elegí un producto…
@@ -136,23 +142,26 @@ function FormularioAbastecimiento({
   }
 
   return (
-    <form
-      onSubmit={manejarSubmit}
-      className="rounded-lg border border-papel-linea bg-white/60 p-5"
-    >
-      <h2 className="font-display text-base font-semibold text-tinta">
-        Abastecimiento
-      </h2>
-      <p className="mt-1 text-xs text-tinta-suave">
-        Suma stock y recalcula el costo promedio del producto.
-      </p>
-
-      <div className="mt-4 grid gap-4">
+    <form onSubmit={manejarSubmit} className="app-card p-5 sm:p-6">
+      <div className="flex items-center gap-2.5">
+        <span className="metric-icon !relative !z-auto !mt-0">
+          <PlusIcon className="h-4 w-4" />
+        </span>
         <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-tinta-suave">
+          <h2 className="font-display text-base font-bold text-tinta">Abastecimiento</h2>
+          <p className="text-xs text-tinta-suave">
+            Suma stock y recalcula el costo promedio del producto.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 space-y-4">
+        <div>
+          <label className="field-label" htmlFor="abastecimiento-producto">
             Producto
           </label>
           <SelectorProducto
+            id="abastecimiento-producto"
             productos={productos}
             value={productoId}
             onChange={setProductoId}
@@ -160,61 +169,65 @@ function FormularioAbastecimiento({
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-tinta-suave">
+            <label className="field-label" htmlFor="abastecimiento-cantidad">
               Cantidad
             </label>
             <input
+              id="abastecimiento-cantidad"
               required
               type="number"
               min="1"
               value={cantidad}
               onChange={(e) => setCantidad(e.target.value)}
-              className="w-full rounded-md border border-papel-linea bg-white px-3 py-2 font-ticket text-sm text-tinta outline-none focus:border-tinta"
+              className="field font-ticket"
               placeholder="50"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-tinta-suave">
+            <label className="field-label" htmlFor="abastecimiento-costo">
               Costo unitario
             </label>
             <input
+              id="abastecimiento-costo"
               required
               type="number"
               step="0.01"
               min="0"
               value={costoUnitario}
               onChange={(e) => setCostoUnitario(e.target.value)}
-              className="w-full rounded-md border border-papel-linea bg-white px-3 py-2 font-ticket text-sm text-tinta outline-none focus:border-tinta"
-              placeholder="900.00"
+              className="field font-ticket"
+              placeholder="0.90"
             />
           </div>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-tinta-suave">
+          <label className="field-label" htmlFor="abastecimiento-proveedor">
             Proveedor (opcional)
           </label>
           <input
+            id="abastecimiento-proveedor"
             value={proveedor}
             onChange={(e) => setProveedor(e.target.value)}
-            className="w-full rounded-md border border-papel-linea bg-white px-3 py-2 text-sm text-tinta outline-none focus:border-tinta"
+            className="field"
             placeholder="Distribuidora Central"
           />
         </div>
       </div>
 
       {error && (
-        <p className="mt-4 rounded-md bg-rojo-perdida/10 px-3 py-2 text-sm text-rojo-perdida">
+        <p className="mt-4 rounded-lg bg-rojo-perdida/10 px-3 py-2 text-sm text-rojo-perdida">
           {error}
         </p>
       )}
 
-      <button
+      <Button
         type="submit"
+        variant="primary"
         disabled={enviando || !productoId}
-        className="mt-4 rounded-md bg-tinta px-4 py-2 text-sm font-medium text-papel transition-opacity hover:opacity-90 disabled:opacity-50"
+        className="mt-5 w-full"
       >
         {enviando ? 'Registrando…' : 'Registrar abastecimiento'}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -260,21 +273,26 @@ function FormularioMerma({
   }
 
   return (
-    <form
-      onSubmit={manejarSubmit}
-      className="rounded-lg border border-papel-linea bg-white/60 p-5"
-    >
-      <h2 className="font-display text-base font-semibold text-tinta">Merma</h2>
-      <p className="mt-1 text-xs text-tinta-suave">
-        Descuenta stock y valoriza la pérdida a costo, no a precio de venta.
-      </p>
-
-      <div className="mt-4 grid gap-4">
+    <form onSubmit={manejarSubmit} className="app-card p-5 sm:p-6">
+      <div className="flex items-center gap-2.5">
+        <span className="metric-icon !relative !z-auto !mt-0 !bg-rojo-perdida/10 !text-rojo-perdida">
+          <MinusIcon className="h-4 w-4" />
+        </span>
         <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-tinta-suave">
+          <h2 className="font-display text-base font-bold text-tinta">Merma</h2>
+          <p className="text-xs text-tinta-suave">
+            Descuenta stock y valoriza la pérdida a costo, no a precio de venta.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 space-y-4">
+        <div>
+          <label className="field-label" htmlFor="merma-producto">
             Producto
           </label>
           <SelectorProducto
+            id="merma-producto"
             productos={productos}
             value={productoId}
             onChange={setProductoId}
@@ -282,28 +300,30 @@ function FormularioMerma({
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-tinta-suave">
+            <label className="field-label" htmlFor="merma-cantidad">
               Cantidad
             </label>
             <input
+              id="merma-cantidad"
               required
               type="number"
               min="1"
               value={cantidad}
               onChange={(e) => setCantidad(e.target.value)}
-              className="w-full rounded-md border border-papel-linea bg-white px-3 py-2 font-ticket text-sm text-tinta outline-none focus:border-tinta"
+              className="field font-ticket"
               placeholder="3"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-tinta-suave">
+            <label className="field-label" htmlFor="merma-motivo">
               Motivo
             </label>
             <select
+              id="merma-motivo"
               required
               value={motivo}
               onChange={(e) => setMotivo(e.target.value as MotivoMerma)}
-              className="w-full rounded-md border border-papel-linea bg-white px-3 py-2 text-sm text-tinta outline-none focus:border-tinta"
+              className="field"
             >
               {MOTIVOS.map((m) => (
                 <option key={m} value={m}>
@@ -316,18 +336,19 @@ function FormularioMerma({
       </div>
 
       {error && (
-        <p className="mt-4 rounded-md bg-rojo-perdida/10 px-3 py-2 text-sm text-rojo-perdida">
+        <p className="mt-4 rounded-lg bg-rojo-perdida/10 px-3 py-2 text-sm text-rojo-perdida">
           {error}
         </p>
       )}
 
-      <button
+      <Button
         type="submit"
+        variant="danger"
         disabled={enviando || !productoId}
-        className="mt-4 rounded-md bg-rojo-perdida px-4 py-2 text-sm font-medium text-papel transition-opacity hover:opacity-90 disabled:opacity-50"
+        className="mt-5 w-full"
       >
         {enviando ? 'Registrando…' : 'Registrar merma'}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -337,22 +358,24 @@ function FormularioMerma({
 function TablaAlertas({ alertas }: { alertas: AlertasProductos | null }) {
   if (!alertas) return null;
 
-  const sinAlertas =
-    alertas.stockBajo.length === 0 && alertas.porVencer.length === 0;
+  const sinAlertas = alertas.stockBajo.length === 0 && alertas.porVencer.length === 0;
 
   if (sinAlertas) {
     return (
-      <p className="text-sm text-tinta-suave">
-        No hay alertas de stock bajo ni de vencimiento por ahora.
-      </p>
+      <EmptyState
+        icon={<AlertIcon className="h-6 w-6" />}
+        title="Todo en orden"
+        description="No hay alertas de stock bajo ni de vencimiento por ahora."
+      />
     );
   }
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-5 sm:grid-cols-2">
       {alertas.stockBajo.length > 0 && (
-        <div className="overflow-hidden rounded-lg border border-papel-linea">
-          <div className="bg-ambar/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-ambar">
+        <div className="table-shell">
+          <div className="table-header flex items-center gap-1.5 px-4 py-2.5">
+            <AlertIcon className="h-3.5 w-3.5 text-ambar" />
             Stock bajo
           </div>
           <table className="w-full text-left text-sm">
@@ -360,8 +383,10 @@ function TablaAlertas({ alertas }: { alertas: AlertasProductos | null }) {
               {alertas.stockBajo.map((p) => (
                 <tr key={p.id} className="border-t border-papel-linea">
                   <td className="px-4 py-3 text-tinta">{p.nombre}</td>
-                  <td className="px-4 py-3 text-right font-ticket font-semibold text-ambar">
-                    {p.stock} / mín. {p.stockMinimo}
+                  <td className="px-4 py-3 text-right">
+                    <span className="status-pill status-pill-warning font-ticket">
+                      {p.stock} / mín. {p.stockMinimo}
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -371,8 +396,9 @@ function TablaAlertas({ alertas }: { alertas: AlertasProductos | null }) {
       )}
 
       {alertas.porVencer.length > 0 && (
-        <div className="overflow-hidden rounded-lg border border-papel-linea">
-          <div className="bg-rojo-perdida/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-rojo-perdida">
+        <div className="table-shell">
+          <div className="table-header flex items-center gap-1.5 px-4 py-2.5">
+            <AlertIcon className="h-3.5 w-3.5 text-rojo-perdida" />
             Por vencer
           </div>
           <table className="w-full text-left text-sm">
@@ -380,13 +406,15 @@ function TablaAlertas({ alertas }: { alertas: AlertasProductos | null }) {
               {alertas.porVencer.map((p) => (
                 <tr key={p.id} className="border-t border-papel-linea">
                   <td className="px-4 py-3 text-tinta">{p.nombre}</td>
-                  <td className="px-4 py-3 text-right font-ticket text-rojo-perdida">
-                    {p.fechaVencimiento
-                      ? new Date(p.fechaVencimiento + 'T00:00:00').toLocaleDateString('es', {
-                          day: 'numeric',
-                          month: 'short',
-                        })
-                      : '—'}
+                  <td className="px-4 py-3 text-right">
+                    <span className="status-pill status-pill-danger font-ticket">
+                      {p.fechaVencimiento
+                        ? new Date(p.fechaVencimiento + 'T00:00:00').toLocaleDateString('es', {
+                            day: 'numeric',
+                            month: 'short',
+                          })
+                        : '—'}
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -411,6 +439,7 @@ function ContenidoInventario() {
 
   async function cargarTodo() {
     if (!token) return;
+    setError(null);
     try {
       const [productosResp, resumenResp, alertasResp] = await Promise.all([
         listarProductos(token),
@@ -421,9 +450,7 @@ function ContenidoInventario() {
       setResumen(resumenResp);
       setAlertas(alertasResp);
     } catch (err) {
-      setError(
-        err instanceof ApiError ? err.message : 'No se pudo cargar el inventario',
-      );
+      setError(err instanceof ApiError ? err.message : 'No se pudo cargar el inventario');
     } finally {
       setCargando(false);
     }
@@ -436,48 +463,54 @@ function ContenidoInventario() {
   }, [token]);
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10">
-      <h1 className="font-display text-2xl font-bold tracking-tight text-tinta">
-        Inventario
-      </h1>
+    <div className="app-page">
+      <div className="app-container">
+        <PageHeader
+          eyebrow="Control de stock"
+          title="Inventario"
+          description="Registrá entradas y pérdidas de mercadería, y revisá las alertas de tu catálogo."
+        />
 
-      {cargando && (
-        <p className="mt-8 font-ticket text-sm text-tinta-suave">Cargando…</p>
-      )}
+        <div className="mt-8">
+          {cargando && <LoadingState label="Cargando inventario…" />}
 
-      {error && (
-        <p className="mt-8 rounded-md bg-rojo-perdida/10 px-4 py-3 text-sm text-rojo-perdida">
-          {error}
-        </p>
-      )}
+          {error && !cargando && (
+            <ErrorState action={<Button variant="secondary" onClick={cargarTodo}>Reintentar</Button>}>
+              {error}
+            </ErrorState>
+          )}
 
-      {!cargando && !error && (
-        <div className="mt-8 grid gap-8">
-          <TarjetaResumenInventario resumen={resumen} />
+          {!cargando && !error && (
+            <div className="space-y-8">
+              <TarjetasResumenInventario resumen={resumen} />
 
-          {esAdmin &&
-            (productos.length === 0 ? (
-              <p className="text-sm text-tinta-suave">
-                Todavía no hay productos cargados. Agregá alguno en
-                &ldquo;Productos&rdquo; antes de registrar movimientos.
-              </p>
-            ) : (
-              <div className="grid grid-cols-2 gap-6">
-                <FormularioAbastecimiento productos={productos} onRegistrado={cargarTodo} />
-                <FormularioMerma productos={productos} onRegistrado={cargarTodo} />
+              {esAdmin &&
+                (productos.length === 0 ? (
+                  <EmptyState
+                    icon={<BoxIcon className="h-6 w-6" />}
+                    title="Todavía no hay productos"
+                    description="Agregá alguno en la sección Productos antes de registrar movimientos de inventario."
+                  />
+                ) : (
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    <FormularioAbastecimiento productos={productos} onRegistrado={cargarTodo} />
+                    <FormularioMerma productos={productos} onRegistrado={cargarTodo} />
+                  </div>
+                ))}
+
+              <div>
+                <SectionHeader
+                  title="Alertas"
+                  description="Stock por debajo del mínimo y productos próximos a vencer."
+                />
+                <div className="mt-4">
+                  <TablaAlertas alertas={alertas} />
+                </div>
               </div>
-            ))}
-
-          <div>
-            <h2 className="font-display text-base font-semibold text-tinta">
-              Alertas
-            </h2>
-            <div className="mt-3">
-              <TablaAlertas alertas={alertas} />
             </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
