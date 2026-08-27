@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
 import { Button, ErrorState, LoadingState, MetricCard, PageHeader } from '@/components/ui';
-import { ReceiptIcon, SparklesIcon } from '@/components/icons';
+import { CartIcon, ReceiptIcon, SparklesIcon } from '@/components/icons';
 import { useAuth } from '@/lib/auth-context';
 import { obtenerResumenDelDia, ApiError } from '@/lib/api';
 import { formatearCentavos } from '@/lib/formato';
@@ -41,6 +42,10 @@ function ContenidoDashboard() {
         month: 'long',
       })
     : undefined;
+  const margenPorcentaje =
+    resumen && resumen.ingresoBrutoCentavos > 0
+      ? Math.round((resumen.gananciaCentavos / resumen.ingresoBrutoCentavos) * 100)
+      : 0;
 
   return (
     <div className="app-page">
@@ -61,7 +66,44 @@ function ContenidoDashboard() {
           )}
 
           {resumen && !cargando && !error && (
-            <div className="space-y-6">
+            <div className="space-y-8">
+              <section className="dashboard-hero" aria-label="Desempeño del día">
+                <div className="dashboard-hero-copy">
+                  <span className="dashboard-hero-kicker">
+                    <SparklesIcon className="h-4 w-4" />
+                    Pulso de la tienda
+                  </span>
+                  <p className="dashboard-hero-label">Ganancia real acumulada</p>
+                  <p className="dashboard-hero-value">
+                    {formatearCentavos(resumen.gananciaCentavos)}
+                  </p>
+                  <p className="dashboard-hero-description">
+                    {resumen.cantidadVentas > 0
+                      ? `Tu margen representa el ${margenPorcentaje}% de lo vendido hoy.`
+                      : 'Empezá una venta para ver el desempeño de tu día.'}
+                  </p>
+                  <Link href="/venta" className="button button-primary dashboard-hero-action">
+                    <CartIcon className="h-4 w-4" />
+                    Ir a vender
+                  </Link>
+                </div>
+
+                <div className="dashboard-hero-summary">
+                  <div className="dashboard-hero-ring" aria-hidden="true">
+                    <span>{margenPorcentaje}%</span>
+                    <small>margen</small>
+                  </div>
+                  <div className="dashboard-hero-summary-copy">
+                    <span>Ingreso bruto</span>
+                    <strong>{formatearCentavos(resumen.ingresoBrutoCentavos)}</strong>
+                    <span>
+                      {resumen.cantidadVentas} venta{resumen.cantidadVentas === 1 ? '' : 's'}
+                      {' '}registrada{resumen.cantidadVentas === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                </div>
+              </section>
+
               <div className="grid gap-4 sm:grid-cols-3">
                 <MetricCard
                   label="Ventas de hoy"
@@ -80,16 +122,13 @@ function ContenidoDashboard() {
                 />
               </div>
 
-              <p className="max-w-md text-xs text-tinta-suave">
-                La ganancia es el margen (venta − costo) de cada producto vendido, no el
-                ingreso bruto.
-              </p>
-
-              {resumen.cantidadVentas === 0 && (
-                <p className="text-sm text-tinta-suave">
-                  Todavía no registraste ninguna venta hoy.
+              <div className="dashboard-nota">
+                <ReceiptIcon className="h-4 w-4 shrink-0 text-ambar" />
+                <p>
+                  La ganancia es el margen (venta − costo) de cada producto vendido, no el
+                  ingreso bruto.
                 </p>
-              )}
+              </div>
             </div>
           )}
         </div>

@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../lib/auth-context';
 import { ApiError } from '../lib/api';
+import { AuthFrame } from '../components/auth-frame';
 import { Boton, Etiqueta, estilosCampo } from '../components/ui';
 import { colores, espaciado } from '../theme/colores';
 import type { AuthStackParamList } from '../navigation/AuthNavigator';
@@ -37,81 +37,89 @@ export function RegistroScreen({ navigation }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.contenedor}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
-      >
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <Text style={styles.titulo}>Registrá tu tienda</Text>
+    <AuthFrame
+      eyebrow="Empezá hoy"
+      titulo="Creá tu espacio"
+      descripcion="Configurá tu tienda en minutos. Vas a quedar como administrador para empezar a operar."
+      icono="sparkles-outline"
+      footer={
+        <Boton variante="ghost" onPress={() => navigation.navigate('Login')}>
+          Ya tengo cuenta, quiero ingresar
+        </Boton>
+      }
+    >
+      <View style={styles.campos}>
+        <Etiqueta>Nombre de la tienda</Etiqueta>
+        <TextInput
+          value={nombreTienda}
+          onChangeText={setNombreTienda}
+          style={estilosCampo.input}
+          placeholder="Mi Tienda"
+          placeholderTextColor={colores.tintaSuave}
+          autoComplete="organization"
+          returnKeyType="next"
+        />
 
-          <Etiqueta>Nombre de la tienda</Etiqueta>
-          <TextInput
-            value={nombreTienda}
-            onChangeText={setNombreTienda}
-            style={estilosCampo.input}
-            placeholder="Mi Tienda"
-          />
+        <Etiqueta>Tu nombre</Etiqueta>
+        <TextInput
+          value={nombreAdmin}
+          onChangeText={setNombreAdmin}
+          style={estilosCampo.input}
+          placeholder="Tu nombre"
+          placeholderTextColor={colores.tintaSuave}
+          autoComplete="name"
+          returnKeyType="next"
+        />
 
-          <Etiqueta>Tu nombre</Etiqueta>
-          <TextInput
-            value={nombreAdmin}
-            onChangeText={setNombreAdmin}
-            style={estilosCampo.input}
-            placeholder="Isra Fas"
-          />
+        <Etiqueta>Correo</Etiqueta>
+        <TextInput
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          style={estilosCampo.input}
+          placeholder="admin@tutienda.com"
+          placeholderTextColor={colores.tintaSuave}
+          autoComplete="email"
+          returnKeyType="next"
+        />
 
-          <Etiqueta>Correo</Etiqueta>
-          <TextInput
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            style={estilosCampo.input}
-            placeholder="admin@tutienda.com"
-          />
+        <Etiqueta>Contraseña</Etiqueta>
+        <TextInput
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          style={estilosCampo.input}
+          placeholder="Mínimo 6 caracteres"
+          placeholderTextColor={colores.tintaSuave}
+          autoComplete="new-password"
+          returnKeyType="go"
+          onSubmitEditing={manejarSubmit}
+        />
 
-          <Etiqueta>Contraseña</Etiqueta>
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            style={estilosCampo.input}
-            placeholder="••••••••"
-          />
+        {error && (
+          <View style={styles.error}>
+            <Text style={styles.errorTexto}>{error}</Text>
+          </View>
+        )}
 
-          {error && <Text style={styles.error}>{error}</Text>}
-
-          <Boton onPress={manejarSubmit} cargando={cargando} style={{ marginTop: espaciado.sm }}>
-            Crear cuenta
-          </Boton>
-
-          <Boton
-            variante="ghost"
-            onPress={() => navigation.navigate('Login')}
-            style={{ marginTop: espaciado.sm }}
-          >
-            Ya tengo cuenta
-          </Boton>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        <Boton onPress={manejarSubmit} cargando={cargando} style={{ marginTop: espaciado.sm }}>
+          Crear mi tienda
+        </Boton>
+      </View>
+    </AuthFrame>
   );
 }
 
 const styles = StyleSheet.create({
-  contenedor: { flex: 1, backgroundColor: colores.papel },
-  scroll: { flexGrow: 1, justifyContent: 'center', padding: espaciado.xl },
-  titulo: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: colores.tinta,
-    textAlign: 'center',
-    marginBottom: espaciado.xl,
-  },
+  campos: { gap: espaciado.xs },
   error: {
-    color: colores.rojoPerdida,
-    fontSize: 13,
+    backgroundColor: 'rgba(182,70,47,0.08)',
+    borderColor: 'rgba(182,70,47,0.2)',
+    borderRadius: 10,
+    borderWidth: 1,
     marginBottom: espaciado.sm,
+    padding: espaciado.sm,
   },
+  errorTexto: { color: colores.rojoPerdida, fontSize: 13, textAlign: 'center' },
 });

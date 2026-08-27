@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { Text, TextInput, View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../lib/auth-context';
 import { ApiError } from '../lib/api';
+import { AuthFrame } from '../components/auth-frame';
 import { Boton, Etiqueta, estilosCampo } from '../components/ui';
 import { colores, espaciado } from '../theme/colores';
 import type { AuthStackParamList } from '../navigation/AuthNavigator';
@@ -32,72 +32,67 @@ export function LoginScreen({ navigation }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.contenedor}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
-      >
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <Text style={styles.logo}>KontaGo</Text>
-          <Text style={styles.titulo}>Iniciar sesión</Text>
+    <AuthFrame
+      eyebrow="Bienvenido de vuelta"
+      titulo="Tu tienda, bajo control"
+      descripcion="Entrá para cobrar, revisar tu inventario y cerrar el día desde un solo lugar."
+      icono="shield-checkmark-outline"
+      footer={
+        <Boton variante="ghost" onPress={() => navigation.navigate('Registro')}>
+          ¿No tenés cuenta? Registrá tu tienda
+        </Boton>
+      }
+    >
+      <View style={styles.campos}>
+        <Etiqueta>Correo</Etiqueta>
+        <TextInput
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          style={estilosCampo.input}
+          placeholder="admin@tutienda.com"
+          placeholderTextColor={colores.tintaSuave}
+          autoComplete="email"
+          returnKeyType="next"
+        />
 
-          <Etiqueta>Correo</Etiqueta>
-          <TextInput
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            style={estilosCampo.input}
-            placeholder="admin@tutienda.com"
-          />
+        <Etiqueta>Contraseña</Etiqueta>
+        <TextInput
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          style={estilosCampo.input}
+          placeholder="••••••••"
+          placeholderTextColor={colores.tintaSuave}
+          autoComplete="password"
+          returnKeyType="go"
+          onSubmitEditing={manejarSubmit}
+        />
 
-          <Etiqueta>Contraseña</Etiqueta>
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            style={estilosCampo.input}
-            placeholder="••••••••"
-          />
+        {error && (
+          <View style={styles.error}>
+            <Text style={styles.errorTexto}>{error}</Text>
+          </View>
+        )}
 
-          {error && <Text style={styles.error}>{error}</Text>}
-
-          <Boton onPress={manejarSubmit} cargando={cargando} style={{ marginTop: espaciado.sm }}>
-            Entrar
-          </Boton>
-
-          <Boton
-            variante="ghost"
-            onPress={() => navigation.navigate('Registro')}
-            style={{ marginTop: espaciado.sm }}
-          >
-            ¿No tenés cuenta? Registrá tu tienda
-          </Boton>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        <Boton onPress={manejarSubmit} cargando={cargando} style={{ marginTop: espaciado.sm }}>
+          Ingresar a KontaGo
+        </Boton>
+      </View>
+    </AuthFrame>
   );
 }
 
 const styles = StyleSheet.create({
-  contenedor: { flex: 1, backgroundColor: colores.papel },
-  scroll: { flexGrow: 1, justifyContent: 'center', padding: espaciado.xl },
-  logo: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: colores.tinta,
-    textAlign: 'center',
-    marginBottom: espaciado.xs,
-  },
-  titulo: {
-    fontSize: 15,
-    color: colores.tintaSuave,
-    textAlign: 'center',
-    marginBottom: espaciado.xl,
-  },
+  campos: { gap: espaciado.xs },
   error: {
-    color: colores.rojoPerdida,
-    fontSize: 13,
+    backgroundColor: 'rgba(182,70,47,0.08)',
+    borderColor: 'rgba(182,70,47,0.2)',
+    borderRadius: 10,
+    borderWidth: 1,
     marginBottom: espaciado.sm,
+    padding: espaciado.sm,
   },
+  errorTexto: { color: colores.rojoPerdida, fontSize: 13, textAlign: 'center' },
 });
