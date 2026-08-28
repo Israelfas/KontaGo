@@ -15,6 +15,7 @@ export interface Producto {
   stock: number;
   stockMinimo: number;
   fechaVencimiento: string | null;
+  ivaExento: boolean;
   activo: boolean;
 }
 
@@ -24,6 +25,7 @@ export interface VentaItem {
   cantidad: number;
   precioVentaCentavos: number;
   costoUnitarioCentavos: number;
+  ivaCentavos: number;
 }
 
 export interface Venta {
@@ -33,6 +35,10 @@ export interface Venta {
   vueltoCentavos: number;
   items: VentaItem[];
   createdAt: string;
+  // totalCentavos ya incluye IVA. Estos dos son el desglose (base
+  // imponible + IVA), calculados por el backend a partir de los items.
+  ivaCentavos: number;
+  subtotalCentavos: number;
 }
 
 export interface ResumenDelDia {
@@ -40,6 +46,7 @@ export interface ResumenDelDia {
   cantidadVentas: number;
   ingresoBrutoCentavos: number;
   gananciaCentavos: number;
+  ivaCentavos: number;
 }
 
 // --- Inventario (Fase 2) ---

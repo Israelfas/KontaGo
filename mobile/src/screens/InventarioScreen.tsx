@@ -13,11 +13,14 @@ import {
 } from '../lib/api';
 import { formatearCentavos } from '../lib/formato';
 import {
+  BarraProporcional,
   Boton,
+  EncabezadoPantalla,
   EstadoCargando,
   EstadoError,
   EstadoVacio,
   Etiqueta,
+  Tarjeta,
   TarjetaMetrica,
   estilosCampo,
 } from '../components/ui';
@@ -298,29 +301,46 @@ export function InventarioScreen() {
 
   return (
     <SafeAreaView style={styles.contenedor} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.eyebrow}>CONTROL DE STOCK</Text>
-        <Text style={styles.titulo}>Inventario</Text>
-      </View>
+      <EncabezadoPantalla eyebrow="CONTROL DE STOCK" titulo="Inventario" icono="clipboard" />
 
-      <ScrollView contentContainerStyle={{ padding: espaciado.lg, gap: espaciado.lg }}>
+      <ScrollView contentContainerStyle={{ padding: espaciado.lg, paddingTop: 0, gap: espaciado.lg }}>
         {cargando && <EstadoCargando texto="Cargando inventario…" />}
         {error && !cargando && <EstadoError mensaje={error} onReintentar={cargarTodo} />}
 
         {!cargando && !error && resumen && (
-          <View style={{ flexDirection: 'row', gap: espaciado.md }}>
-            <TarjetaMetrica
-              etiqueta="Gastado hoy"
-              valor={formatearCentavos(resumen.egresoCentavos)}
-              detalle={`${resumen.cantidadAbastecimientos} mov.`}
-            />
-            <TarjetaMetrica
-              etiqueta="Pérdida hoy"
-              valor={formatearCentavos(resumen.perdidaCentavos)}
-              detalle={`${resumen.cantidadMermas} mov.`}
-              tono="danger"
-            />
-          </View>
+          <>
+            <View style={{ flexDirection: 'row', gap: espaciado.md }}>
+              <TarjetaMetrica
+                etiqueta="Gastado hoy"
+                valor={formatearCentavos(resumen.egresoCentavos)}
+                detalle={`${resumen.cantidadAbastecimientos} mov.`}
+                icono="arrow-down-circle-outline"
+              />
+              <TarjetaMetrica
+                etiqueta="Pérdida hoy"
+                valor={formatearCentavos(resumen.perdidaCentavos)}
+                detalle={`${resumen.cantidadMermas} mov.`}
+                icono="trash-outline"
+                tono="danger"
+              />
+            </View>
+
+            {(resumen.egresoCentavos > 0 || resumen.perdidaCentavos > 0) && (
+              <Tarjeta>
+                <Text style={styles.balanceTitulo}>Balance del día</Text>
+                <View style={{ marginTop: espaciado.sm }}>
+                  <BarraProporcional
+                    etiquetaA="Abastecimiento"
+                    valorA={resumen.egresoCentavos}
+                    colorA={colores.tinta}
+                    etiquetaB="Merma"
+                    valorB={resumen.perdidaCentavos}
+                    colorB={colores.rojoPerdida}
+                  />
+                </View>
+              </Tarjeta>
+            )}
+          </>
         )}
 
         {!cargando && !error && esAdmin && productos.length === 0 && (
@@ -366,6 +386,7 @@ const styles = StyleSheet.create({
   selectorItem: { minHeight: 40, paddingVertical: espaciado.sm },
   error: { color: colores.rojoPerdida, fontSize: 13, marginBottom: espaciado.sm },
   seccionTitulo: { fontSize: 16, fontWeight: '700', color: colores.tinta, marginBottom: espaciado.sm },
+  balanceTitulo: { fontSize: 13, fontWeight: '700', color: colores.tinta },
   alertaBloque: {
     backgroundColor: colores.superficie,
     borderRadius: radios.md,

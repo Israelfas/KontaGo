@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 import { Producto } from '../productos/entities/producto.entity';
 import { Venta } from './entities/venta.entity';
@@ -11,9 +12,41 @@ import {
   StockInsuficienteError,
 } from './ventas.errors';
 
+// totalCentavos ya incluye IVA (precio final al público). Estos dos
+// campos son un desglose derivado, no datos nuevos: subtotalCentavos es
+// la base imponible (totalCentavos - ivaCentavos). Se calculan una sola
+// vez acá para que web/mobile no tengan que sumar venta.items[] a mano
+// cada vez que quieran mostrar el desglose en el ticket.
+export interface VentaConDesglose extends Venta {
+  ivaCentavos: number;
+  subtotalCentavos: number;
+}
+
 @Injectable()
 export class VentasService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly config: ConfigService,
+  ) {}
+
+  /**
+   * precioVentaCentavos ya incluye IVA (así se muestran los precios al
+   * público en Ecuador) — este método EXTRAE la porción de IVA contenida
+   * en ese precio final, no la suma aparte. Fórmula estándar SRI:
+   * base = precio / (1 + tarifa); iva = precio - base. Se calcula sobre
+   * el subtotal de la línea (precio unitario × cantidad) en vez de por
+   * unidad y luego multiplicar, para que base + iva == subtotal exacto
+   * sin arrastrar diferencias de redondeo entre unidades.
+   */
+  private calcularIvaDeLineaCentavos(
+    subtotalLineaCentavos: number,
+    ivaExento: boolean,
+  ): number {
+    if (ivaExento) return 0;
+    const tarifa = this.config.get<number>('impuestos.tarifaIvaGeneral')!;
+    const baseImponible = Math.round(subtotalLineaCentavos / (1 + tarifa));
+    return subtotalLineaCentavos - baseImponible;
+  }
 
   /**
    * Registra una venta completa: valida stock, descuenta inventario y
@@ -33,7 +66,7 @@ export class VentasService {
     tenantId: string,
     usuarioId: string,
     dto: CrearVentaDto,
-  ): Promise<Venta> {
+  ): Promise<VentaConDesglose> {
     return this.dataSource.transaction(async (manager) => {
       const productoRepo = manager.getRepository(Producto);
       let totalCentavos = 0;
@@ -71,6 +104,10 @@ export class VentasService {
         // Congelamos precio y costo del momento de la venta.
         item.precioVentaCentavos = producto.precioVentaCentavos;
         item.costoUnitarioCentavos = producto.costoUnitarioCentavos;
+        item.ivaCentavos = this.calcularIvaDeLineaCentavos(
+          subtotalCentavos,
+          producto.ivaExento,
+        );
         items.push(item);
       }
 
@@ -90,7 +127,14 @@ export class VentasService {
       venta.items = items;
 
       const ventaRepo = manager.getRepository(Venta);
-      return ventaRepo.save(venta);
+      const ventaGuardada = await ventaRepo.save(venta);
+      const ivaCentavos = this.calcularIvaCentavos(ventaGuardada);
+
+      return {
+        ...ventaGuardada,
+        ivaCentavos,
+        subtotalCentavos: ventaGuardada.totalCentavos - ivaCentavos,
+      };
     });
   }
 
@@ -104,6 +148,15 @@ export class VentasService {
         item.precioVentaCentavos - item.costoUnitarioCentavos;
       return acc + margenUnitario * item.cantidad;
     }, 0);
+  }
+
+  /**
+   * IVA total contenido en una venta (suma de ivaCentavos de cada línea,
+   * ya congelado al momento de la venta). Útil para que el vendedor sepa
+   * cuánto de lo cobrado corresponde a IVA, de cara a su declaración.
+   */
+  calcularIvaCentavos(venta: Venta): number {
+    return venta.items.reduce((acc, item) => acc + item.ivaCentavos, 0);
   }
 
   /**
@@ -141,12 +194,17 @@ export class VentasService {
       (acc, venta) => acc + this.calcularGananciaCentavos(venta),
       0,
     );
+    const ivaCentavos = ventas.reduce(
+      (acc, venta) => acc + this.calcularIvaCentavos(venta),
+      0,
+    );
 
     return {
       fecha: inicioDelDia.toISOString().slice(0, 10),
       cantidadVentas: ventas.length,
       ingresoBrutoCentavos,
       gananciaCentavos,
+      ivaCentavos,
     };
   }
 }

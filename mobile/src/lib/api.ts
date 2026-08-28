@@ -38,14 +38,16 @@ async function apiFetch<T>(
 ): Promise<T> {
   const { token, headers, ...resto } = options;
 
-  const response = await fetch(`${API_URL}${path}`, {
+  const fetchOptions: RequestInit = {
     ...resto,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
-  });
+  };
+
+  const response = await fetch(`${API_URL}${path}`, fetchOptions);
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
@@ -59,21 +61,39 @@ async function apiFetch<T>(
     return undefined as T;
   }
 
-  // Leemos como texto primero en vez de llamar response.json() directo:
-  // en algunos casos (respuesta con body vacío o cortada, común al leer
-  // desde un dispositivo físico sobre WiFi) response.json() explota con
-  // "Unexpected end of input" en vez de simplemente no tener nada que
-  // parsear. Un cuerpo vacío es un caso legítimo (ej. la ruta de
-  // escanear código de barras responde el JSON "null" cuando no
-  // encuentra el producto) y no debería tratarse como una falla.
+  // NestJS nunca manda un body realmente vacío para una respuesta 200 —
+  // aunque el valor sea `null`, igual manda el texto literal "null" (4
+  // bytes). Así que si acá llega texto vacío, es casi siempre un corte
+  // de la conexión WiFi a mitad de la respuesta, NO un "sin datos"
+  // legítimo. Tratarlo como éxito silencioso fue el bug real: un
+  // producto que SÍ existe podía llegar con el body cortado y mostrarse
+  // como "no encontrado". En vez de eso, reintentamos una vez — si el
+  // segundo intento también llega vacío, ahí sí lo tratamos como falla
+  // real en vez de inventar un resultado.
   const texto = await response.text();
-  if (!texto) {
-    return undefined as T;
+  if (texto) {
+    return parsearOFallar<T>(texto, response.status);
   }
+
+  const reintento = await fetch(`${API_URL}${path}`, fetchOptions);
+  if (!reintento.ok) {
+    throw new ApiError(`Error ${reintento.status}`, reintento.status);
+  }
+  const textoReintento = await reintento.text();
+  if (!textoReintento) {
+    throw new ApiError(
+      'El servidor no respondió (conexión inestable). Probá de nuevo.',
+      response.status,
+    );
+  }
+  return parsearOFallar<T>(textoReintento, reintento.status);
+}
+
+function parsearOFallar<T>(texto: string, statusCode: number): T {
   try {
     return JSON.parse(texto);
   } catch {
-    throw new ApiError('Respuesta inválida del servidor', response.status);
+    throw new ApiError('Respuesta inválida del servidor', statusCode);
   }
 }
 
@@ -116,6 +136,8 @@ export interface CrearProductoInput {
   proveedor?: string;
   stockInicial?: number;
   stockMinimo?: number;
+  fechaVencimiento?: string;
+  ivaExento?: boolean;
 }
 
 export function crearProducto(
@@ -124,6 +146,30 @@ export function crearProducto(
 ): Promise<Producto> {
   return apiFetch<Producto>('/productos', {
     method: 'POST',
+    token,
+    body: JSON.stringify(dto),
+  });
+}
+
+export interface ActualizarProductoInput {
+  nombre?: string;
+  categoria?: string;
+  proveedor?: string;
+  precioVentaCentavos?: number;
+  costoUnitarioCentavos?: number;
+  stockMinimo?: number;
+  fechaVencimiento?: string;
+  quitarFechaVencimiento?: boolean;
+  ivaExento?: boolean;
+}
+
+export function actualizarProducto(
+  token: string,
+  id: string,
+  dto: ActualizarProductoInput,
+): Promise<Producto> {
+  return apiFetch<Producto>(`/productos/${id}`, {
+    method: 'PATCH',
     token,
     body: JSON.stringify(dto),
   });

@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { LessThanOrEqual, Repository } from 'typeorm';
 import { Producto } from './entities/producto.entity';
 import { CrearProductoDto } from './dto/crear-producto.dto';
-import { ActualizarProductoDto } from './dto/actualizar-producto.dto';
 import { AlertasProductosDto } from './dto/alertas-productos.dto';
 
 @Injectable()
@@ -12,36 +11,6 @@ export class ProductosService {
     @InjectRepository(Producto)
     private readonly productoRepo: Repository<Producto>,
   ) {}
-
-  /**
-   * Edición parcial (PATCH): solo toca los campos que vengan en el DTO.
-   * codigoBarras nunca se edita acá — es la identidad del producto.
-   */
-  async actualizar(
-    tenantId: string,
-    id: string,
-    dto: ActualizarProductoDto,
-  ): Promise<Producto> {
-    const producto = await this.buscarPorId(tenantId, id);
-
-    if (dto.nombre !== undefined) producto.nombre = dto.nombre;
-    if (dto.categoria !== undefined) producto.categoria = dto.categoria;
-    if (dto.proveedor !== undefined) producto.proveedor = dto.proveedor;
-    if (dto.precioVentaCentavos !== undefined)
-      producto.precioVentaCentavos = dto.precioVentaCentavos;
-    if (dto.costoUnitarioCentavos !== undefined)
-      producto.costoUnitarioCentavos = dto.costoUnitarioCentavos;
-    if (dto.stockMinimo !== undefined) producto.stockMinimo = dto.stockMinimo;
-    if (dto.ivaExento !== undefined) producto.ivaExento = dto.ivaExento;
-
-    if (dto.quitarFechaVencimiento) {
-      producto.fechaVencimiento = null;
-    } else if (dto.fechaVencimiento !== undefined) {
-      producto.fechaVencimiento = new Date(dto.fechaVencimiento);
-    }
-
-    return this.productoRepo.save(producto);
-  }
 
   async crear(tenantId: string, dto: CrearProductoDto): Promise<Producto> {
     const producto = this.productoRepo.create({

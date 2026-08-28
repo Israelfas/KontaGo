@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsDateString,
   IsInt,
   IsOptional,
@@ -48,4 +49,10 @@ export class CrearProductoDto {
   @IsOptional()
   @IsDateString()
   fechaVencimiento?: string;
+
+  // Tarifa 0% de IVA (alimentos básicos, medicinas, etc — ver art. 55
+  // LRTI). Si se omite, el producto queda con tarifa general (15%).
+  @IsOptional()
+  @IsBoolean()
+  ivaExento?: boolean;
 }

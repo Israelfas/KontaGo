@@ -8,7 +8,19 @@ import type {
   Venta,
 } from './tipos';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+// Si NEXT_PUBLIC_API_URL está seteado, gana siempre (útil para producción,
+// donde el backend vive en otro host). Si no está seteado, usamos el mismo
+// hostname con el que se cargó la página + puerto 3000 — así, sea que
+// entres por localhost:3001 o por 192.168.1.XX:3001 desde el celular, la
+// API se resuelve sola sin tener que editar .env.local cada vez que el
+// router le asigna una IP nueva a la PC (nos pasó 3 veces en un día).
+function resolverApiUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  if (typeof window !== 'undefined') return `http://${window.location.hostname}:3000`;
+  return 'http://localhost:3000'; // fallback para renderizado en el servidor
+}
+
+const API_URL = resolverApiUrl();
 
 export class ApiError extends Error {
   constructor(
@@ -31,14 +43,16 @@ async function apiFetch<T>(
 ): Promise<T> {
   const { token, headers, ...resto } = options;
 
-  const response = await fetch(`${API_URL}${path}`, {
+  const fetchOptions: RequestInit = {
     ...resto,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
-  });
+  };
+
+  const response = await fetch(`${API_URL}${path}`, fetchOptions);
 
   if (!response.ok) {
     // El backend siempre devuelve { message, error, statusCode } en errores.
@@ -54,18 +68,37 @@ async function apiFetch<T>(
     return undefined as T;
   }
 
-  // Leemos como texto primero: un body vacío (ej. la ruta de escanear
-  // código de barras responde "null" cuando no encuentra el producto,
-  // pero en algunas condiciones de red esto puede llegar vacío) no
-  // debería tumbar la app con un error de parseo de JSON.
+  // NestJS nunca manda un body realmente vacío en un 200 — aunque el
+  // valor sea `null`, igual manda el texto literal "null". Si acá llega
+  // vacío es casi siempre un corte de conexión a mitad de la respuesta,
+  // no un "sin datos" legítimo. Reintentamos una vez antes de rendirnos,
+  // en vez de tratar el vacío como éxito silencioso (eso hacía que un
+  // producto que sí existe pudiera mostrarse como "no encontrado" solo
+  // por un hipo de red).
   const texto = await response.text();
-  if (!texto) {
-    return undefined as T;
+  if (texto) {
+    return parsearOFallar<T>(texto, response.status);
   }
+
+  const reintento = await fetch(`${API_URL}${path}`, fetchOptions);
+  if (!reintento.ok) {
+    throw new ApiError(`Error ${reintento.status}`, reintento.status);
+  }
+  const textoReintento = await reintento.text();
+  if (!textoReintento) {
+    throw new ApiError(
+      'El servidor no respondió (conexión inestable). Probá de nuevo.',
+      response.status,
+    );
+  }
+  return parsearOFallar<T>(textoReintento, reintento.status);
+}
+
+function parsearOFallar<T>(texto: string, statusCode: number): T {
   try {
     return JSON.parse(texto);
   } catch {
-    throw new ApiError('Respuesta inválida del servidor', response.status);
+    throw new ApiError('Respuesta inválida del servidor', statusCode);
   }
 }
 
@@ -108,6 +141,8 @@ export interface CrearProductoInput {
   proveedor?: string;
   stockInicial?: number;
   stockMinimo?: number;
+  fechaVencimiento?: string;
+  ivaExento?: boolean;
 }
 
 export function crearProducto(
@@ -116,6 +151,30 @@ export function crearProducto(
 ): Promise<Producto> {
   return apiFetch<Producto>('/productos', {
     method: 'POST',
+    token,
+    body: JSON.stringify(dto),
+  });
+}
+
+export interface ActualizarProductoInput {
+  nombre?: string;
+  categoria?: string;
+  proveedor?: string;
+  precioVentaCentavos?: number;
+  costoUnitarioCentavos?: number;
+  stockMinimo?: number;
+  fechaVencimiento?: string;
+  quitarFechaVencimiento?: boolean;
+  ivaExento?: boolean;
+}
+
+export function actualizarProducto(
+  token: string,
+  id: string,
+  dto: ActualizarProductoInput,
+): Promise<Producto> {
+  return apiFetch<Producto>(`/productos/${id}`, {
+    method: 'PATCH',
     token,
     body: JSON.stringify(dto),
   });

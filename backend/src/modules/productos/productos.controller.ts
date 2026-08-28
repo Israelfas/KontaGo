@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -15,6 +16,7 @@ import { Rol } from '../../common/enums/rol.enum';
 import type { AuthenticatedUser } from '../auth/interfaces/jwt-payload.interface';
 import { ProductosService } from './productos.service';
 import { CrearProductoDto } from './dto/crear-producto.dto';
+import { ActualizarProductoDto } from './dto/actualizar-producto.dto';
 
 @Controller('productos')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -25,6 +27,16 @@ export class ProductosController {
   @Roles(Rol.ADMIN)
   crear(@CurrentUser() user: AuthenticatedUser, @Body() dto: CrearProductoDto) {
     return this.productosService.crear(user.tenantId, dto);
+  }
+
+  @Patch(':id')
+  @Roles(Rol.ADMIN)
+  actualizar(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: ActualizarProductoDto,
+  ) {
+    return this.productosService.actualizar(user.tenantId, id, dto);
   }
 
   @Get()

@@ -1,5 +1,5 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { VentaScreen } from '../screens/VentaScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { ProductosScreen } from '../screens/ProductosScreen';
@@ -15,14 +15,17 @@ export type MainTabParamList = {
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
-// Iconos con emoji simple en vez de una librería de íconos extra — mantiene
-// el bundle liviano; se puede reemplazar por @expo/vector-icons más
-// adelante si se quiere paridad visual exacta con el ícono set del web.
-const ICONOS: Record<keyof MainTabParamList, string> = {
-  Vender: '🛒',
-  Resumen: '📊',
-  Productos: '📦',
-  Inventario: '📋',
+const ICONOS: Record<keyof MainTabParamList, keyof typeof Ionicons.glyphMap> = {
+  Vender: 'cart',
+  Resumen: 'bar-chart',
+  Productos: 'cube',
+  Inventario: 'clipboard',
+};
+const ICONOS_INACTIVOS: Record<keyof MainTabParamList, keyof typeof Ionicons.glyphMap> = {
+  Vender: 'cart-outline',
+  Resumen: 'bar-chart-outline',
+  Productos: 'cube-outline',
+  Inventario: 'clipboard-outline',
 };
 
 export function MainNavigator() {
@@ -35,8 +38,18 @@ export function MainNavigator() {
         tabBarStyle: {
           backgroundColor: colores.superficie,
           borderTopColor: colores.papelLinea,
+          height: 64,
+          paddingTop: 6,
+          paddingBottom: 8,
         },
-        tabBarIcon: () => <Text style={{ fontSize: 18 }}>{ICONOS[route.name]}</Text>,
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        tabBarIcon: ({ focused, color }) => (
+          <Ionicons
+            name={focused ? ICONOS[route.name] : ICONOS_INACTIVOS[route.name]}
+            size={22}
+            color={color}
+          />
+        ),
       })}
     >
       <Tab.Screen name="Vender" component={VentaScreen} />
