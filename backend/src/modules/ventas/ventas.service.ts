@@ -139,14 +139,25 @@ export class VentasService {
   }
 
   /**
-   * Ganancia real de una venta = suma de (precioVenta - costoUnitario) * cantidad
-   * por cada línea. Nunca el ingreso bruto (ver riesgo #2 del spec).
+   * Ganancia real de una venta = suma, por línea, de:
+   *   (precioVenta SIN IVA - costoUnitario) * cantidad
+   *
+   * precioVentaCentavos incluye IVA (precio final al público — así se
+   * vende acá), así que hay que restar la porción de IVA de esa línea
+   * ANTES de restar el costo. Si no se resta, la "ganancia" queda
+   * inflada por el IVA de cada venta, que no es plata del negocio sino
+   * plata que hay que declararle al SRI. ivaCentavos ya viene congelado
+   * por línea (ver VentaItem), así que este es un cálculo puro, sin
+   * necesidad de recalcular nada contra la tarifa vigente.
+   *
+   * Nunca el ingreso bruto tampoco (ver riesgo #2 del spec).
    */
   calcularGananciaCentavos(venta: Venta): number {
     return venta.items.reduce((acc, item) => {
-      const margenUnitario =
-        item.precioVentaCentavos - item.costoUnitarioCentavos;
-      return acc + margenUnitario * item.cantidad;
+      const subtotalLineaSinIva =
+        item.precioVentaCentavos * item.cantidad - item.ivaCentavos;
+      const costoLinea = item.costoUnitarioCentavos * item.cantidad;
+      return acc + (subtotalLineaSinIva - costoLinea);
     }, 0);
   }
 

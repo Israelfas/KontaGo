@@ -303,7 +303,7 @@ export function VentaScreen() {
 
   if (ventaConfirmada) {
     return (
-      <SafeAreaView style={styles.contenedor} edges={['top']}>
+      <SafeAreaView style={styles.contenedor} edges={[]}>
         <View style={styles.confirmacionContenedor}>
           <View style={styles.confirmacionIconoFondo}>
             <Ionicons name="checkmark" size={32} color={colores.verdeGanancia} />
@@ -441,7 +441,7 @@ export function VentaScreen() {
     );
 
   return (
-    <SafeAreaView style={styles.contenedor} edges={['top']}>
+    <SafeAreaView style={styles.contenedor} edges={[]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

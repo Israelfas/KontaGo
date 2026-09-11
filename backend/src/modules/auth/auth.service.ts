@@ -26,6 +26,8 @@ export class AuthService {
   constructor(
     @InjectRepository(Usuario)
     private readonly usuarioRepo: Repository<Usuario>,
+    @InjectRepository(Tenant)
+    private readonly tenantRepo: Repository<Tenant>,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly dataSource: DataSource,
@@ -93,6 +95,30 @@ export class AuthService {
     }
 
     return this.emitirTokens(usuario);
+  }
+
+  /**
+   * Datos de cuenta que no viajan en el JWT (nombre, email, plan de la
+   * tienda) — el token solo lleva sub/tenantId/rol para no engordarlo,
+   * así que la pantalla de perfil pide esto aparte, bajo demanda.
+   */
+  async obtenerPerfil(usuarioId: string, tenantId: string) {
+    const usuario = await this.usuarioRepo.findOne({
+      where: { id: usuarioId, tenantId, activo: true },
+    });
+    if (!usuario) {
+      throw new UnauthorizedException('Usuario no encontrado');
+    }
+
+    const tenant = await this.tenantRepo.findOne({ where: { id: tenantId } });
+
+    return {
+      nombre: usuario.nombre,
+      email: usuario.email,
+      rol: usuario.rol,
+      tienda: tenant?.nombre ?? null,
+      plan: tenant?.plan ?? null,
+    };
   }
 
   private emitirTokens(usuario: Usuario): TokenPair {

@@ -65,16 +65,31 @@ async function apiFetch<T>(
   // aunque el valor sea `null`, igual manda el texto literal "null" (4
   // bytes). Así que si acá llega texto vacío, es casi siempre un corte
   // de la conexión WiFi a mitad de la respuesta, NO un "sin datos"
-  // legítimo. Tratarlo como éxito silencioso fue el bug real: un
-  // producto que SÍ existe podía llegar con el body cortado y mostrarse
-  // como "no encontrado". En vez de eso, reintentamos una vez — si el
-  // segundo intento también llega vacío, ahí sí lo tratamos como falla
-  // real en vez de inventar un resultado.
+  // legítimo.
   const texto = await response.text();
   if (texto) {
     return parsearOFallar<T>(texto, response.status);
   }
 
+  const metodo = (fetchOptions.method ?? 'GET').toUpperCase();
+  if (metodo !== 'GET') {
+    // OJO: acá NO hay que reintentar. Si esta petición ya modificó algo
+    // (crear producto, registrar venta, etc.) y el servidor respondió
+    // 2xx pero el body llegó cortado, el request YA se procesó del lado
+    // del backend. Reintentar mandaría la misma petición de nuevo — en
+    // el mejor caso, un duplicado; con la restricción de código de
+    // barras único, un 409 confuso sobre algo que en realidad sí
+    // funcionó la primera vez. Mejor avisar y dejar que la persona
+    // confirme mirando la lista, que resubmitir a ciegas.
+    throw new ApiError(
+      'Es posible que esto sí se haya guardado, pero no pudimos confirmarlo por un corte de conexión. Revisá la lista antes de intentar de nuevo.',
+      response.status,
+    );
+  }
+
+  // Para GET (leer datos) reintentar es seguro: no hay efecto secundario
+  // que duplicar. Si el segundo intento también llega vacío, ahí sí lo
+  // tratamos como falla real en vez de inventar un resultado.
   const reintento = await fetch(`${API_URL}${path}`, fetchOptions);
   if (!reintento.ok) {
     throw new ApiError(`Error ${reintento.status}`, reintento.status);
@@ -119,6 +134,18 @@ export function registrar(dto: RegistroInput): Promise<TokenPair> {
     method: 'POST',
     body: JSON.stringify(dto),
   });
+}
+
+export interface Perfil {
+  nombre: string;
+  email: string;
+  rol: 'admin' | 'cajero';
+  tienda: string | null;
+  plan: 'gratuito' | 'pago' | 'enterprise' | null;
+}
+
+export function obtenerPerfil(token: string): Promise<Perfil> {
+  return apiFetch<Perfil>('/auth/perfil', { token });
 }
 
 // --- Productos ---

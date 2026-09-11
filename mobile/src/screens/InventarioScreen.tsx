@@ -300,7 +300,7 @@ export function InventarioScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.contenedor} edges={['top']}>
+    <SafeAreaView style={styles.contenedor} edges={[]}>
       <EncabezadoPantalla eyebrow="CONTROL DE STOCK" titulo="Inventario" icono="clipboard" />
 
       <ScrollView contentContainerStyle={{ padding: espaciado.lg, paddingTop: 0, gap: espaciado.lg }}>

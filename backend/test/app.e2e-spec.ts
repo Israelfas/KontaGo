@@ -16,11 +16,16 @@ describe('AppController (e2e)', () => {
     await app.init();
   });
 
-  it('/ (GET)', () => {
+  // La app no tiene una ruta GET / real (solo /health) — este test venía
+  // sin actualizar desde el scaffold inicial de Nest, probando una ruta
+  // que nunca existió en KontaGo.
+  it('/health (GET)', () => {
     return request(app.getHttpServer())
-      .get('/')
+      .get('/health')
       .expect(200)
-      .expect('Hello World!');
+      .expect((res) => {
+        expect(res.body).toHaveProperty('status', 'ok');
+      });
   });
 
   afterEach(async () => {

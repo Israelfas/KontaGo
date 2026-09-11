@@ -388,7 +388,7 @@ export function ProductosScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.contenedor} edges={['top']}>
+    <SafeAreaView style={styles.contenedor} edges={[]}>
       <EncabezadoPantalla
         eyebrow="CATÁLOGO"
         titulo="Productos"

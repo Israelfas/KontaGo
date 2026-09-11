@@ -70,7 +70,7 @@ export function DashboardScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.contenedor} edges={['top']}>
+    <SafeAreaView style={styles.contenedor} edges={[]}>
       <EncabezadoPantalla eyebrow="CIERRE DEL DÍA" titulo="Resumen" icono="bar-chart" />
 
       <ScrollView contentContainerStyle={styles.scroll}>

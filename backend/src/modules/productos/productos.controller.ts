@@ -1,8 +1,10 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -33,7 +35,7 @@ export class ProductosController {
   @Roles(Rol.ADMIN)
   actualizar(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ActualizarProductoDto,
   ) {
     return this.productosService.actualizar(user.tenantId, id, dto);
@@ -58,9 +60,21 @@ export class ProductosController {
   @Get('alertas')
   alertas(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('diasVencimiento') diasVencimiento?: string,
+    @Query('diasVencimiento') diasVencimientoRaw?: string,
   ) {
-    const dias = diasVencimiento ? parseInt(diasVencimiento, 10) : undefined;
+    let dias: number | undefined;
+    if (diasVencimientoRaw !== undefined) {
+      dias = parseInt(diasVencimientoRaw, 10);
+      // parseInt("abc") da NaN, y un valor negativo o cero no tiene
+      // sentido acá — sin esta validación, cualquiera de los dos casos
+      // se colaba hasta el cálculo de fecha (Invalid Date) y de ahí a
+      // la consulta a la base, con resultados impredecibles o un 500.
+      if (isNaN(dias) || dias <= 0) {
+        throw new BadRequestException(
+          'diasVencimiento debe ser un número entero positivo',
+        );
+      }
+    }
     return this.productosService.obtenerAlertas(user.tenantId, dias);
   }
 }

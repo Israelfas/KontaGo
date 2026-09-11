@@ -17,11 +17,14 @@ import { Tenant } from '../../tenants/entities/tenant.entity';
  * - precioVentaCentavos / costoUnitarioCentavos: enteros en centavos, nunca floats.
  * - costoUnitarioCentavos se recalcula como costo promedio ponderado en cada
  *   reabastecimiento (lógica en el servicio de inventario, no acá).
- * - Índice compuesto (tenantId, codigoBarras) para que la búsqueda en el
- *   checkout sea rápida incluso con muchas tiendas concurrentes.
+ * - Índice único compuesto (tenantId, codigoBarras): la búsqueda en el
+ *   checkout es rápida incluso con muchas tiendas concurrentes, y de paso
+ *   impide dos productos con el mismo código en la misma tienda — antes
+ *   de la restricción única, el escaneo podía devolver un producto
+ *   arbitrario entre duplicados (ver migración CodigoBarrasUnico).
  */
 @Entity('productos')
-@Index(['tenantId', 'codigoBarras'])
+@Index(['tenantId', 'codigoBarras'], { unique: true })
 export class Producto {
   @PrimaryGeneratedColumn('uuid')
   id: string;

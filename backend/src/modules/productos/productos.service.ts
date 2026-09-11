@@ -1,10 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThanOrEqual, Repository } from 'typeorm';
+import { Between, Repository } from 'typeorm';
 import { Producto } from './entities/producto.entity';
 import { CrearProductoDto } from './dto/crear-producto.dto';
 import { ActualizarProductoDto } from './dto/actualizar-producto.dto';
 import { AlertasProductosDto } from './dto/alertas-productos.dto';
+import { CodigoBarrasDuplicadoError } from './productos.errors';
 
 @Injectable()
 export class ProductosService {
@@ -60,7 +61,22 @@ export class ProductosService {
       ivaExento: dto.ivaExento ?? false,
     });
 
-    return this.productoRepo.save(producto);
+    try {
+      return await this.productoRepo.save(producto);
+    } catch (error) {
+      // 23505 = unique_violation en Postgres. Confiamos en la restricción
+      // de la base como fuente de verdad (evita condiciones de carrera de
+      // un chequeo previo tipo "buscar y luego crear"), y solo traducimos
+      // el error crudo de Postgres a un mensaje entendible para el cliente.
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as { code: string }).code === '23505'
+      ) {
+        throw new CodigoBarrasDuplicadoError(dto.codigoBarras);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -114,6 +130,14 @@ export class ProductosService {
       (p) => p.stockMinimo > 0 && p.stock <= p.stockMinimo,
     );
 
+    // Rango [hoy, límite]: sin el piso de "hoy", un producto vencido hace
+    // meses también entraba acá para siempre (cualquier fecha <= límite
+    // incluye el pasado completo) — el correo diario habría seguido
+    // alertando sobre stock ya vencido indefinidamente, en vez de mostrar
+    // solo lo que realmente está por vencer en los próximos días.
+    const inicioDeHoy = new Date();
+    inicioDeHoy.setHours(0, 0, 0, 0);
+
     const limiteVencimiento = new Date();
     limiteVencimiento.setDate(limiteVencimiento.getDate() + diasVencimiento);
     limiteVencimiento.setHours(23, 59, 59, 999);
@@ -122,7 +146,7 @@ export class ProductosService {
       where: {
         tenantId,
         activo: true,
-        fechaVencimiento: LessThanOrEqual(limiteVencimiento),
+        fechaVencimiento: Between(inicioDeHoy, limiteVencimiento),
       },
       order: { fechaVencimiento: 'ASC' },
     });

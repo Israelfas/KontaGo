@@ -60,7 +60,13 @@ export function Boton({
 
 // --- Card ---
 
-export function Tarjeta({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
+export function Tarjeta({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: ViewStyle | (ViewStyle | false | null | undefined)[];
+}) {
   return <View style={[styles.tarjeta, style]}>{children}</View>;
 }
 
