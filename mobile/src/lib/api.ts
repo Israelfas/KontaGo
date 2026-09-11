@@ -9,13 +9,30 @@ import type {
   Venta,
 } from './tipos';
 
-// A diferencia del web (que corre en el mismo host que el backend en dev),
-// un celular físico necesita la IP de LAN de la PC, no "localhost" — eso
-// apuntaría al propio celular. Se configura en app.json > expo.extra.apiUrl
-// (ver README de mobile/ para instrucciones).
-const API_URL =
-  (Constants.expoConfig?.extra?.apiUrl as string | undefined) ??
-  'http://localhost:3000';
+// El celular no puede usar "localhost" — eso apuntaría al propio
+// celular, no a la PC. Antes esto se configuraba a mano en
+// app.json > expo.extra.apiUrl, pero la IP de LAN de la PC cambia cada
+// vez que el router renueva el DHCP o cambiás de red — cada cambio
+// rompía la app hasta actualizar el archivo a mano.
+//
+// Fix: Expo ya sabe con qué IP:puerto se conectó el celular a Metro
+// para bajar el código (Constants.expoConfig.hostUri, algo como
+// "192.168.1.18:8081") — reusamos esa misma IP para hablar con el
+// backend, así la detección es automática y sigue funcionando aunque
+// la IP cambie, sin tocar ningún archivo. app.json > extra.apiUrl queda
+// como respaldo manual para casos donde hostUri no está disponible
+// (ej. un build standalone con EAS, que no pasa por Metro).
+function resolverApiUrl(): string {
+  const hostUri = Constants.expoConfig?.hostUri;
+  if (hostUri) {
+    const host = hostUri.split(':')[0];
+    if (host) return `http://${host}:3000`;
+  }
+  const configurado = Constants.expoConfig?.extra?.apiUrl as string | undefined;
+  return configurado ?? 'http://localhost:3000';
+}
+
+const API_URL = resolverApiUrl();
 
 export class ApiError extends Error {
   constructor(
