@@ -1,4 +1,5 @@
 import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { NormalizarEmail } from '../../../common/transforms/normalizar-email';
 
 export class RegistroDto {
   @IsString()
@@ -14,6 +15,7 @@ export class RegistroDto {
   @MinLength(2)
   nombreAdmin!: string;
 
+  @NormalizarEmail()
   @IsEmail()
   email!: string;
 

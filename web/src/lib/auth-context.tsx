@@ -10,8 +10,10 @@ import {
 import { useRouter } from 'next/navigation';
 import * as api from './api';
 import type { RegistroInput } from './api';
+import type { TokenPair } from './tipos';
 
 const STORAGE_KEY = 'kontago.accessToken';
+const REFRESH_STORAGE_KEY = 'kontago.refreshToken';
 
 interface JwtPayload {
   sub: string;
@@ -34,6 +36,7 @@ interface AuthContextValue {
   usuario: JwtPayload | null;
   cargando: boolean;
   iniciarSesion: (email: string, password: string) => Promise<void>;
+  completarLoginConClerk: (clerkToken: string) => Promise<void>;
   registrarse: (dto: RegistroInput) => Promise<void>;
   cerrarSesion: () => void;
 }
@@ -45,45 +48,86 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [cargando, setCargando] = useState(true);
   const router = useRouter();
 
-  // Al montar, recuperamos la sesión guardada (si el token no venció).
+  // Único punto que renueva la sesión: lo usa api.ts cuando recibe un
+  // 401, y el arranque cuando el accessToken guardado ya venció. Devuelve
+  // el accessToken nuevo, o null si no se pudo renovar.
+  async function renovarSesion(): Promise<string | null> {
+    const refreshToken = localStorage.getItem(REFRESH_STORAGE_KEY);
+    if (!refreshToken) return null;
+    try {
+      const par = await api.refrescarSesion(refreshToken);
+      guardarSesion(par);
+      return par.accessToken;
+    } catch (err) {
+      // Solo un 401 significa "refresh vencido o usuario desactivado". Un
+      // corte de red no debe sacar a nadie de la sesión.
+      // Sin redirigir: RutaProtegida ya manda a /login si hace falta, y
+      // así una página pública no expulsa a nadie.
+      if (err instanceof api.ApiError && err.statusCode === 401) {
+        limpiarSesion();
+      }
+      return null;
+    }
+  }
+
+  useEffect(() => {
+    api.configurarRefrescoDeSesion(renovarSesion);
+    return () => api.configurarRefrescoDeSesion(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Al montar, recuperamos la sesión guardada. Si el accessToken ya
+  // venció pero queda refreshToken, se renueva en vez de pedir login.
   // localStorage no existe en el servidor, así que esto solo puede
   // resolverse en un efecto — es el caso legítimo de "sincronizar estado
   // inicial desde un sistema externo" que React recomienda.
   useEffect(() => {
     const guardado = localStorage.getItem(STORAGE_KEY);
-    if (guardado) {
-      const payload = decodificarPayload(guardado);
-      const vigente = payload && payload.exp * 1000 > Date.now();
-      if (vigente) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setToken(guardado);
-      } else {
-        localStorage.removeItem(STORAGE_KEY);
-      }
+    const payload = guardado ? decodificarPayload(guardado) : null;
+    if (guardado && payload && payload.exp * 1000 > Date.now()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setToken(guardado);
+      setCargando(false);
+      return;
     }
-    setCargando(false);
+    localStorage.removeItem(STORAGE_KEY);
+    renovarSesion().finally(() => setCargando(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function guardarSesion(accessToken: string) {
+  function guardarSesion({ accessToken, refreshToken }: TokenPair) {
     localStorage.setItem(STORAGE_KEY, accessToken);
+    localStorage.setItem(REFRESH_STORAGE_KEY, refreshToken);
     setToken(accessToken);
   }
 
   async function iniciarSesion(email: string, password: string) {
-    const { accessToken } = await api.login(email, password);
-    guardarSesion(accessToken);
+    guardarSesion(await api.login(email, password));
+    router.push('/dashboard');
+  }
+
+  // Puente con Clerk: Clerk ya autenticó a la persona (Google, etc.) del
+  // lado del cliente. Acá se manda su token de sesión de Clerk al
+  // backend, que devuelve el MISMO tipo de token que iniciarSesion() —
+  // de ahí en más es indistinguible de un login normal con contraseña.
+  async function completarLoginConClerk(clerkToken: string) {
+    guardarSesion(await api.loginConClerk(clerkToken));
     router.push('/dashboard');
   }
 
   async function registrarse(dto: RegistroInput) {
-    const { accessToken } = await api.registrar(dto);
-    guardarSesion(accessToken);
+    guardarSesion(await api.registrar(dto));
     router.push('/dashboard');
   }
 
-  function cerrarSesion() {
+  function limpiarSesion() {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(REFRESH_STORAGE_KEY);
     setToken(null);
+  }
+
+  function cerrarSesion() {
+    limpiarSesion();
     router.push('/login');
   }
 
@@ -91,7 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ token, usuario, cargando, iniciarSesion, registrarse, cerrarSesion }}
+      value={{ token, usuario, cargando, iniciarSesion, completarLoginConClerk, registrarse, cerrarSesion }}
     >
       {children}
     </AuthContext.Provider>
