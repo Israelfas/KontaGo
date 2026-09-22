@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import { useSignIn } from '@clerk/nextjs/legacy';
 import { AuthShell } from '@/components/auth-shell';
 import { Button, ErrorState } from '@/components/ui';
 import { useAuth } from '@/lib/auth-context';
@@ -9,10 +10,12 @@ import { ApiError } from '@/lib/api';
 
 export default function LoginPage() {
   const { iniciarSesion } = useAuth();
+  const { signIn, isLoaded: clerkListo } = useSignIn();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [conGoogle, setConGoogle] = useState(false);
 
   async function manejarSubmit(evento: FormEvent) {
     evento.preventDefault();
@@ -24,6 +27,25 @@ export default function LoginPage() {
       setError(err instanceof ApiError ? err.message : 'No se pudo iniciar sesión');
     } finally {
       setEnviando(false);
+    }
+  }
+
+  async function iniciarConGoogle() {
+    if (!clerkListo) return;
+    setError(null);
+    setConGoogle(true);
+    try {
+      // Redirige a Google, Google vuelve a /sso-callback (donde Clerk
+      // termina de armar su sesión), y de ahí a /clerk-bridge (donde
+      // cambiamos esa sesión de Clerk por un token propio de KontaGo).
+      await signIn.authenticateWithRedirect({
+        strategy: 'oauth_google',
+        redirectUrl: '/sso-callback',
+        redirectUrlComplete: '/clerk-bridge',
+      });
+    } catch {
+      setError('No se pudo iniciar el login con Google. Probá de nuevo.');
+      setConGoogle(false);
     }
   }
 
@@ -86,6 +108,22 @@ export default function LoginPage() {
 
         <Button type="submit" disabled={enviando} className="mt-6 w-full">
           {enviando ? 'Ingresando…' : 'Ingresar a KontaGo'}
+        </Button>
+
+        <div className="my-4 flex items-center gap-3">
+          <div className="h-px flex-1 bg-papel-linea" />
+          <span className="text-xs text-tinta-suave">o</span>
+          <div className="h-px flex-1 bg-papel-linea" />
+        </div>
+
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={conGoogle}
+          onClick={iniciarConGoogle}
+          className="w-full"
+        >
+          {conGoogle ? 'Redirigiendo…' : 'Continuar con Google'}
         </Button>
       </form>
     </AuthShell>

@@ -8,8 +8,10 @@ import {
 import * as SecureStore from 'expo-secure-store';
 import * as api from './api';
 import type { RegistroInput } from './api';
+import type { TokenPair } from './tipos';
 
 const STORAGE_KEY = 'kontago.accessToken';
+const REFRESH_STORAGE_KEY = 'kontago.refreshToken';
 
 interface JwtPayload {
   sub: string;
@@ -57,6 +59,7 @@ interface AuthContextValue {
   cargando: boolean;
   iniciarSesion: (email: string, password: string) => Promise<void>;
   registrarse: (dto: RegistroInput) => Promise<void>;
+  loginConClerk: (clerkToken: string) => Promise<void>;
   cerrarSesion: () => Promise<void>;
 }
 
@@ -66,41 +69,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
 
-  // Al montar, recuperamos la sesión guardada (si el token no venció).
+  // Único punto que renueva la sesión: lo usa api.ts cuando recibe un
+  // 401, y el arranque cuando el accessToken guardado ya venció. Devuelve
+  // el accessToken nuevo, o null si no se pudo renovar.
+  async function renovarSesion(): Promise<string | null> {
+    const refreshToken = await SecureStore.getItemAsync(REFRESH_STORAGE_KEY);
+    if (!refreshToken) return null;
+    try {
+      const par = await api.refrescarSesion(refreshToken);
+      await guardarSesion(par);
+      return par.accessToken;
+    } catch (err) {
+      // Solo un 401 significa "refresh vencido o usuario desactivado". Un
+      // corte de red no debe sacar a nadie de la sesión.
+      if (err instanceof api.ApiError && err.statusCode === 401) {
+        await cerrarSesion();
+      }
+      return null;
+    }
+  }
+
+  useEffect(() => {
+    api.configurarRefrescoDeSesion(renovarSesion);
+    return () => api.configurarRefrescoDeSesion(null);
+  }, []);
+
+  // Al montar, recuperamos la sesión guardada. Si el accessToken ya
+  // venció pero queda refreshToken, se renueva en vez de pedir login.
   // SecureStore es async incluso para leer, a diferencia de localStorage.
   useEffect(() => {
     (async () => {
       const guardado = await SecureStore.getItemAsync(STORAGE_KEY);
-      if (guardado) {
-        const payload = decodificarPayload(guardado);
-        const vigente = payload && payload.exp * 1000 > Date.now();
-        if (vigente) {
-          setToken(guardado);
-        } else {
-          await SecureStore.deleteItemAsync(STORAGE_KEY);
-        }
+      const payload = guardado ? decodificarPayload(guardado) : null;
+      if (guardado && payload && payload.exp * 1000 > Date.now()) {
+        setToken(guardado);
+      } else {
+        await SecureStore.deleteItemAsync(STORAGE_KEY);
+        await renovarSesion();
       }
       setCargando(false);
     })();
   }, []);
 
-  async function guardarSesion(accessToken: string) {
+  async function guardarSesion({ accessToken, refreshToken }: TokenPair) {
     await SecureStore.setItemAsync(STORAGE_KEY, accessToken);
+    await SecureStore.setItemAsync(REFRESH_STORAGE_KEY, refreshToken);
     setToken(accessToken);
   }
 
   async function iniciarSesion(email: string, password: string) {
-    const { accessToken } = await api.login(email, password);
-    await guardarSesion(accessToken);
+    await guardarSesion(await api.login(email, password));
   }
 
   async function registrarse(dto: RegistroInput) {
-    const { accessToken } = await api.registrar(dto);
-    await guardarSesion(accessToken);
+    await guardarSesion(await api.registrar(dto));
+  }
+
+  async function loginConClerk(clerkToken: string) {
+    await guardarSesion(await api.loginConClerk(clerkToken));
   }
 
   async function cerrarSesion() {
     await SecureStore.deleteItemAsync(STORAGE_KEY);
+    await SecureStore.deleteItemAsync(REFRESH_STORAGE_KEY);
     setToken(null);
   }
 
@@ -108,7 +139,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ token, usuario, cargando, iniciarSesion, registrarse, cerrarSesion }}
+      value={{
+        token,
+        usuario,
+        cargando,
+        iniciarSesion,
+        registrarse,
+        loginConClerk,
+        cerrarSesion,
+      }}
     >
       {children}
     </AuthContext.Provider>

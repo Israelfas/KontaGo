@@ -6,7 +6,15 @@ import { Nav } from '@/components/nav';
 import { Button, EmptyState, ErrorState, LoadingState, PageHeader } from '@/components/ui';
 import { BoxIcon, PlusIcon } from '@/components/icons';
 import { useAuth } from '@/lib/auth-context';
-import { listarProductos, crearProducto, actualizarProducto, ApiError } from '@/lib/api';
+import {
+  listarProductos,
+  crearProducto,
+  actualizarProducto,
+  darDeBajaProducto,
+  reactivarProducto,
+  listarProductosDadosDeBaja,
+  ApiError,
+} from '@/lib/api';
 import { formatearCentavos } from '@/lib/formato';
 import type { Producto } from '@/lib/tipos';
 
@@ -192,10 +200,12 @@ function FormularioNuevoProducto({
 function FormularioEditarProducto({
   producto,
   onActualizado,
+  onDadoDeBaja,
   onCerrar,
 }: {
   producto: Producto;
   onActualizado: (p: Producto) => void;
+  onDadoDeBaja: (p: Producto) => void;
   onCerrar: () => void;
 }) {
   const { token } = useAuth();
@@ -208,6 +218,22 @@ function FormularioEditarProducto({
   );
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [confirmandoBaja, setConfirmandoBaja] = useState(false);
+
+  async function darDeBaja() {
+    if (!token) return;
+    setError(null);
+    setEnviando(true);
+    try {
+      onDadoDeBaja(await darDeBajaProducto(token, producto.id));
+      onCerrar();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo dar de baja el producto');
+      setConfirmandoBaja(false);
+    } finally {
+      setEnviando(false);
+    }
+  }
 
   async function manejarSubmit(e: FormEvent) {
     e.preventDefault();
@@ -283,14 +309,44 @@ function FormularioEditarProducto({
         </p>
       )}
 
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 flex flex-wrap gap-2">
         <Button type="submit" variant="primary" disabled={enviando}>
           {enviando ? 'Guardando…' : 'Guardar cambios'}
         </Button>
         <Button type="button" variant="ghost" onClick={onCerrar}>
           Cancelar
         </Button>
+        {!confirmandoBaja && (
+          <Button
+            type="button"
+            variant="ghost"
+            className="sm:ml-auto"
+            disabled={enviando}
+            onClick={() => setConfirmandoBaja(true)}
+          >
+            Dar de baja
+          </Button>
+        )}
       </div>
+
+      {/* Confirmación en dos pasos: la baja saca el producto de la caja,
+          no conviene que un click perdido lo haga. */}
+      {confirmandoBaja && (
+        <div className="mt-4 rounded-lg border border-rojo-perdida/30 bg-rojo-perdida/5 p-3">
+          <p className="text-sm text-tinta">
+            <strong>{producto.nombre}</strong> dejará de aparecer en el catálogo y no se podrá
+            vender. Sus ventas pasadas se conservan, y podés reactivarlo después.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <Button type="button" variant="danger" disabled={enviando} onClick={darDeBaja}>
+              {enviando ? 'Dando de baja…' : 'Sí, dar de baja'}
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setConfirmandoBaja(false)}>
+              No
+            </Button>
+          </div>
+        </div>
+      )}
     </form>
   );
 }
@@ -373,12 +429,14 @@ function TablaProductos({
   productoEditandoId,
   onEditar,
   onActualizado,
+  onDadoDeBaja,
   onCerrarEdicion,
 }: {
   productos: Producto[];
   productoEditandoId: string | null;
   onEditar: (id: string) => void;
   onActualizado: (p: Producto) => void;
+  onDadoDeBaja: (p: Producto) => void;
   onCerrarEdicion: () => void;
 }) {
   return (
@@ -443,6 +501,7 @@ function TablaProductos({
             <FormularioEditarProducto
               producto={producto}
               onActualizado={onActualizado}
+              onDadoDeBaja={onDadoDeBaja}
               onCerrar={onCerrarEdicion}
             />
           );
@@ -451,8 +510,106 @@ function TablaProductos({
   );
 }
 
-function ContenidoProductos() {
+// Plegada por defecto y cargada recién al abrirla: es algo que se mira
+// de vez en cuando, no en cada visita al catálogo.
+function SeccionDadosDeBaja({
+  dadosDeBaja,
+  abierta,
+  onAlternar,
+  onReactivado,
+}: {
+  dadosDeBaja: Producto[] | null;
+  abierta: boolean;
+  onAlternar: () => void;
+  onReactivado: (p: Producto) => void;
+}) {
   const { token } = useAuth();
+  const [reactivandoId, setReactivandoId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function reactivar(producto: Producto) {
+    if (!token) return;
+    setError(null);
+    setReactivandoId(producto.id);
+    try {
+      onReactivado(await reactivarProducto(token, producto.id));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo reactivar el producto');
+    } finally {
+      setReactivandoId(null);
+    }
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onAlternar}
+        className="text-sm font-medium text-tinta-suave underline hover:text-tinta"
+      >
+        {abierta ? 'Ocultar productos dados de baja' : 'Ver productos dados de baja'}
+      </button>
+
+      {abierta && (
+        <div className="mt-3 space-y-3">
+          {error && (
+            <p className="rounded-lg bg-rojo-perdida/10 px-3 py-2 text-sm text-rojo-perdida">
+              {error}
+            </p>
+          )}
+          {dadosDeBaja === null && <LoadingState label="Cargando…" />}
+          {dadosDeBaja?.length === 0 && (
+            <p className="text-sm text-tinta-suave">No hay productos dados de baja.</p>
+          )}
+          {dadosDeBaja && dadosDeBaja.length > 0 && (
+            <div className="table-shell">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="table-header">
+                    <th className="px-4 py-3">Producto</th>
+                    <th className="px-4 py-3">Código</th>
+                    <th className="px-4 py-3 text-right">Stock</th>
+                    <th className="px-4 py-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {dadosDeBaja.map((p) => (
+                    <tr key={p.id} className="border-t border-papel-linea">
+                      <td className="px-4 py-3 text-tinta-suave">{p.nombre}</td>
+                      <td className="px-4 py-3 font-ticket text-xs text-tinta-suave">
+                        {p.codigoBarras}
+                      </td>
+                      <td className="px-4 py-3 text-right font-ticket text-tinta-suave">
+                        {p.stock}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          disabled={reactivandoId !== null}
+                          onClick={() => reactivar(p)}
+                          className="text-xs font-medium text-tinta-suave underline hover:text-tinta disabled:opacity-50"
+                        >
+                          {reactivandoId === p.id ? 'Reactivando…' : 'Reactivar'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ContenidoProductos() {
+  const { token, usuario } = useAuth();
+  const esAdmin = usuario?.rol === 'admin';
+  // null = todavía no se pidió (la sección arranca plegada).
+  const [dadosDeBaja, setDadosDeBaja] = useState<Producto[] | null>(null);
+  const [dadosDeBajaAbierta, setDadosDeBajaAbierta] = useState(false);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -469,6 +626,28 @@ function ContenidoProductos() {
         setError(err instanceof ApiError ? err.message : 'No se pudo cargar el catálogo'),
       )
       .finally(() => setCargando(false));
+  }
+
+  function alternarDadosDeBaja() {
+    const abrir = !dadosDeBajaAbierta;
+    setDadosDeBajaAbierta(abrir);
+    if (abrir && dadosDeBaja === null && token) {
+      listarProductosDadosDeBaja(token)
+        .then(setDadosDeBaja)
+        .catch(() => setDadosDeBaja([]));
+    }
+  }
+
+  function manejarDadoDeBaja(producto: Producto) {
+    setProductos((prev) => prev.filter((p) => p.id !== producto.id));
+    setDadosDeBaja((prev) => (prev ? [producto, ...prev] : prev));
+  }
+
+  function manejarReactivado(producto: Producto) {
+    setDadosDeBaja((prev) => prev?.filter((p) => p.id !== producto.id) ?? prev);
+    setProductos((prev) =>
+      [...prev, producto].sort((a, b) => a.nombre.localeCompare(b.nombre)),
+    );
   }
 
   useEffect(() => {
@@ -528,7 +707,17 @@ function ContenidoProductos() {
                   prev.map((p) => (p.id === actualizado.id ? actualizado : p)),
                 )
               }
+              onDadoDeBaja={manejarDadoDeBaja}
               onCerrarEdicion={() => setProductoEditandoId(null)}
+            />
+          )}
+
+          {!cargando && !error && esAdmin && (
+            <SeccionDadosDeBaja
+              dadosDeBaja={dadosDeBaja}
+              abierta={dadosDeBajaAbierta}
+              onAlternar={alternarDadosDeBaja}
+              onReactivado={manejarReactivado}
             />
           )}
         </div>
