@@ -245,6 +245,23 @@ export function actualizarProducto(
   });
 }
 
+// Baja lógica: el producto deja de aparecer en catálogo, escaneo y
+// ventas, y su código de barras queda libre. Se puede reactivar.
+export function darDeBajaProducto(token: string, id: string): Promise<Producto> {
+  return apiFetch<Producto>(`/productos/${id}/baja`, { method: 'PATCH', token });
+}
+
+export function reactivarProducto(token: string, id: string): Promise<Producto> {
+  return apiFetch<Producto>(`/productos/${id}/reactivar`, {
+    method: 'PATCH',
+    token,
+  });
+}
+
+export function listarProductosDadosDeBaja(token: string): Promise<Producto[]> {
+  return apiFetch<Producto[]>('/productos/dados-de-baja', { token });
+}
+
 export function buscarPorCodigoBarras(
   token: string,
   codigoBarras: string,

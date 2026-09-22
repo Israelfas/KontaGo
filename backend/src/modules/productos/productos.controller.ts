@@ -41,9 +41,33 @@ export class ProductosController {
     return this.productosService.actualizar(user.tenantId, id, dto);
   }
 
+  @Patch(':id/baja')
+  @Roles(Rol.ADMIN)
+  darDeBaja(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.productosService.darDeBaja(user.tenantId, id);
+  }
+
+  @Patch(':id/reactivar')
+  @Roles(Rol.ADMIN)
+  reactivar(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.productosService.reactivar(user.tenantId, id);
+  }
+
   @Get()
   listar(@CurrentUser() user: AuthenticatedUser) {
     return this.productosService.listar(user.tenantId);
+  }
+
+  @Get('dados-de-baja')
+  @Roles(Rol.ADMIN)
+  listarDadosDeBaja(@CurrentUser() user: AuthenticatedUser) {
+    return this.productosService.listarDadosDeBaja(user.tenantId);
   }
 
   @Get('escanear/:codigoBarras')

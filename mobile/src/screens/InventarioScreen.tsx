@@ -253,7 +253,7 @@ function SeccionAlertas({ alertas }: { alertas: AlertasProductos | null }) {
               <Text style={styles.alertaNombre}>{p.nombre}</Text>
               <Text style={[styles.alertaValor, { color: colores.rojoPerdida }]}>
                 {p.fechaVencimiento
-                  ? new Date(p.fechaVencimiento).toLocaleDateString('es', { day: 'numeric', month: 'short' })
+                  ? new Date(p.fechaVencimiento + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })
                   : '—'}
               </Text>
             </View>

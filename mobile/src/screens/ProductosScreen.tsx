@@ -4,7 +4,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../lib/auth-context';
-import { listarProductos, crearProducto, actualizarProducto, ApiError } from '../lib/api';
+import {
+  listarProductos,
+  crearProducto,
+  actualizarProducto,
+  darDeBajaProducto,
+  reactivarProducto,
+  listarProductosDadosDeBaja,
+  ApiError,
+} from '../lib/api';
 import { formatearCentavos } from '../lib/formato';
 import {
   Boton,
@@ -19,8 +27,8 @@ import {
 import { colores, espaciado, radios } from '../theme/colores';
 import type { Producto } from '../lib/tipos';
 
-// El backend valida con @IsDateString(), que acepta ISO 8601 —
-// "AAAA-MM-DD" alcanza. Sin librería de selector de fecha (para no
+// El backend exige exactamente "AAAA-MM-DD" (una fecha de calendario,
+// sin hora ni zona horaria). Sin librería de selector de fecha (para no
 // meter una dependencia nativa nueva), validamos el formato a mano.
 const FORMATO_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -274,10 +282,12 @@ function FormularioNuevoProducto({
 function FormularioEditarProducto({
   producto,
   onActualizado,
+  onDadoDeBaja,
   onCerrar,
 }: {
   producto: Producto;
   onActualizado: (p: Producto) => void;
+  onDadoDeBaja: (p: Producto) => void;
   onCerrar: () => void;
 }) {
   const { token } = useAuth();
@@ -286,8 +296,24 @@ function FormularioEditarProducto({
   const [fechaVencimiento, setFechaVencimiento] = useState(producto.fechaVencimiento ?? '');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [confirmandoBaja, setConfirmandoBaja] = useState(false);
 
   const fechaValida = !fechaVencimiento || FORMATO_FECHA.test(fechaVencimiento);
+
+  async function darDeBaja() {
+    if (!token) return;
+    setError(null);
+    setEnviando(true);
+    try {
+      onDadoDeBaja(await darDeBajaProducto(token, producto.id));
+      onCerrar();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo dar de baja el producto');
+      setConfirmandoBaja(false);
+    } finally {
+      setEnviando(false);
+    }
+  }
 
   async function manejarSubmit() {
     if (!token || !fechaValida) return;
@@ -359,12 +385,123 @@ function FormularioEditarProducto({
           Cancelar
         </Boton>
       </View>
+
+      {/* Confirmación en dos pasos: la baja saca el producto de la caja,
+          no conviene que un toque perdido lo haga. */}
+      {confirmandoBaja ? (
+        <View style={styles.confirmacionBaja}>
+          <Text style={styles.confirmacionTexto}>
+            <Text style={{ fontWeight: '700' }}>{producto.nombre}</Text> dejará de aparecer en el
+            catálogo y no se podrá vender. Sus ventas pasadas se conservan, y podés reactivarlo
+            después.
+          </Text>
+          <View style={{ flexDirection: 'row', gap: espaciado.sm }}>
+            <Boton variante="danger" onPress={darDeBaja} cargando={enviando} style={{ flex: 1 }}>
+              Sí, dar de baja
+            </Boton>
+            <Boton variante="ghost" onPress={() => setConfirmandoBaja(false)} style={{ flex: 1 }}>
+              No
+            </Boton>
+          </View>
+        </View>
+      ) : (
+        <Pressable
+          onPress={() => setConfirmandoBaja(true)}
+          disabled={enviando}
+          hitSlop={8}
+          style={styles.botonBaja}
+        >
+          <Ionicons name="archive-outline" size={16} color={colores.rojoPerdida} />
+          <Text style={styles.botonBajaTexto}>Dar de baja</Text>
+        </Pressable>
+      )}
     </Tarjeta>
   );
 }
 
-export function ProductosScreen() {
+// Plegada por defecto y cargada recién al abrirla: es algo que se mira
+// de vez en cuando, no en cada visita al catálogo.
+function SeccionDadosDeBaja({
+  dadosDeBaja,
+  abierta,
+  onAlternar,
+  onReactivado,
+}: {
+  dadosDeBaja: Producto[] | null;
+  abierta: boolean;
+  onAlternar: () => void;
+  onReactivado: (p: Producto) => void;
+}) {
   const { token } = useAuth();
+  const [reactivandoId, setReactivandoId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function reactivar(producto: Producto) {
+    if (!token) return;
+    setError(null);
+    setReactivandoId(producto.id);
+    try {
+      onReactivado(await reactivarProducto(token, producto.id));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo reactivar el producto');
+    } finally {
+      setReactivandoId(null);
+    }
+  }
+
+  return (
+    <View style={styles.seccionBaja}>
+      <Pressable onPress={onAlternar} hitSlop={8} style={styles.seccionBajaToggle}>
+        <Ionicons
+          name={abierta ? 'chevron-up' : 'chevron-down'}
+          size={16}
+          color={colores.tintaSuave}
+        />
+        <Text style={styles.seccionBajaToggleTexto}>
+          {abierta ? 'Ocultar productos dados de baja' : 'Ver productos dados de baja'}
+        </Text>
+      </Pressable>
+
+      {abierta && (
+        <View style={{ gap: espaciado.sm, marginTop: espaciado.sm }}>
+          {error && <Text style={styles.error}>{error}</Text>}
+          {dadosDeBaja === null && <Text style={styles.filaCodigo}>Cargando…</Text>}
+          {dadosDeBaja?.length === 0 && (
+            <Text style={styles.filaCodigo}>No hay productos dados de baja.</Text>
+          )}
+          {dadosDeBaja?.map((p) => (
+            <Tarjeta key={p.id} style={styles.filaTarjeta}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.filaNombre, { color: colores.tintaSuave }]} numberOfLines={1}>
+                  {p.nombre}
+                </Text>
+                <Text style={styles.filaCodigo}>
+                  {p.codigoBarras} · Stock {p.stock}
+                </Text>
+              </View>
+              <Boton
+                variante="secondary"
+                onPress={() => reactivar(p)}
+                cargando={reactivandoId === p.id}
+                disabled={reactivandoId !== null}
+                style={styles.botonReactivar}
+              >
+                Reactivar
+              </Boton>
+            </Tarjeta>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+export function ProductosScreen() {
+  const { token, usuario } = useAuth();
+  const esAdmin = usuario?.rol === 'admin';
+  // null = todavía no se pidió (la sección arranca plegada).
+  const [dadosDeBaja, setDadosDeBaja] = useState<Producto[] | null>(null);
+  const [dadosDeBajaAbierta, setDadosDeBajaAbierta] = useState(false);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -386,6 +523,28 @@ export function ProductosScreen() {
       cargar();
     }, [cargar]),
   );
+
+  function alternarDadosDeBaja() {
+    const abrir = !dadosDeBajaAbierta;
+    setDadosDeBajaAbierta(abrir);
+    if (abrir && dadosDeBaja === null && token) {
+      listarProductosDadosDeBaja(token)
+        .then(setDadosDeBaja)
+        .catch(() => setDadosDeBaja([]));
+    }
+  }
+
+  function manejarDadoDeBaja(producto: Producto) {
+    setProductos((prev) => prev.filter((p) => p.id !== producto.id));
+    setDadosDeBaja((prev) => (prev ? [producto, ...prev] : prev));
+  }
+
+  function manejarReactivado(producto: Producto) {
+    setDadosDeBaja((prev) => prev?.filter((p) => p.id !== producto.id) ?? prev);
+    setProductos((prev) =>
+      [...prev, producto].sort((a, b) => a.nombre.localeCompare(b.nombre)),
+    );
+  }
 
   return (
     <SafeAreaView style={styles.contenedor} edges={[]}>
@@ -412,6 +571,7 @@ export function ProductosScreen() {
               onActualizado={(actualizado) =>
                 setProductos((prev) => prev.map((p) => (p.id === actualizado.id ? actualizado : p)))
               }
+              onDadoDeBaja={manejarDadoDeBaja}
               onCerrar={() => setProductoEditandoId(null)}
             />
           ) : (
@@ -435,6 +595,16 @@ export function ProductosScreen() {
           ) : null
         }
         ListHeaderComponentStyle={{ marginBottom: formularioAbierto ? espaciado.md : 0 }}
+        ListFooterComponent={
+          !cargando && !error && esAdmin ? (
+            <SeccionDadosDeBaja
+              dadosDeBaja={dadosDeBaja}
+              abierta={dadosDeBajaAbierta}
+              onAlternar={alternarDadosDeBaja}
+              onReactivado={manejarReactivado}
+            />
+          ) : null
+        }
         ListEmptyComponent={
           !cargando && !error ? (
             <EstadoVacio
@@ -490,6 +660,29 @@ const styles = StyleSheet.create({
     width: 100,
   },
   editarBoton: { marginLeft: espaciado.xs, padding: 4 },
+  botonBaja: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: espaciado.xs,
+    marginTop: espaciado.md,
+    paddingVertical: espaciado.xs,
+  },
+  botonBajaTexto: { fontSize: 13, color: colores.rojoPerdida, fontWeight: '600' },
+  confirmacionBaja: {
+    marginTop: espaciado.md,
+    padding: espaciado.md,
+    gap: espaciado.sm,
+    borderRadius: radios.md,
+    borderWidth: 1,
+    borderColor: 'rgba(182,70,47,0.3)',
+    backgroundColor: 'rgba(182,70,47,0.05)',
+  },
+  confirmacionTexto: { fontSize: 13, color: colores.tinta, lineHeight: 18 },
+  seccionBaja: { marginTop: espaciado.lg },
+  seccionBajaToggle: { flexDirection: 'row', alignItems: 'center', gap: espaciado.xs },
+  seccionBajaToggleTexto: { fontSize: 13, color: colores.tintaSuave, fontWeight: '600' },
+  botonReactivar: { paddingHorizontal: espaciado.md, minHeight: 36 },
   filaPrecio: { fontSize: 14, color: colores.tinta, fontVariant: ['tabular-nums'], fontWeight: '600' },
   stockPill: { marginTop: 4, paddingHorizontal: 8, paddingVertical: 2, borderRadius: radios.full },
   stockPillBajo: { backgroundColor: 'rgba(217,140,43,0.14)' },

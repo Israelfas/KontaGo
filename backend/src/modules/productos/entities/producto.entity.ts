@@ -17,14 +17,19 @@ import { Tenant } from '../../tenants/entities/tenant.entity';
  * - precioVentaCentavos / costoUnitarioCentavos: enteros en centavos, nunca floats.
  * - costoUnitarioCentavos se recalcula como costo promedio ponderado en cada
  *   reabastecimiento (lógica en el servicio de inventario, no acá).
- * - Índice único compuesto (tenantId, codigoBarras): la búsqueda en el
- *   checkout es rápida incluso con muchas tiendas concurrentes, y de paso
- *   impide dos productos con el mismo código en la misma tienda — antes
- *   de la restricción única, el escaneo podía devolver un producto
- *   arbitrario entre duplicados (ver migración CodigoBarrasUnico).
+ * - Índice único compuesto (tenantId, codigoBarras) entre productos
+ *   ACTIVOS: la búsqueda en el checkout es rápida incluso con muchas
+ *   tiendas concurrentes, y de paso impide dos productos activos con el
+ *   mismo código en la misma tienda — antes de la restricción única, el
+ *   escaneo podía devolver un producto arbitrario entre duplicados (ver
+ *   migración CodigoBarrasUnico). Un producto dado de baja libera su
+ *   código (ver migración CodigoBarrasUnicoSoloActivos).
  */
 @Entity('productos')
-@Index(['tenantId', 'codigoBarras'], { unique: true })
+@Index('IDX_productos_tenant_codigo_activo', ['tenantId', 'codigoBarras'], {
+  unique: true,
+  where: '"activo" = true',
+})
 export class Producto {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -63,8 +68,13 @@ export class Producto {
   @Column({ name: 'stock_minimo', type: 'integer', default: 0 })
   stockMinimo: number;
 
+  // 'AAAA-MM-DD' como texto, no Date: es una fecha de calendario, sin
+  // hora ni zona horaria. TypeORM ya devuelve las columnas `date` como
+  // string; y al revés, un Date se convierte con la hora LOCAL del
+  // servidor, así que new Date('2026-09-30') (medianoche UTC) en Ecuador
+  // se guardaba como el 29.
   @Column({ name: 'fecha_vencimiento', type: 'date', nullable: true })
-  fechaVencimiento: Date | null;
+  fechaVencimiento: string | null;
 
   // Tarifa 0% de IVA (ej. alimentos en estado natural, medicinas — ver
   // art. 55 LRTI). false = tarifa general vigente (15% al momento de

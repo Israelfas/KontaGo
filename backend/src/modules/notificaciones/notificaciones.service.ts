@@ -9,6 +9,18 @@ import { Rol } from '../../common/enums/rol.enum';
 import { Producto } from '../productos/entities/producto.entity';
 import { ProductosService } from '../productos/productos.service';
 import { MailService } from '../mail/mail.service';
+import { fechaLegible } from '../../common/formato-fecha';
+
+// El nombre del producto lo escribe el usuario: sin escapar, un nombre
+// como '<a href=...>' se renderizaría como HTML dentro del correo.
+function escaparHtml(texto: string): string {
+  return texto
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 @Injectable()
 export class NotificacionesService {
@@ -82,14 +94,10 @@ export class NotificacionesService {
     const filas = productos
       .map((p) => {
         const fecha = p.fechaVencimiento
-          ? new Date(p.fechaVencimiento).toLocaleDateString('es-EC', {
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric',
-            })
+          ? fechaLegible(p.fechaVencimiento)
           : '—';
         return `<tr>
-          <td style="padding:8px 12px;border-bottom:1px solid #e5e0d8;">${p.nombre}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e0d8;">${escaparHtml(p.nombre)}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #e5e0d8;text-align:right;">${p.stock}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #e5e0d8;text-align:right;">${fecha}</td>
         </tr>`;
