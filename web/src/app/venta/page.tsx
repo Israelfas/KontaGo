@@ -352,15 +352,18 @@ function ContenidoVenta() {
             </Button>
           </div>
           {errorBusqueda && <p className="mt-2 text-sm text-rojo-perdida">{errorBusqueda}</p>}
-
-          {codigoNoEncontrado && (
-            <FormularioProductoNuevo
-              codigoBarras={codigoNoEncontrado}
-              onCreado={manejarProductoNuevoCreado}
-              onCancelar={() => setCodigoNoEncontrado(null)}
-            />
-          )}
         </form>
+
+        {/* Fuera del <form> de búsqueda: un form dentro de otro es HTML
+            inválido, y en React el submit del de adentro también dispara
+            el onSubmit del de afuera (volvía a buscar el código). */}
+        {codigoNoEncontrado && (
+          <FormularioProductoNuevo
+            codigoBarras={codigoNoEncontrado}
+            onCreado={manejarProductoNuevoCreado}
+            onCancelar={() => setCodigoNoEncontrado(null)}
+          />
+        )}
 
         <div className="mt-3">
           {camaraActiva ? (

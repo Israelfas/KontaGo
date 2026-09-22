@@ -105,10 +105,11 @@ async function apiFetch<T>(
     return undefined as T;
   }
 
-  // NestJS nunca manda un body realmente vacío en un 200 — aunque el
-  // valor sea `null`, igual manda el texto literal "null". Si acá llega
-  // vacío es casi siempre un corte de conexión a mitad de la respuesta,
-  // no un "sin datos" legítimo.
+  // Ningún endpoint de KontaGo responde 200 con cuerpo vacío: cuando no
+  // hay dato se usa 404 (ojo: si un handler de Nest devuelve null, Nest
+  // manda 200 con el cuerpo VACÍO, no el texto "null" — por eso el
+  // escaneo responde 404). Así que si acá llega vacío es casi siempre un
+  // corte de conexión a mitad de la respuesta, no un "sin datos".
   const texto = await response.text();
   if (texto) {
     return parsearOFallar<T>(texto, response.status);
@@ -308,14 +309,21 @@ export function listarProductosDadosDeBaja(token: string): Promise<Producto[]> {
   return apiFetch<Producto[]>('/productos/dados-de-baja', { token });
 }
 
-export function buscarPorCodigoBarras(
+// null = el código no está en el catálogo (el backend responde 404), para
+// que la caja ofrezca darlo de alta en vez de mostrar un error.
+export async function buscarPorCodigoBarras(
   token: string,
   codigoBarras: string,
 ): Promise<Producto | null> {
-  return apiFetch<Producto | null>(
-    `/productos/escanear/${encodeURIComponent(codigoBarras)}`,
-    { token },
-  );
+  try {
+    return await apiFetch<Producto>(
+      `/productos/escanear/${encodeURIComponent(codigoBarras)}`,
+      { token },
+    );
+  } catch (err) {
+    if (err instanceof ApiError && err.statusCode === 404) return null;
+    throw err;
+  }
 }
 
 // --- Ventas ---

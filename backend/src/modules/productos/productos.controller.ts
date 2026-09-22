@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  NotFoundException,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -70,15 +71,25 @@ export class ProductosController {
     return this.productosService.listarDadosDeBaja(user.tenantId);
   }
 
+  // Código desconocido = 404, no 200 con null: cuando un handler devuelve
+  // null, Nest responde 200 con el cuerpo VACÍO, y el cliente no puede
+  // distinguir eso de una respuesta cortada por la red (mostraba "el
+  // servidor no respondió" en vez de ofrecer dar de alta el producto).
   @Get('escanear/:codigoBarras')
-  escanear(
+  async escanear(
     @CurrentUser() user: AuthenticatedUser,
     @Param('codigoBarras') codigoBarras: string,
   ) {
-    return this.productosService.buscarPorCodigoBarras(
+    const producto = await this.productosService.buscarPorCodigoBarras(
       user.tenantId,
       codigoBarras,
     );
+    if (!producto) {
+      throw new NotFoundException(
+        `No hay ningún producto con el código ${codigoBarras} en esta tienda`,
+      );
+    }
+    return producto;
   }
 
   @Get('alertas')
