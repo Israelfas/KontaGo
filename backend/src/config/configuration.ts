@@ -5,9 +5,58 @@ function parseDuracionASegundos(valor: string): number {
   return Math.floor(milisegundos / 1000);
 }
 
+/**
+ * Secretos que firman los JWT. En desarrollo se tolera el valor por
+ * defecto para no trabar a nadie, pero en producción arrancar con
+ * 'change-me-...' significaría que cualquiera que lea este repo puede
+ * firmar tokens válidos (de cualquier tenant, con rol admin). Mejor que
+ * el backend no levante a que levante inseguro.
+ */
+function secretoRequerido(nombre: string, porDefecto: string): string {
+  const valor = process.env[nombre];
+  if (valor) return valor;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      `Falta la variable de entorno ${nombre} (obligatoria en producción)`,
+    );
+  }
+  return porDefecto;
+}
+
+/**
+ * TRUST_PROXY: cuántos proxies (Nginx, Railway, Cloudflare...) hay
+ * delante del backend. Sin esto, detrás de un proxy todas las peticiones
+ * parecen venir de la IP del proxy, y el límite de intentos de login se
+ * compartiría entre TODOS los usuarios.
+ *
+ * - vacío (default): sin proxy, se usa la IP de la conexión.
+ * - número (ej. 1): Express toma la IP que agregó el último proxy en
+ *   X-Forwarded-For — la del cliente real, que él no puede falsificar.
+ * - lista de IPs/subredes (ej. "loopback, 10.0.0.0/8"): confía solo en
+ *   proxies con esas direcciones.
+ *
+ * "true" se rechaza a propósito: con true Express toma la IP de más a la
+ * izquierda del header, que la escribe el propio cliente — un atacante
+ * mandaría una IP inventada distinta en cada intento y el límite nunca
+ * lo frenaría.
+ */
+function parseTrustProxy(valor: string | undefined): number | string | false {
+  const limpio = valor?.trim();
+  if (!limpio || limpio === 'false') return false;
+  if (/^\d+$/.test(limpio)) return parseInt(limpio, 10);
+  if (limpio === 'true') {
+    throw new Error(
+      'TRUST_PROXY=true es inseguro (permite falsificar la IP y saltarse el límite de intentos). ' +
+        'Usá la cantidad de proxies delante del backend, ej. TRUST_PROXY=1',
+    );
+  }
+  return limpio;
+}
+
 export default () => ({
   nodeEnv: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3000', 10),
+  trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
 
   database: {
     host: process.env.DB_HOST || 'localhost',
@@ -54,14 +103,24 @@ export default () => ({
     tarifaIvaGeneral: parseFloat(process.env.IVA_TARIFA_GENERAL || '15') / 100,
   },
 
+  clerk: {
+    secretKey: process.env.CLERK_SECRET_KEY || '',
+  },
+
   jwt: {
-    accessSecret: process.env.JWT_ACCESS_SECRET || 'change-me-access-secret',
+    accessSecret: secretoRequerido(
+      'JWT_ACCESS_SECRET',
+      'change-me-access-secret',
+    ),
     // Segundos (número), no string ('15m'): así @nestjs/jwt tipa expiresIn
     // como `number` sin necesidad de castear a `any` en ningún lado.
     accessExpiresInSeconds: parseDuracionASegundos(
       process.env.JWT_ACCESS_EXPIRES_IN || '15m',
     ),
-    refreshSecret: process.env.JWT_REFRESH_SECRET || 'change-me-refresh-secret',
+    refreshSecret: secretoRequerido(
+      'JWT_REFRESH_SECRET',
+      'change-me-refresh-secret',
+    ),
     refreshExpiresInSeconds: parseDuracionASegundos(
       process.env.JWT_REFRESH_EXPIRES_IN || '7d',
     ),

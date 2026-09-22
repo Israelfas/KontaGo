@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
+import { useSSO, useAuth as useClerkAuth } from '@clerk/expo';
 import { useAuth } from '../lib/auth-context';
 import { ApiError } from '../lib/api';
 import { AuthFrame } from '../components/auth-frame';
@@ -8,26 +11,56 @@ import { Boton, Etiqueta, estilosCampo } from '../components/ui';
 import { colores, espaciado } from '../theme/colores';
 import type { AuthStackParamList } from '../navigation/AuthNavigator';
 
+WebBrowser.maybeCompleteAuthSession();
+
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
 export function LoginScreen({ navigation }: Props) {
-  const { iniciarSesion } = useAuth();
+  const { iniciarSesion, loginConClerk } = useAuth();
+  const { startSSOFlow } = useSSO();
+  const { getToken } = useClerkAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
+  const [cargandoGoogle, setCargandoGoogle] = useState(false);
 
   async function manejarSubmit() {
     setError(null);
     setCargando(true);
     try {
       await iniciarSesion(email.trim(), password);
-      // No hace falta navegar manualmente: RootNavigator cambia de stack
-      // solo con que `token` deje de ser null.
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo iniciar sesión');
     } finally {
       setCargando(false);
+    }
+  }
+
+  async function manejarGoogle() {
+    setError(null);
+    setCargandoGoogle(true);
+    try {
+      const redirectUrl = Linking.createURL('/sso-callback');
+      console.log('Google SSO redirectUrl:', redirectUrl);
+      const { createdSessionId, setActive } = await startSSOFlow({
+        strategy: 'oauth_google',
+        redirectUrl,
+      });
+      if (!createdSessionId || !setActive) return;
+      await setActive({ session: createdSessionId });
+      const token = await getToken();
+      if (!token) throw new Error('Sin token de Clerk');
+      await loginConClerk(token);
+    } catch (err) {
+      console.error('Google SSO:', JSON.stringify(err, null, 2), err);
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : `No se pudo continuar con Google: ${(err as Error)?.message ?? 'error desconocido'}`,
+      );
+    } finally {
+      setCargandoGoogle(false);
     }
   }
 
@@ -78,6 +111,10 @@ export function LoginScreen({ navigation }: Props) {
 
         <Boton onPress={manejarSubmit} cargando={cargando} style={{ marginTop: espaciado.sm }}>
           Ingresar a KontaGo
+        </Boton>
+
+        <Boton variante="ghost" onPress={manejarGoogle} cargando={cargandoGoogle}>
+          Continuar con Google
         </Boton>
       </View>
     </AuthFrame>

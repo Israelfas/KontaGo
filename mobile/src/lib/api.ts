@@ -44,6 +44,30 @@ export class ApiError extends Error {
   }
 }
 
+// El accessToken dura 15 min. Cuando vence, el backend responde 401 y
+// acá se pide uno nuevo con el refreshToken (lo resuelve auth-context,
+// que es quien guarda la sesión) y se repite la petición una vez. Así
+// ninguna pantalla tiene que enterarse de que el token se renovó.
+type RefrescadorDeSesion = () => Promise<string | null>;
+let refrescador: RefrescadorDeSesion | null = null;
+let refrescoEnCurso: Promise<string | null> | null = null;
+
+export function configurarRefrescoDeSesion(fn: RefrescadorDeSesion | null) {
+  refrescador = fn;
+}
+
+// Si varias pantallas reciben 401 a la vez, comparten un solo refresh
+// en vez de disparar uno cada una.
+function refrescarUnaVez(): Promise<string | null> {
+  if (!refrescador) return Promise.resolve(null);
+  if (!refrescoEnCurso) {
+    refrescoEnCurso = refrescador().finally(() => {
+      refrescoEnCurso = null;
+    });
+  }
+  return refrescoEnCurso;
+}
+
 /**
  * Wrapper central de fetch. Todas las llamadas al backend pasan por acá,
  * así el manejo de errores, el header de auth y la base URL están en un
@@ -55,16 +79,27 @@ async function apiFetch<T>(
 ): Promise<T> {
   const { token, headers, ...resto } = options;
 
-  const fetchOptions: RequestInit = {
+  const construirOpciones = (tokenActual?: string): RequestInit => ({
     ...resto,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(tokenActual ? { Authorization: `Bearer ${tokenActual}` } : {}),
       ...headers,
     },
-  };
+  });
 
-  const response = await fetch(`${API_URL}${path}`, fetchOptions);
+  let fetchOptions = construirOpciones(token);
+  let response = await fetch(`${API_URL}${path}`, fetchOptions);
+
+  // Reintentar tras un 401 es seguro incluso en POST: el guard JWT
+  // rechaza la petición antes de que el controller haga nada.
+  if (response.status === 401 && token) {
+    const nuevoToken = await refrescarUnaVez();
+    if (nuevoToken) {
+      fetchOptions = construirOpciones(nuevoToken);
+      response = await fetch(`${API_URL}${path}`, fetchOptions);
+    }
+  }
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
@@ -153,6 +188,22 @@ export function registrar(dto: RegistroInput): Promise<TokenPair> {
   });
 }
 
+// Puente con Clerk: manda el token de sesión de Clerk y recibe el JWT
+// propio de KontaGo.
+export function loginConClerk(clerkToken: string): Promise<TokenPair> {
+  return apiFetch<TokenPair>('/auth/clerk', {
+    method: 'POST',
+    body: JSON.stringify({ clerkToken }),
+  });
+}
+
+export function refrescarSesion(refreshToken: string): Promise<TokenPair> {
+  return apiFetch<TokenPair>('/auth/refresh', {
+    method: 'POST',
+    body: JSON.stringify({ refreshToken }),
+  });
+}
+
 export interface Perfil {
   nombre: string;
   email: string;
@@ -217,6 +268,23 @@ export function actualizarProducto(
     token,
     body: JSON.stringify(dto),
   });
+}
+
+// Baja lógica: el producto deja de aparecer en catálogo, escaneo y
+// ventas, y su código de barras queda libre. Se puede reactivar.
+export function darDeBajaProducto(token: string, id: string): Promise<Producto> {
+  return apiFetch<Producto>(`/productos/${id}/baja`, { method: 'PATCH', token });
+}
+
+export function reactivarProducto(token: string, id: string): Promise<Producto> {
+  return apiFetch<Producto>(`/productos/${id}/reactivar`, {
+    method: 'PATCH',
+    token,
+  });
+}
+
+export function listarProductosDadosDeBaja(token: string): Promise<Producto[]> {
+  return apiFetch<Producto[]>('/productos/dados-de-baja', { token });
 }
 
 export function buscarPorCodigoBarras(
