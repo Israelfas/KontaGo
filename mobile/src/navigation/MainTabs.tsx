@@ -61,6 +61,11 @@ function BotonPerfil() {
 }
 
 export function MainTabs() {
+  const { usuario } = useAuth();
+  // El cajero vende y consulta el catálogo; resumen (ganancias) e
+  // inventario son del dueño (el backend igual le responde 403).
+  const esAdmin = usuario?.rol === 'admin';
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -89,9 +94,9 @@ export function MainTabs() {
       })}
     >
       <Tab.Screen name="Vender" component={VentaScreen} />
-      <Tab.Screen name="Resumen" component={DashboardScreen} />
+      {esAdmin && <Tab.Screen name="Resumen" component={DashboardScreen} />}
       <Tab.Screen name="Productos" component={ProductosScreen} />
-      <Tab.Screen name="Inventario" component={InventarioScreen} />
+      {esAdmin && <Tab.Screen name="Inventario" component={InventarioScreen} />}
     </Tab.Navigator>
   );
 }

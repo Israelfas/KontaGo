@@ -10,6 +10,7 @@ import { ProductosModule } from './modules/productos/productos.module';
 import { VentasModule } from './modules/ventas/ventas.module';
 import { InventarioModule } from './modules/inventario/inventario.module';
 import { NotificacionesModule } from './modules/notificaciones/notificaciones.module';
+import { UsuariosModule } from './modules/usuarios/usuarios.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -48,6 +49,7 @@ import { AppService } from './app.service';
     VentasModule,
     InventarioModule,
     NotificacionesModule,
+    UsuariosModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -517,7 +517,7 @@ function ContenidoInventario() {
 
 export default function InventarioPage() {
   return (
-    <RutaProtegida>
+    <RutaProtegida soloAdmin>
       <Nav />
       <ContenidoInventario />
     </RutaProtegida>

@@ -38,9 +38,11 @@ const FORMATO_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 function ChipFechaVencimiento({
   producto,
   onActualizado,
+  soloLectura,
 }: {
   producto: Producto;
   onActualizado: (p: Producto) => void;
+  soloLectura: boolean;
 }) {
   const { token } = useAuth();
   const [editando, setEditando] = useState(false);
@@ -97,6 +99,10 @@ function ChipFechaVencimiento({
       })
     : null;
 
+  if (soloLectura) {
+    return fechaLegible ? <Text style={styles.filaVencimiento}>Vence {fechaLegible}</Text> : null;
+  }
+
   return (
     <Pressable
       onPress={() => {
@@ -116,10 +122,12 @@ function FilaProducto({
   producto,
   onEditar,
   onActualizado,
+  soloLectura,
 }: {
   producto: Producto;
   onEditar: () => void;
   onActualizado: (p: Producto) => void;
+  soloLectura: boolean;
 }) {
   const stockBajo = producto.stock <= producto.stockMinimo && producto.stockMinimo > 0;
 
@@ -133,7 +141,11 @@ function FilaProducto({
           {producto.nombre}
         </Text>
         <Text style={styles.filaCodigo}>{producto.codigoBarras}</Text>
-        <ChipFechaVencimiento producto={producto} onActualizado={onActualizado} />
+        <ChipFechaVencimiento
+          producto={producto}
+          onActualizado={onActualizado}
+          soloLectura={soloLectura}
+        />
       </View>
       <View style={{ alignItems: 'flex-end' }}>
         <Text style={styles.filaPrecio}>{formatearCentavos(producto.precioVentaCentavos)}</Text>
@@ -143,9 +155,11 @@ function FilaProducto({
           </Text>
         </View>
       </View>
-      <Pressable onPress={onEditar} style={styles.editarBoton} hitSlop={8}>
-        <Ionicons name="pencil-outline" size={16} color={colores.tintaSuave} />
-      </Pressable>
+      {!soloLectura && (
+        <Pressable onPress={onEditar} style={styles.editarBoton} hitSlop={8}>
+          <Ionicons name="pencil-outline" size={16} color={colores.tintaSuave} />
+        </Pressable>
+      )}
     </Tarjeta>
   );
 }
@@ -553,7 +567,7 @@ export function ProductosScreen() {
         titulo="Productos"
         descripcion={productos.length > 0 ? `${productos.length} en tu catálogo` : undefined}
         accion={
-          !formularioAbierto ? (
+          esAdmin && !formularioAbierto ? (
             <Boton onPress={() => setFormularioAbierto(true)} style={styles.botonNuevo}>
               + Nuevo
             </Boton>
@@ -577,6 +591,7 @@ export function ProductosScreen() {
           ) : (
             <FilaProducto
               producto={item}
+              soloLectura={!esAdmin}
               onEditar={() => setProductoEditandoId(item.id)}
               onActualizado={(actualizado) =>
                 setProductos((prev) => prev.map((p) => (p.id === actualizado.id ? actualizado : p)))

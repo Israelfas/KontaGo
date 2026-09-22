@@ -22,6 +22,12 @@ interface JwtPayload {
   exp: number;
 }
 
+// El cajero no tiene acceso al resumen (ganancias), así que entra
+// directo a vender.
+export function rutaInicial(rol: JwtPayload['rol'] | undefined): string {
+  return rol === 'cajero' ? '/venta' : '/dashboard';
+}
+
 function decodificarPayload(token: string): JwtPayload | null {
   try {
     const [, payloadB64] = token.split('.');
@@ -102,8 +108,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function iniciarSesion(email: string, password: string) {
-    guardarSesion(await api.login(email, password));
-    router.push('/dashboard');
+    const par = await api.login(email, password);
+    guardarSesion(par);
+    router.push(rutaInicial(decodificarPayload(par.accessToken)?.rol));
   }
 
   // Puente con Clerk: Clerk ya autenticó a la persona (Google, etc.) del
@@ -111,11 +118,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // backend, que devuelve el MISMO tipo de token que iniciarSesion() —
   // de ahí en más es indistinguible de un login normal con contraseña.
   async function completarLoginConClerk(clerkToken: string) {
-    guardarSesion(await api.loginConClerk(clerkToken));
-    router.push('/dashboard');
+    const par = await api.loginConClerk(clerkToken);
+    guardarSesion(par);
+    router.push(rutaInicial(decodificarPayload(par.accessToken)?.rol));
   }
 
   async function registrarse(dto: RegistroInput) {
+    // Quien se registra siempre es el admin de la tienda nueva.
     guardarSesion(await api.registrar(dto));
     router.push('/dashboard');
   }

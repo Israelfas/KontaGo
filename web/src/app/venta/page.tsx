@@ -148,7 +148,7 @@ function FormularioProductoNuevo({
 }
 
 function ContenidoVenta() {
-  const { token } = useAuth();
+  const { token, usuario } = useAuth();
   const [codigoInput, setCodigoInput] = useState('');
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
   const [errorBusqueda, setErrorBusqueda] = useState<string | null>(null);
@@ -198,7 +198,15 @@ function ContenidoVenta() {
         // para ofrecer darlo de alta ahí mismo — es el flujo real de una
         // caja: llega un producto nuevo, se escanea, y hay que poder
         // cargarlo sin cortar la venta.
-        setCodigoNoEncontrado(codigo.trim());
+        // Crear productos es del admin (el backend responde 403 a un
+        // cajero): al cajero solo se le avisa.
+        if (usuario?.rol === 'admin') {
+          setCodigoNoEncontrado(codigo.trim());
+        } else {
+          setErrorBusqueda(
+            `El código ${codigo.trim()} no está en el catálogo. Pedile al administrador que lo cargue.`,
+          );
+        }
         return;
       }
       agregarAlCarrito(producto);

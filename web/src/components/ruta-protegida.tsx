@@ -4,15 +4,28 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 
-export function RutaProtegida({ children }: { children: React.ReactNode }) {
-  const { token, cargando } = useAuth();
+// soloAdmin: pantallas con información del dueño (resumen, inventario,
+// equipo). El backend igual responde 403 a un cajero; esto evita que
+// vea una pantalla rota y lo manda a vender.
+export function RutaProtegida({
+  children,
+  soloAdmin = false,
+}: {
+  children: React.ReactNode;
+  soloAdmin?: boolean;
+}) {
+  const { token, usuario, cargando } = useAuth();
+  const bloqueado = soloAdmin && usuario?.rol !== 'admin';
   const router = useRouter();
 
   useEffect(() => {
-    if (!cargando && !token) {
+    if (cargando) return;
+    if (!token) {
       router.replace('/login');
+    } else if (bloqueado) {
+      router.replace('/venta');
     }
-  }, [cargando, token, router]);
+  }, [cargando, token, bloqueado, router]);
 
   if (cargando) {
     return (
@@ -22,7 +35,7 @@ export function RutaProtegida({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!token) {
+  if (!token || bloqueado) {
     return null; // el useEffect ya está redirigiendo
   }
 

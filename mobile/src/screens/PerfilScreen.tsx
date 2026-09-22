@@ -94,14 +94,25 @@ export function PerfilScreen() {
               </View>
             </Tarjeta>
 
-            <Text style={styles.seccionTitulo}>Tu cuenta</Text>
-            <Tarjeta style={styles.grupoOpciones}>
-              <FilaOpcion
-                icono="card-outline"
-                titulo={`Suscripción · Plan ${perfil.plan ? ETIQUETAS_PLAN[perfil.plan] : '—'}`}
-                onPress={() => navigation.navigate('Suscripcion', { plan: perfil.plan })}
-              />
-            </Tarjeta>
+            {/* Equipo y suscripción son de la tienda: solo el admin. */}
+            {perfil.rol === 'admin' && (
+              <>
+                <Text style={styles.seccionTitulo}>Tu tienda</Text>
+                <Tarjeta style={styles.grupoOpciones}>
+                  <FilaOpcion
+                    icono="people-outline"
+                    titulo="Equipo"
+                    onPress={() => navigation.navigate('Equipo')}
+                  />
+                  <View style={styles.separador} />
+                  <FilaOpcion
+                    icono="card-outline"
+                    titulo={`Suscripción · Plan ${perfil.plan ? ETIQUETAS_PLAN[perfil.plan] : '—'}`}
+                    onPress={() => navigation.navigate('Suscripcion', { plan: perfil.plan })}
+                  />
+                </Tarjeta>
+              </>
+            )}
 
             <Text style={styles.seccionTitulo}>Ayuda</Text>
             <Tarjeta style={styles.grupoOpciones}>

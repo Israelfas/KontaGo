@@ -6,6 +6,7 @@ import type {
   ResumenDelDia,
   ResumenMovimientosDelDia,
   TokenPair,
+  UsuarioEquipo,
   Venta,
 } from './tipos';
 
@@ -214,6 +215,50 @@ export interface Perfil {
 
 export function obtenerPerfil(token: string): Promise<Perfil> {
   return apiFetch<Perfil>('/auth/perfil', { token });
+}
+
+// --- Equipo (solo admin) ---
+
+export function listarEquipo(token: string): Promise<UsuarioEquipo[]> {
+  return apiFetch<UsuarioEquipo[]>('/usuarios', { token });
+}
+
+export interface CrearUsuarioInput {
+  nombre: string;
+  email: string;
+  password: string;
+  rol?: 'admin' | 'cajero';
+}
+
+export function crearUsuario(
+  token: string,
+  dto: CrearUsuarioInput,
+): Promise<UsuarioEquipo> {
+  return apiFetch<UsuarioEquipo>('/usuarios', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(dto),
+  });
+}
+
+export function desactivarUsuario(token: string, id: string): Promise<UsuarioEquipo> {
+  return apiFetch<UsuarioEquipo>(`/usuarios/${id}/desactivar`, { method: 'PATCH', token });
+}
+
+export function reactivarUsuario(token: string, id: string): Promise<UsuarioEquipo> {
+  return apiFetch<UsuarioEquipo>(`/usuarios/${id}/reactivar`, { method: 'PATCH', token });
+}
+
+export function cambiarPasswordUsuario(
+  token: string,
+  id: string,
+  password: string,
+): Promise<UsuarioEquipo> {
+  return apiFetch<UsuarioEquipo>(`/usuarios/${id}/password`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ password }),
+  });
 }
 
 // --- Productos ---

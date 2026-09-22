@@ -9,12 +9,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { verifyToken } from '@clerk/backend';
 import { randomUUID } from 'crypto';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Usuario } from './entities/usuario.entity';
 import { Tenant } from '../tenants/entities/tenant.entity';
 import { Rol } from '../../common/enums/rol.enum';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 import { RegistroDto } from './dto/registro.dto';
+import { bloquearEmail } from '../../common/db/bloquear-email';
 
 interface TokenPair {
   accessToken: string;
@@ -65,7 +66,7 @@ export class AuthService {
 
       // El chequeo de arriba es solo para fallar rápido; el que vale es
       // este, ya con el lock tomado (ver bloquearEmail).
-      await this.bloquearEmail(manager, dto.email);
+      await bloquearEmail(manager, dto.email);
       if (await usuarioRepo.exists({ where: { email: dto.email } })) {
         throw new ConflictException('Ese email ya está registrado');
       }
@@ -201,7 +202,7 @@ export class AuthService {
         // Dos logins simultáneos de la misma persona nueva (doble click,
         // web + móvil) crearían dos tiendas. Con el lock, el segundo
         // espera y encuentra el usuario que creó el primero.
-        await this.bloquearEmail(manager, email);
+        await bloquearEmail(manager, email);
         const yaCreado = await usuarioRepo.findOne({ where: { email } });
         if (yaCreado) {
           if (!yaCreado.activo) {
@@ -258,18 +259,6 @@ export class AuthService {
     }
 
     return this.emitirTokens(usuario);
-  }
-
-  /**
-   * Lock de Postgres por email, liberado al terminar la transacción.
-   * El índice único de Usuario es (tenantId, email), así que la base no
-   * frena por sí sola dos altas con el mismo email en tenants distintos.
-   */
-  private async bloquearEmail(
-    manager: EntityManager,
-    email: string,
-  ): Promise<void> {
-    await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [email]);
   }
 
   private emitirTokens(usuario: Usuario): TokenPair {

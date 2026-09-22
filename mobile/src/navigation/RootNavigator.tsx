@@ -9,6 +9,7 @@ import { TutorialScreen } from '../screens/TutorialScreen';
 import { TerminosScreen } from '../screens/TerminosScreen';
 import { ContactoScreen } from '../screens/ContactoScreen';
 import { SuscripcionScreen } from '../screens/SuscripcionScreen';
+import { EquipoScreen } from '../screens/EquipoScreen';
 import { colores } from '../theme/colores';
 import type { Perfil } from '../lib/api';
 
@@ -19,6 +20,7 @@ export type RootStackParamList = {
   Terminos: undefined;
   Contacto: undefined;
   Suscripcion: { plan: Perfil['plan'] } | undefined;
+  Equipo: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -51,6 +53,7 @@ export function RootNavigator() {
           <Stack.Screen name="Terminos" component={TerminosScreen} options={{ title: 'Términos y condiciones' }} />
           <Stack.Screen name="Contacto" component={ContactoScreen} options={{ title: 'Contacto y soporte' }} />
           <Stack.Screen name="Suscripcion" component={SuscripcionScreen} options={{ title: 'Suscripción' }} />
+          <Stack.Screen name="Equipo" component={EquipoScreen} options={{ title: 'Equipo' }} />
         </Stack.Navigator>
       ) : (
         <AuthNavigator />

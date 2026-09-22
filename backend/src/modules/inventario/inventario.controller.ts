@@ -43,7 +43,9 @@ export class InventarioController {
     );
   }
 
+  // Egresos y pérdidas del día: información del dueño, no del cajero.
   @Get('resumen-dia')
+  @Roles(Rol.ADMIN)
   resumenDelDia(@CurrentUser() user: AuthenticatedUser) {
     return this.inventarioService.obtenerResumenDelDia(user.tenantId);
   }

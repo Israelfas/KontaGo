@@ -2,16 +2,16 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/auth-context';
+import { rutaInicial, useAuth } from '@/lib/auth-context';
 
 export default function Home() {
-  const { token, cargando } = useAuth();
+  const { token, usuario, cargando } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (cargando) return;
-    router.replace(token ? '/dashboard' : '/login');
-  }, [cargando, token, router]);
+    router.replace(token ? rutaInicial(usuario?.rol) : '/login');
+  }, [cargando, token, usuario?.rol, router]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-papel">

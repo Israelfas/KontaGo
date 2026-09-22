@@ -3,16 +3,19 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useAuth } from '@/lib/auth-context';
+import { rutaInicial, useAuth } from '@/lib/auth-context';
 import { obtenerAlertas } from '@/lib/api';
-import { BoxIcon, CartIcon, DashboardIcon, InventoryIcon } from './icons';
+import { BoxIcon, CartIcon, DashboardIcon, InventoryIcon, UsersIcon } from './icons';
 import { AppLogo } from './ui';
 
+// soloAdmin: el cajero vende y consulta el catálogo; resumen (ganancias),
+// inventario y equipo son del dueño.
 const ENLACES = [
-  { href: '/venta', etiqueta: 'Vender', icono: CartIcon },
-  { href: '/dashboard', etiqueta: 'Resumen', icono: DashboardIcon },
-  { href: '/productos', etiqueta: 'Productos', icono: BoxIcon },
-  { href: '/inventario', etiqueta: 'Inventario', icono: InventoryIcon },
+  { href: '/venta', etiqueta: 'Vender', icono: CartIcon, soloAdmin: false },
+  { href: '/dashboard', etiqueta: 'Resumen', icono: DashboardIcon, soloAdmin: true },
+  { href: '/productos', etiqueta: 'Productos', icono: BoxIcon, soloAdmin: false },
+  { href: '/inventario', etiqueta: 'Inventario', icono: InventoryIcon, soloAdmin: true },
+  { href: '/equipo', etiqueta: 'Equipo', icono: UsersIcon, soloAdmin: true },
 ];
 
 function EnlaceNavegacion({
@@ -57,9 +60,11 @@ export function Nav() {
   const pathname = usePathname();
   const { usuario, token, cerrarSesion } = useAuth();
   const [porVencer, setPorVencer] = useState(0);
+  const esAdmin = usuario?.rol === 'admin';
 
   useEffect(() => {
-    if (!token) return;
+    // El badge vive en Inventario, que el cajero no ve.
+    if (!token || !esAdmin) return;
     // El nav se monta en todas las pantallas protegidas, así que este es
     // un buen lugar único para chequear alertas de vencimiento sin
     // depender de que el usuario entre a /inventario. Si falla, no
@@ -67,18 +72,22 @@ export function Nav() {
     obtenerAlertas(token)
       .then((alertas) => setPorVencer(alertas.porVencer.length))
       .catch(() => setPorVencer(0));
-  }, [token]);
+  }, [token, esAdmin]);
 
-  const enlaces = ENLACES.map((enlace) => ({
-    ...enlace,
-    badge: enlace.href === '/inventario' ? porVencer : undefined,
-  }));
+  const enlaces = ENLACES.filter((enlace) => esAdmin || !enlace.soloAdmin).map(
+    ({ href, etiqueta, icono }) => ({
+      href,
+      etiqueta,
+      icono,
+      badge: href === '/inventario' ? porVencer : undefined,
+    }),
+  );
 
   return (
     <header className="sticky top-0 z-40 border-b border-papel-linea/80 bg-papel/90 backdrop-blur-xl">
       <div className="app-container">
         <div className="flex h-[72px] items-center justify-between gap-4">
-          <Link href="/dashboard" aria-label="Ir al resumen de KontaGo">
+          <Link href={rutaInicial(usuario?.rol)} aria-label="Ir al inicio de KontaGo">
             <AppLogo />
           </Link>
 

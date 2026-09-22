@@ -139,7 +139,7 @@ function ContenidoDashboard() {
 
 export default function DashboardPage() {
   return (
-    <RutaProtegida>
+    <RutaProtegida soloAdmin>
       <Nav />
       <ContenidoDashboard />
     </RutaProtegida>

@@ -19,6 +19,15 @@ export interface Producto {
   activo: boolean;
 }
 
+export interface UsuarioEquipo {
+  id: string;
+  nombre: string;
+  email: string;
+  rol: 'admin' | 'cajero';
+  activo: boolean;
+  createdAt: string;
+}
+
 export interface VentaItem {
   id: string;
   productoId: string;

@@ -201,7 +201,7 @@ function FormularioProductoNuevo({
 }
 
 export function VentaScreen() {
-  const { token } = useAuth();
+  const { token, usuario } = useAuth();
   const [codigoInput, setCodigoInput] = useState('');
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
   const [errorBusqueda, setErrorBusqueda] = useState<string | null>(null);
@@ -247,7 +247,15 @@ export function VentaScreen() {
         // un formulario, cosa que no puede hacer mientras la cámara
         // ocupa toda la pantalla.
         setCamaraActiva(false);
-        setCodigoNoEncontrado(codigo.trim());
+        // Crear productos es del admin (el backend responde 403 a un
+        // cajero): al cajero solo se le avisa.
+        if (usuario?.rol === 'admin') {
+          setCodigoNoEncontrado(codigo.trim());
+        } else {
+          setErrorBusqueda(
+            `El código ${codigo.trim()} no está en el catálogo. Pedile al administrador que lo cargue.`,
+          );
+        }
         return;
       }
       // La cámara se queda ABIERTA a propósito: el caso más común es

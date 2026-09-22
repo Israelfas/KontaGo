@@ -358,9 +358,11 @@ function FormularioEditarProducto({
 function CeldaFechaVencimiento({
   producto,
   onActualizado,
+  soloLectura,
 }: {
   producto: Producto;
   onActualizado: (p: Producto) => void;
+  soloLectura: boolean;
 }) {
   const { token } = useAuth();
   const [editando, setEditando] = useState(false);
@@ -410,6 +412,10 @@ function CeldaFechaVencimiento({
       })
     : null;
 
+  if (soloLectura) {
+    return <span className="font-ticket text-xs text-tinta-suave">{fechaLegible ?? '—'}</span>;
+  }
+
   return (
     <button
       type="button"
@@ -431,7 +437,9 @@ function TablaProductos({
   onActualizado,
   onDadoDeBaja,
   onCerrarEdicion,
+  soloLectura,
 }: {
+  soloLectura: boolean;
   productos: Producto[];
   productoEditandoId: string | null;
   onEditar: (id: string) => void;
@@ -450,7 +458,7 @@ function TablaProductos({
               <th className="px-4 py-3 text-right">Precio</th>
               <th className="px-4 py-3 text-right">Stock</th>
               <th className="px-4 py-3 text-right">Vence</th>
-              <th className="px-4 py-3" />
+              {!soloLectura && <th className="px-4 py-3" />}
             </tr>
           </thead>
           <tbody>
@@ -475,17 +483,23 @@ function TablaProductos({
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <CeldaFechaVencimiento producto={p} onActualizado={onActualizado} />
+                    <CeldaFechaVencimiento
+                      producto={p}
+                      onActualizado={onActualizado}
+                      soloLectura={soloLectura}
+                    />
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => onEditar(p.id)}
-                      className="text-xs font-medium text-tinta-suave underline hover:text-tinta"
-                    >
-                      Editar
-                    </button>
-                  </td>
+                  {!soloLectura && (
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => onEditar(p.id)}
+                        className="text-xs font-medium text-tinta-suave underline hover:text-tinta"
+                      >
+                        Editar
+                      </button>
+                    </td>
+                  )}
                 </tr>
               );
             })}
@@ -664,6 +678,7 @@ function ContenidoProductos() {
           title="Productos"
           description="Gestioná los artículos de tu tienda: precio, costo y stock."
           action={
+            esAdmin &&
             !formularioAbierto && (
               <Button variant="primary" onClick={() => setFormularioAbierto(true)}>
                 <PlusIcon className="h-4 w-4" />
@@ -700,6 +715,7 @@ function ContenidoProductos() {
           {!cargando && !error && productos.length > 0 && (
             <TablaProductos
               productos={productos}
+              soloLectura={!esAdmin}
               productoEditandoId={productoEditandoId}
               onEditar={(id) => setProductoEditandoId(id)}
               onActualizado={(actualizado) =>
