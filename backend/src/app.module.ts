@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule } from '@nestjs/throttler';
 import configuration from './config/configuration';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -19,6 +20,11 @@ import { AppService } from './app.service';
       load: [configuration],
     }),
     ScheduleModule.forRoot(),
+    // Límite de pedidos por IP. No es global: solo lo aplican los
+    // controllers que usan ThrottlerGuard (hoy, auth), para no frenar el
+    // escaneo en caja. En memoria alcanza mientras haya una sola
+    // instancia del backend.
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 10 }]),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
