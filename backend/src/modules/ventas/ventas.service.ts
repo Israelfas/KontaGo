@@ -72,18 +72,36 @@ export class VentasService {
       let totalCentavos = 0;
       const items: VentaItem[] = [];
 
-      for (const linea of dto.items) {
+      // Los bloqueos se toman SIEMPRE en el mismo orden (por id), no en
+      // el orden del carrito. Si la venta 1 bloquea A y después B, y la
+      // venta 2 bloquea B y después A, cada una queda esperando a la
+      // otra (deadlock) y Postgres aborta una de las dos. Con orden fijo
+      // la segunda simplemente espera. Además cada producto se bloquea
+      // una sola vez aunque aparezca en varias líneas.
+      const idsOrdenados = [
+        ...new Set(dto.items.map((linea) => linea.productoId)),
+      ].sort();
+      const productos = new Map<string, Producto>();
+      for (const id of idsOrdenados) {
         // Bloqueo pesimista: ninguna otra transacción puede leer/escribir
-        // esta fila hasta que esta transacción termine.
+        // esta fila hasta que esta transacción termine. Un producto dado
+        // de baja cuenta como inexistente: no se puede vender.
         const producto = await productoRepo.findOne({
-          where: { id: linea.productoId, tenantId },
+          where: { id, tenantId, activo: true },
           lock: { mode: 'pessimistic_write' },
         });
-
         if (!producto) {
-          throw new ProductoNoEncontradoError(linea.productoId);
+          throw new ProductoNoEncontradoError(id);
         }
+        productos.set(id, producto);
+      }
 
+      for (const linea of dto.items) {
+        const producto = productos.get(linea.productoId)!;
+
+        // producto.stock se va descontando en memoria, así que si el
+        // mismo producto viene en dos líneas, la segunda se valida contra
+        // lo que quedó después de la primera.
         if (producto.stock < linea.cantidad) {
           throw new StockInsuficienteError(
             producto.id,
@@ -93,7 +111,6 @@ export class VentasService {
         }
 
         producto.stock -= linea.cantidad;
-        await productoRepo.save(producto);
 
         const subtotalCentavos = producto.precioVentaCentavos * linea.cantidad;
         totalCentavos += subtotalCentavos;
@@ -110,6 +127,8 @@ export class VentasService {
         );
         items.push(item);
       }
+
+      await productoRepo.save([...productos.values()]);
 
       if (dto.montoRecibidoCentavos < totalCentavos) {
         throw new MontoRecibidoInsuficienteError(
