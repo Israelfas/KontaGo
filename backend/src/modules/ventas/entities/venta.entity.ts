@@ -11,6 +11,7 @@ import {
 import { Tenant } from '../../tenants/entities/tenant.entity';
 import { Usuario } from '../../auth/entities/usuario.entity';
 import { VentaItem } from './venta-item.entity';
+import { AnulacionVenta } from './anulacion-venta.entity';
 
 /**
  * Cabecera de una venta (ticket).
@@ -47,8 +48,16 @@ export class Venta {
   @Column({ name: 'vuelto_centavos', type: 'integer' })
   vueltoCentavos: number;
 
+  // Plata devuelta por anulaciones (total o parciales), acumulada. El
+  // ingreso real de la venta es totalCentavos - totalAnuladoCentavos.
+  @Column({ name: 'total_anulado_centavos', type: 'integer', default: 0 })
+  totalAnuladoCentavos: number;
+
   @OneToMany(() => VentaItem, (item) => item.venta, { cascade: true })
   items: VentaItem[];
+
+  @OneToMany(() => AnulacionVenta, (anulacion) => anulacion.venta)
+  anulaciones: AnulacionVenta[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

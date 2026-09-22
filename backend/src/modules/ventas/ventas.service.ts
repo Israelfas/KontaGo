@@ -6,10 +6,22 @@ import { Venta } from './entities/venta.entity';
 import { VentaItem } from './entities/venta-item.entity';
 import { CrearVentaDto } from './dto/crear-venta.dto';
 import { ResumenDelDiaDto } from './dto/resumen-del-dia.dto';
+import { AnularVentaDto } from './dto/anular-venta.dto';
+import { VentaDelHistorialDto } from './dto/venta-del-historial.dto';
 import {
+  AnulacionVenta,
+  DetalleAnulacion,
+} from './entities/anulacion-venta.entity';
+import { fechaLocal } from '../../common/formato-fecha';
+import {
+  CantidadAAnularInvalidaError,
+  LineaDeOtraVentaError,
   MontoRecibidoInsuficienteError,
   ProductoNoEncontradoError,
   StockInsuficienteError,
+  VentaDeOtroDiaError,
+  VentaNoEncontradaError,
+  VentaYaAnuladaError,
 } from './ventas.errors';
 
 // totalCentavos ya incluye IVA (precio final al público). Estos dos
@@ -159,7 +171,7 @@ export class VentasService {
 
   /**
    * Ganancia real de una venta = suma, por línea, de:
-   *   (precioVenta SIN IVA - costoUnitario) * cantidad
+   *   (precioVenta SIN IVA - costoUnitario) * cantidad vendida
    *
    * precioVentaCentavos incluye IVA (precio final al público — así se
    * vende acá), así que hay que restar la porción de IVA de esa línea
@@ -169,24 +181,31 @@ export class VentasService {
    * por línea (ver VentaItem), así que este es un cálculo puro, sin
    * necesidad de recalcular nada contra la tarifa vigente.
    *
-   * Nunca el ingreso bruto tampoco (ver riesgo #2 del spec).
+   * "Cantidad vendida" descuenta lo anulado: unidades devueltas no son
+   * ganancia. Nunca el ingreso bruto tampoco (ver riesgo #2 del spec).
    */
   calcularGananciaCentavos(venta: Venta): number {
     return venta.items.reduce((acc, item) => {
+      const cantidadVendida = item.cantidad - item.cantidadAnulada;
+      const ivaVendido = item.ivaCentavos - item.ivaAnuladoCentavos;
       const subtotalLineaSinIva =
-        item.precioVentaCentavos * item.cantidad - item.ivaCentavos;
-      const costoLinea = item.costoUnitarioCentavos * item.cantidad;
+        item.precioVentaCentavos * cantidadVendida - ivaVendido;
+      const costoLinea = item.costoUnitarioCentavos * cantidadVendida;
       return acc + (subtotalLineaSinIva - costoLinea);
     }, 0);
   }
 
   /**
-   * IVA total contenido en una venta (suma de ivaCentavos de cada línea,
-   * ya congelado al momento de la venta). Útil para que el vendedor sepa
-   * cuánto de lo cobrado corresponde a IVA, de cara a su declaración.
+   * IVA total contenido en lo efectivamente vendido (ivaCentavos de cada
+   * línea menos la porción anulada, ambos congelados). Útil para que el
+   * vendedor sepa cuánto de lo cobrado corresponde a IVA, de cara a su
+   * declaración.
    */
   calcularIvaCentavos(venta: Venta): number {
-    return venta.items.reduce((acc, item) => acc + item.ivaCentavos, 0);
+    return venta.items.reduce(
+      (acc, item) => acc + item.ivaCentavos - item.ivaAnuladoCentavos,
+      0,
+    );
   }
 
   /**
@@ -203,21 +222,23 @@ export class VentasService {
    * la Fase 3, porque requieren tablas agregadas para no degradar el
    * rendimiento con el volumen (ver riesgo #4 del spec) — este método hace
    * el cálculo en vivo sobre un solo día, que es liviano.
+   *
+   * Todo descuenta lo anulado: una venta anulada por completo no cuenta
+   * como venta, y las parciales cuentan solo por lo que quedó vendido.
    */
   async obtenerResumenDelDia(tenantId: string): Promise<ResumenDelDiaDto> {
-    const inicioDelDia = new Date();
-    inicioDelDia.setHours(0, 0, 0, 0);
+    const inicio = inicioDelDia();
 
     const ventaRepo = this.dataSource.getRepository(Venta);
     const ventas = await ventaRepo
       .createQueryBuilder('venta')
       .leftJoinAndSelect('venta.items', 'item')
       .where('venta.tenantId = :tenantId', { tenantId })
-      .andWhere('venta.createdAt >= :inicioDelDia', { inicioDelDia })
+      .andWhere('venta.createdAt >= :inicio', { inicio })
       .getMany();
 
     const ingresoBrutoCentavos = ventas.reduce(
-      (acc, venta) => acc + venta.totalCentavos,
+      (acc, venta) => acc + venta.totalCentavos - venta.totalAnuladoCentavos,
       0,
     );
     const gananciaCentavos = ventas.reduce(
@@ -228,13 +249,235 @@ export class VentasService {
       (acc, venta) => acc + this.calcularIvaCentavos(venta),
       0,
     );
+    const anuladoCentavos = ventas.reduce(
+      (acc, venta) => acc + venta.totalAnuladoCentavos,
+      0,
+    );
 
     return {
-      fecha: inicioDelDia.toISOString().slice(0, 10),
-      cantidadVentas: ventas.length,
+      fecha: fechaLocal(inicio),
+      cantidadVentas: ventas.filter(
+        (venta) => venta.totalCentavos > venta.totalAnuladoCentavos,
+      ).length,
       ingresoBrutoCentavos,
       gananciaCentavos,
       ivaCentavos,
+      anuladoCentavos,
     };
   }
+
+  /**
+   * Ventas de hoy, de la más reciente a la más vieja, con sus
+   * anulaciones. Lo ve cualquier rol (el cajero necesita encontrar la
+   * venta para avisarle al admin cuál anular), así que no expone costos.
+   */
+  async obtenerHistorialDelDia(
+    tenantId: string,
+  ): Promise<VentaDelHistorialDto[]> {
+    const ventas = await this.dataSource
+      .getRepository(Venta)
+      .createQueryBuilder('venta')
+      .leftJoinAndSelect('venta.usuario', 'vendedor')
+      .leftJoinAndSelect('venta.items', 'item')
+      .leftJoinAndSelect('item.producto', 'producto')
+      .leftJoinAndSelect('venta.anulaciones', 'anulacion')
+      .leftJoinAndSelect('anulacion.usuario', 'anuladoPor')
+      .where('venta.tenantId = :tenantId', { tenantId })
+      .andWhere('venta.createdAt >= :inicio', { inicio: inicioDelDia() })
+      .orderBy('venta.createdAt', 'DESC')
+      .addOrderBy('anulacion.createdAt', 'ASC')
+      .getMany();
+
+    return ventas.map(aVentaDelHistorial);
+  }
+
+  /**
+   * Anula una venta del día, completa o por producto: devuelve las
+   * unidades al stock y registra quién anuló, cuándo y por qué. El
+   * ticket original no se toca; lo anulado se acumula en
+   * cantidadAnulada / totalAnuladoCentavos, así que se puede anular por
+   * partes en varias veces (hasta agotar lo vendido).
+   *
+   * Solo ventas de hoy: una de otro día ya forma parte de reportes (y
+   * de lo que se declaró de IVA) — eso sería una devolución, no una
+   * anulación.
+   */
+  async anularVenta(
+    tenantId: string,
+    usuarioId: string,
+    ventaId: string,
+    dto: AnularVentaDto,
+  ): Promise<VentaDelHistorialDto> {
+    await this.dataSource.transaction(async (manager) => {
+      const ventaRepo = manager.getRepository(Venta);
+      const itemRepo = manager.getRepository(VentaItem);
+      const productoRepo = manager.getRepository(Producto);
+
+      // Lock sobre la venta: dos anulaciones simultáneas de la misma
+      // venta (doble click, dos admins) no pueden devolver el mismo
+      // stock dos veces. Sin joins: Postgres no permite FOR UPDATE sobre
+      // el lado opcional de un LEFT JOIN.
+      const venta = await ventaRepo.findOne({
+        where: { id: ventaId, tenantId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!venta) {
+        throw new VentaNoEncontradaError(ventaId);
+      }
+      if (venta.createdAt < inicioDelDia()) {
+        throw new VentaDeOtroDiaError();
+      }
+
+      const items = await itemRepo.find({
+        where: { ventaId },
+        relations: { producto: true },
+      });
+      const itemsPorId = new Map(items.map((item) => [item.id, item]));
+
+      // Qué anular: lo pedido (sumando si una línea viene repetida), o
+      // si no se especificó, todo lo que quede.
+      const aAnular = new Map<string, number>();
+      if (dto.items) {
+        for (const linea of dto.items) {
+          if (!itemsPorId.has(linea.ventaItemId)) {
+            throw new LineaDeOtraVentaError(linea.ventaItemId);
+          }
+          aAnular.set(
+            linea.ventaItemId,
+            (aAnular.get(linea.ventaItemId) ?? 0) + linea.cantidad,
+          );
+        }
+      } else {
+        for (const item of items) {
+          const pendiente = item.cantidad - item.cantidadAnulada;
+          if (pendiente > 0) aAnular.set(item.id, pendiente);
+        }
+        if (aAnular.size === 0) {
+          throw new VentaYaAnuladaError();
+        }
+      }
+
+      for (const [itemId, cantidad] of aAnular) {
+        const item = itemsPorId.get(itemId)!;
+        const pendiente = item.cantidad - item.cantidadAnulada;
+        if (cantidad > pendiente) {
+          throw new CantidadAAnularInvalidaError(
+            item.producto.nombre,
+            pendiente,
+            cantidad,
+          );
+        }
+      }
+
+      // Devolver stock bloqueando los productos en orden fijo, igual que
+      // crearVenta (evita deadlocks con ventas en curso). Un producto
+      // dado de baja igual recupera sus unidades.
+      const cantidadPorProducto = new Map<string, number>();
+      for (const [itemId, cantidad] of aAnular) {
+        const productoId = itemsPorId.get(itemId)!.productoId;
+        cantidadPorProducto.set(
+          productoId,
+          (cantidadPorProducto.get(productoId) ?? 0) + cantidad,
+        );
+      }
+      for (const productoId of [...cantidadPorProducto.keys()].sort()) {
+        const producto = await productoRepo.findOne({
+          where: { id: productoId, tenantId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (producto) {
+          producto.stock += cantidadPorProducto.get(productoId)!;
+          await productoRepo.save(producto);
+        }
+      }
+
+      let montoDevueltoCentavos = 0;
+      const detalle: DetalleAnulacion[] = [];
+      for (const [itemId, cantidad] of aAnular) {
+        const item = itemsPorId.get(itemId)!;
+        const pendiente = item.cantidad - item.cantidadAnulada;
+        const ivaPendiente = item.ivaCentavos - item.ivaAnuladoCentavos;
+        // IVA proporcional a las unidades anuladas. Si se anula todo lo
+        // que queda, se toma el resto exacto para no dejar centavos
+        // sueltos por redondeo.
+        const ivaAAnular =
+          cantidad === pendiente
+            ? ivaPendiente
+            : Math.min(
+                ivaPendiente,
+                Math.round((item.ivaCentavos * cantidad) / item.cantidad),
+              );
+
+        item.cantidadAnulada += cantidad;
+        item.ivaAnuladoCentavos += ivaAAnular;
+        montoDevueltoCentavos += item.precioVentaCentavos * cantidad;
+        detalle.push({
+          ventaItemId: item.id,
+          productoId: item.productoId,
+          cantidad,
+        });
+      }
+      await itemRepo.save([...aAnular.keys()].map((id) => itemsPorId.get(id)!));
+
+      venta.totalAnuladoCentavos += montoDevueltoCentavos;
+      await ventaRepo.save(venta);
+
+      const anulacionRepo = manager.getRepository(AnulacionVenta);
+      await anulacionRepo.save(
+        anulacionRepo.create({
+          tenantId,
+          ventaId,
+          usuarioId,
+          motivo: dto.motivo,
+          montoDevueltoCentavos,
+          detalle,
+        }),
+      );
+    });
+
+    const historial = await this.obtenerHistorialDelDia(tenantId);
+    return historial.find((venta) => venta.id === ventaId)!;
+  }
+}
+
+function inicioDelDia(): Date {
+  const inicio = new Date();
+  inicio.setHours(0, 0, 0, 0);
+  return inicio;
+}
+
+function aVentaDelHistorial(venta: Venta): VentaDelHistorialDto {
+  const estado =
+    venta.totalAnuladoCentavos === 0
+      ? 'completa'
+      : venta.totalAnuladoCentavos >= venta.totalCentavos
+        ? 'anulada'
+        : 'parcialmente_anulada';
+
+  return {
+    id: venta.id,
+    createdAt: venta.createdAt,
+    vendedor: venta.usuario.nombre,
+    totalCentavos: venta.totalCentavos,
+    totalAnuladoCentavos: venta.totalAnuladoCentavos,
+    montoRecibidoCentavos: venta.montoRecibidoCentavos,
+    vueltoCentavos: venta.vueltoCentavos,
+    estado,
+    items: venta.items.map((item) => ({
+      id: item.id,
+      productoId: item.productoId,
+      nombre: item.producto.nombre,
+      codigoBarras: item.producto.codigoBarras,
+      cantidad: item.cantidad,
+      cantidadAnulada: item.cantidadAnulada,
+      precioVentaCentavos: item.precioVentaCentavos,
+    })),
+    anulaciones: venta.anulaciones.map((anulacion) => ({
+      id: anulacion.id,
+      createdAt: anulacion.createdAt,
+      anuladoPor: anulacion.usuario.nombre,
+      motivo: anulacion.motivo,
+      montoDevueltoCentavos: anulacion.montoDevueltoCentavos,
+    })),
+  };
 }

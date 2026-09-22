@@ -56,7 +56,38 @@ export interface ResumenDelDia {
   ingresoBrutoCentavos: number;
   gananciaCentavos: number;
   ivaCentavos: number;
+  anuladoCentavos: number; // devuelto por anulaciones, ya descontado de lo anterior
 }
+
+// Venta tal como la devuelve GET /ventas/hoy (sin costos: la ve también
+// el cajero).
+export interface VentaDelHistorial {
+  id: string;
+  createdAt: string;
+  vendedor: string;
+  totalCentavos: number;
+  totalAnuladoCentavos: number;
+  montoRecibidoCentavos: number;
+  vueltoCentavos: number;
+  estado: 'completa' | 'parcialmente_anulada' | 'anulada';
+  items: {
+    id: string;
+    productoId: string;
+    nombre: string;
+    codigoBarras: string;
+    cantidad: number;
+    cantidadAnulada: number;
+    precioVentaCentavos: number;
+  }[];
+  anulaciones: {
+    id: string;
+    createdAt: string;
+    anuladoPor: string;
+    motivo: string;
+    montoDevueltoCentavos: number;
+  }[];
+}
+
 
 // --- Inventario (Fase 2) ---
 

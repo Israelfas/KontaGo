@@ -45,4 +45,15 @@ export class VentaItem {
   // históricos no deben recalcularse.
   @Column({ name: 'iva_centavos', type: 'integer', default: 0 })
   ivaCentavos: number;
+
+  // Unidades de esta línea anuladas después (devueltas al cliente y al
+  // stock). La línea original no se modifica: lo vendido de verdad es
+  // cantidad - cantidadAnulada.
+  @Column({ name: 'cantidad_anulada', type: 'integer', default: 0 })
+  cantidadAnulada: number;
+
+  // Porción de ivaCentavos que corresponde a las unidades anuladas,
+  // congelada al anular (proporcional a la cantidad).
+  @Column({ name: 'iva_anulado_centavos', type: 'integer', default: 0 })
+  ivaAnuladoCentavos: number;
 }

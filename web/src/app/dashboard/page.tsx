@@ -122,6 +122,16 @@ function ContenidoDashboard() {
                 />
               </div>
 
+              {resumen.anuladoCentavos > 0 && (
+                <p className="text-sm text-tinta-suave">
+                  Hoy se anularon {formatearCentavos(resumen.anuladoCentavos)} en ventas; ya
+                  están descontados de estos números.{' '}
+                  <Link href="/ventas" className="font-medium text-tinta underline">
+                    Ver ventas de hoy
+                  </Link>
+                </p>
+              )}
+
               <div className="dashboard-nota">
                 <ReceiptIcon className="h-4 w-4 shrink-0 text-ambar" />
                 <p>

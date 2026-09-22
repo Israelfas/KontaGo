@@ -1,8 +1,20 @@
 import { useRef, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useAuth } from '../lib/auth-context';
 import { buscarPorCodigoBarras, crearProducto, crearVenta, ApiError } from '../lib/api';
 import { formatearCentavos } from '../lib/formato';
@@ -202,6 +214,7 @@ function FormularioProductoNuevo({
 
 export function VentaScreen() {
   const { token, usuario } = useAuth();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [codigoInput, setCodigoInput] = useState('');
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
   const [errorBusqueda, setErrorBusqueda] = useState<string | null>(null);
@@ -361,7 +374,20 @@ export function VentaScreen() {
 
   const encabezadoYEntrada = (
     <View>
-      <EncabezadoPantalla eyebrow="CAJA" titulo="Vender" icono="cart" />
+      <EncabezadoPantalla
+        eyebrow="CAJA"
+        titulo="Vender"
+        accion={
+          <Pressable
+            onPress={() => navigation.navigate('VentasHoy')}
+            style={styles.botonVentasHoy}
+            hitSlop={8}
+          >
+            <Ionicons name="receipt-outline" size={18} color={colores.tinta} />
+            <Text style={styles.botonVentasHoyTexto}>Ventas de hoy</Text>
+          </Pressable>
+        }
+      />
 
       {camaraActiva ? (
         <EscanerCamara
@@ -500,6 +526,18 @@ export function VentaScreen() {
 }
 
 const styles = StyleSheet.create({
+  botonVentasHoy: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: espaciado.xs,
+    paddingHorizontal: espaciado.sm,
+    paddingVertical: espaciado.xs,
+    borderRadius: radios.full,
+    borderWidth: 1,
+    borderColor: colores.papelLinea,
+    backgroundColor: colores.superficie,
+  },
+  botonVentasHoyTexto: { fontSize: 12, fontWeight: '600', color: colores.tinta },
   contenedor: { flex: 1, backgroundColor: colores.papel },
   error: { color: colores.rojoPerdida, fontSize: 13, marginVertical: espaciado.xs },
   itemCarrito: {

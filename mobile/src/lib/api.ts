@@ -8,6 +8,7 @@ import type {
   TokenPair,
   UsuarioEquipo,
   Venta,
+  VentaDelHistorial,
 } from './tipos';
 
 // El celular no puede usar "localhost" — eso apuntaría al propio
@@ -351,6 +352,28 @@ export interface CrearVentaInput {
 
 export function crearVenta(token: string, dto: CrearVentaInput): Promise<Venta> {
   return apiFetch<Venta>('/ventas', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(dto),
+  });
+}
+
+export function obtenerVentasDeHoy(token: string): Promise<VentaDelHistorial[]> {
+  return apiFetch<VentaDelHistorial[]>('/ventas/hoy', { token });
+}
+
+export interface AnularVentaInput {
+  motivo: string;
+  // Omitido = anular todo lo que quede de la venta.
+  items?: { ventaItemId: string; cantidad: number }[];
+}
+
+export function anularVenta(
+  token: string,
+  ventaId: string,
+  dto: AnularVentaInput,
+): Promise<VentaDelHistorial> {
+  return apiFetch<VentaDelHistorial>(`/ventas/${ventaId}/anular`, {
     method: 'POST',
     token,
     body: JSON.stringify(dto),

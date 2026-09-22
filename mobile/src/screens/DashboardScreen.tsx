@@ -1,7 +1,9 @@
 import { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../navigation/RootNavigator';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../lib/auth-context';
 import { obtenerResumenDelDia, ApiError } from '../lib/api';
@@ -46,6 +48,7 @@ function TarjetaGanancia({ resumen }: { resumen: ResumenDelDia }) {
 }
 
 export function DashboardScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { token } = useAuth();
   const [resumen, setResumen] = useState<ResumenDelDia | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -94,6 +97,23 @@ export function DashboardScreen() {
               />
             </View>
 
+            {resumen.anuladoCentavos > 0 && (
+              <Text style={styles.anuladoTexto}>
+                Hoy se anularon {formatearCentavos(resumen.anuladoCentavos)} en ventas; ya están
+                descontados de estos números.
+              </Text>
+            )}
+
+            <Pressable
+              onPress={() => navigation.navigate('VentasHoy')}
+              style={styles.enlaceVentas}
+              hitSlop={8}
+            >
+              <Ionicons name="receipt-outline" size={16} color={colores.tinta} />
+              <Text style={styles.enlaceVentasTexto}>Ver ventas de hoy</Text>
+              <Ionicons name="chevron-forward" size={16} color={colores.tintaSuave} />
+            </Pressable>
+
             {resumen.cantidadVentas === 0 && (
               <View style={styles.tipContenedor}>
                 <Ionicons name="bulb-outline" size={18} color={colores.ambar} />
@@ -111,6 +131,9 @@ export function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
+  anuladoTexto: { fontSize: 13, color: colores.tintaSuave, lineHeight: 18 },
+  enlaceVentas: { flexDirection: 'row', alignItems: 'center', gap: espaciado.xs },
+  enlaceVentasTexto: { flex: 1, fontSize: 14, fontWeight: '600', color: colores.tinta },
   contenedor: { flex: 1, backgroundColor: colores.papel },
   scroll: { padding: espaciado.lg, paddingTop: 0, flexGrow: 1 },
   heroTarjeta: { alignItems: 'flex-start' },

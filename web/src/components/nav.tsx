@@ -5,13 +5,21 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { rutaInicial, useAuth } from '@/lib/auth-context';
 import { obtenerAlertas } from '@/lib/api';
-import { BoxIcon, CartIcon, DashboardIcon, InventoryIcon, UsersIcon } from './icons';
+import {
+  BoxIcon,
+  CartIcon,
+  DashboardIcon,
+  InventoryIcon,
+  ReceiptIcon,
+  UsersIcon,
+} from './icons';
 import { AppLogo } from './ui';
 
-// soloAdmin: el cajero vende y consulta el catálogo; resumen (ganancias),
-// inventario y equipo son del dueño.
+// soloAdmin: el cajero vende, ve las ventas del día y consulta el catálogo;
+// resumen (ganancias), inventario y equipo son del dueño.
 const ENLACES = [
   { href: '/venta', etiqueta: 'Vender', icono: CartIcon, soloAdmin: false },
+  { href: '/ventas', etiqueta: 'Ventas', icono: ReceiptIcon, soloAdmin: false },
   { href: '/dashboard', etiqueta: 'Resumen', icono: DashboardIcon, soloAdmin: true },
   { href: '/productos', etiqueta: 'Productos', icono: BoxIcon, soloAdmin: false },
   { href: '/inventario', etiqueta: 'Inventario', icono: InventoryIcon, soloAdmin: true },

@@ -21,3 +21,37 @@ export class MontoRecibidoInsuficienteError extends BadRequestException {
     );
   }
 }
+
+export class VentaNoEncontradaError extends NotFoundException {
+  constructor(ventaId: string) {
+    super(`Venta ${ventaId} no existe o no pertenece a esta tienda`);
+  }
+}
+
+export class VentaDeOtroDiaError extends BadRequestException {
+  constructor() {
+    super(
+      'Solo se pueden anular ventas del día. Una venta de un día anterior ya forma parte de reportes cerrados.',
+    );
+  }
+}
+
+export class VentaYaAnuladaError extends BadRequestException {
+  constructor() {
+    super('Esta venta ya está anulada por completo');
+  }
+}
+
+export class LineaDeOtraVentaError extends BadRequestException {
+  constructor(ventaItemId: string) {
+    super(`La línea ${ventaItemId} no pertenece a esta venta`);
+  }
+}
+
+export class CantidadAAnularInvalidaError extends BadRequestException {
+  constructor(nombre: string, pendiente: number, solicitada: number) {
+    super(
+      `No se pueden anular ${solicitada} unidades de "${nombre}": quedan ${pendiente} sin anular en esta venta`,
+    );
+  }
+}
