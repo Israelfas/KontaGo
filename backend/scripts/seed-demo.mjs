@@ -117,6 +117,20 @@ const LOTES_FINALES = {
 };
 
 // Pérdidas del día: [producto, cantidad, motivo]
+// Pérdidas de los días pasados, para el historial de inventario: lo que
+// más se pierde en un minimarket es lo perecible (vencido) y algo de rotura.
+// [cada cuántos días, producto, cantidad, motivo]
+const MERMAS_PASADAS = [
+  [4, 'yogurt', 2, 'vencido'],
+  [5, 'leche', 1, 'vencido'],
+  [6, 'pan', 1, 'vencido'],
+  [9, 'queso', 1, 'vencido'],
+  [7, 'galletas', 2, 'danado'],
+  [11, 'fiora', 1, 'danado'],
+  [13, 'manicho', 3, 'robado'],
+  [15, 'huevos', 1, 'danado'],
+];
+
 const MERMAS = [
   ['yogurt', 2, 'vencido'],
   ['galletas', 3, 'danado'],
@@ -346,6 +360,14 @@ try {
     if (plan.anular) sumar(plan.anular.clave, -plan.anular.cantidad);
   }
   for (const [k, c] of MERMAS) sumar(k, c);
+  // Cada merma pasada se repite cada tantos días a lo largo del mes.
+  const mermasPasadas = [];
+  for (const [cada, clave, cantidad, motivo] of MERMAS_PASADAS) {
+    for (let hace = cada; hace <= DIAS_DE_HISTORIA; hace += cada) {
+      mermasPasadas.push({ hace, clave, cantidad, motivo });
+      sumar(clave, cantidad);
+    }
+  }
   const entregas = REPOSICIONES.filter((hace) => hace <= DIAS_DE_HISTORIA).length + 1;
   const llega = new Map(ABASTECIMIENTOS.map(([k, c]) => [k, c * entregas]));
 
@@ -410,6 +432,18 @@ try {
       await moverA('movimientos_inventario', mov.id, antes, cuando);
     }
   }
+
+  // 5b. Las pérdidas del mes (a la noche, al revisar la góndola).
+  for (const { hace, clave, cantidad, motivo } of mermasPasadas) {
+    const antes = Date.now();
+    const mov = await api('/inventario/merma', {
+      method: 'POST',
+      token: admin,
+      body: { productoId: ids.get(clave), cantidad, motivo },
+    });
+    await moverA('movimientos_inventario', mov.id, antes, diaA(hace, 20, 15));
+  }
+  console.log(`· ${mermasPasadas.length} pérdidas en los ${DIAS_DE_HISTORIA} días anteriores`);
 
   // 6. Las ventas. Las anulaciones de días pasados se hacen apenas se crea
   // la venta (la API solo deja anular las de hoy) y después se llevan las

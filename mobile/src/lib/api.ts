@@ -3,14 +3,17 @@ import type {
   AlertasProductos,
   MetodoPago,
   MotivoMerma,
+  PaginaDeMovimientos,
   PaginaDeVentas,
   Producto,
   ResumenDelDia,
+  ResumenInventarioPeriodo,
   ResumenMovimientosDelDia,
   ResumenPeriodo,
   Ticket,
   Tienda,
   TipoMovimientoCaja,
+  TipoMovimientoInventario,
   TokenPair,
   TurnoCaja,
   UsuarioEquipo,
@@ -596,4 +599,36 @@ export function actualizarTienda(token: string, datos: Partial<Tienda>): Promise
     token,
     body: JSON.stringify(datos),
   });
+}
+
+// --- Historial de inventario (solo admin) ---
+
+// Query string a mano (en React Native, URLSearchParams está incompleto).
+function consulta(valores: Record<string, string | number | undefined>): string {
+  return Object.entries(valores)
+    .filter(([, v]) => v !== undefined && v !== '')
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+    .join('&');
+}
+
+export function listarMovimientosInventario(
+  token: string,
+  rango: RangoDeFechas,
+  filtros: {
+    tipo?: TipoMovimientoInventario;
+    productoId?: string;
+    limite?: number;
+    desplazamiento?: number;
+  } = {},
+): Promise<PaginaDeMovimientos> {
+  const q = consulta({ desde: rango.desde, hasta: rango.hasta, ...filtros });
+  return apiFetch<PaginaDeMovimientos>(`/inventario/movimientos?${q}`, { token });
+}
+
+export function obtenerResumenInventario(
+  token: string,
+  rango: RangoDeFechas,
+): Promise<ResumenInventarioPeriodo> {
+  const q = consulta({ desde: rango.desde, hasta: rango.hasta });
+  return apiFetch<ResumenInventarioPeriodo>(`/inventario/resumen?${q}`, { token });
 }

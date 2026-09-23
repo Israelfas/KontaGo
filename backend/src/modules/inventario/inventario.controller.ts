@@ -6,6 +6,7 @@ import {
   ParseUUIDPipe,
   Post,
   Put,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -18,6 +19,9 @@ import { InventarioService } from './inventario.service';
 import { RegistrarAbastecimientoDto } from './dto/registrar-abastecimiento.dto';
 import { RegistrarMermaDto } from './dto/registrar-merma.dto';
 import { CorregirLotesDto } from './dto/corregir-lotes.dto';
+import { ListarMovimientosDto } from './dto/historial-inventario.dto';
+import { RangoFechasDto } from '../ventas/dto/consulta-ventas.dto';
+import { armarRango } from '../ventas/rango-fechas';
 
 @Controller('inventario')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -63,6 +67,33 @@ export class InventarioController {
     @Body() dto: CorregirLotesDto,
   ) {
     return this.inventarioService.corregirLotes(user.tenantId, productoId, dto);
+  }
+
+  // Historial: abastecimientos y mermas de un período (hasta 92 días).
+  @Get('movimientos')
+  @Roles(Rol.ADMIN)
+  movimientos(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() consulta: ListarMovimientosDto,
+  ) {
+    return this.inventarioService.listarMovimientos(
+      user.tenantId,
+      armarRango(consulta.desde, consulta.hasta),
+      consulta,
+    );
+  }
+
+  // Gastado en mercadería y perdido en un período, con sus desgloses.
+  @Get('resumen')
+  @Roles(Rol.ADMIN)
+  resumen(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() consulta: RangoFechasDto,
+  ) {
+    return this.inventarioService.resumenDelPeriodo(
+      user.tenantId,
+      armarRango(consulta.desde, consulta.hasta),
+    );
   }
 
   // Egresos y pérdidas del día: información del dueño, no del cajero.

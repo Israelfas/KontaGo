@@ -5,6 +5,12 @@ import { MovimientoInventario } from './entities/movimiento-inventario.entity';
 import { RegistrarAbastecimientoDto } from './dto/registrar-abastecimiento.dto';
 import { RegistrarMermaDto } from './dto/registrar-merma.dto';
 import { CorregirLotesDto } from './dto/corregir-lotes.dto';
+import {
+  MovimientoDelHistorialDto,
+  ResumenInventarioPeriodoDto,
+} from './dto/historial-inventario.dto';
+import type { RangoFechas } from '../ventas/rango-fechas';
+import { MotivoMerma } from '../../common/enums/motivo-merma.enum';
 import { ResumenMovimientosDelDiaDto } from './dto/resumen-movimientos-del-dia.dto';
 import { TipoMovimientoInventario } from '../../common/enums/tipo-movimiento-inventario.enum';
 import {
@@ -184,6 +190,152 @@ export class InventarioService {
       );
       return producto;
     });
+  }
+
+  /**
+   * Abastecimientos y mermas de un período, del más reciente al más viejo,
+   * paginados. Filtros opcionales por tipo y por producto.
+   */
+  async listarMovimientos(
+    tenantId: string,
+    rango: RangoFechas,
+    filtros: {
+      tipo?: TipoMovimientoInventario;
+      productoId?: string;
+      limite?: number;
+      desplazamiento?: number;
+    },
+  ): Promise<{ movimientos: MovimientoDelHistorialDto[]; total: number }> {
+    const consulta = this.dataSource
+      .getRepository(MovimientoInventario)
+      .createQueryBuilder('movimiento')
+      .leftJoinAndSelect('movimiento.producto', 'producto')
+      .leftJoinAndSelect('movimiento.usuario', 'usuario')
+      .leftJoinAndSelect('movimiento.lote', 'lote')
+      .where('movimiento.tenantId = :tenantId', { tenantId })
+      .andWhere('movimiento.createdAt >= :inicio', { inicio: rango.inicio })
+      .andWhere('movimiento.createdAt < :fin', { fin: rango.finExclusivo });
+    if (filtros.tipo) {
+      consulta.andWhere('movimiento.tipo = :tipo', { tipo: filtros.tipo });
+    }
+    if (filtros.productoId) {
+      consulta.andWhere('movimiento.productoId = :productoId', {
+        productoId: filtros.productoId,
+      });
+    }
+    const [movimientos, total] = await consulta
+      .orderBy('movimiento.createdAt', 'DESC')
+      .skip(filtros.desplazamiento ?? 0)
+      .take(filtros.limite ?? 50)
+      .getManyAndCount();
+
+    return {
+      total,
+      movimientos: movimientos.map((m) => ({
+        id: m.id,
+        tipo: m.tipo,
+        createdAt: m.createdAt,
+        producto: { id: m.producto.id, nombre: m.producto.nombre },
+        cantidad: m.cantidad,
+        costoUnitarioCentavos: m.costoUnitarioCentavos,
+        totalCentavos: m.costoUnitarioCentavos * m.cantidad,
+        proveedor: m.proveedor,
+        motivo: m.motivo,
+        vencimientoLote: m.lote?.fechaVencimiento ?? null,
+        registradoPor: m.usuario.nombre,
+      })),
+    };
+  }
+
+  /**
+   * Lo que se gastó en mercadería y lo que se perdió en el período, con
+   * los desgloses que responden las preguntas del dueño: ¿por qué pierdo?,
+   * ¿a quién le compro más?, ¿qué producto se me echa a perder?
+   */
+  async resumenDelPeriodo(
+    tenantId: string,
+    rango: RangoFechas,
+  ): Promise<ResumenInventarioPeriodoDto> {
+    const movimientos = await this.dataSource
+      .getRepository(MovimientoInventario)
+      .createQueryBuilder('movimiento')
+      .leftJoinAndSelect('movimiento.producto', 'producto')
+      .where('movimiento.tenantId = :tenantId', { tenantId })
+      .andWhere('movimiento.createdAt >= :inicio', { inicio: rango.inicio })
+      .andWhere('movimiento.createdAt < :fin', { fin: rango.finExclusivo })
+      .getMany();
+
+    const total = (m: MovimientoInventario) =>
+      m.costoUnitarioCentavos * m.cantidad;
+    const abastecimientos = movimientos.filter(
+      (m) => m.tipo === TipoMovimientoInventario.ABASTECIMIENTO,
+    );
+    const mermas = movimientos.filter(
+      (m) => m.tipo === TipoMovimientoInventario.MERMA,
+    );
+
+    const porMotivo = new Map<
+      MotivoMerma,
+      { motivo: MotivoMerma; unidades: number; centavos: number }
+    >();
+    const porProducto = new Map<
+      string,
+      { nombre: string; unidades: number; centavos: number }
+    >();
+    for (const m of mermas) {
+      const motivo = m.motivo ?? MotivoMerma.OTRO;
+      const deMotivo = porMotivo.get(motivo) ?? {
+        motivo,
+        unidades: 0,
+        centavos: 0,
+      };
+      deMotivo.unidades += m.cantidad;
+      deMotivo.centavos += total(m);
+      porMotivo.set(motivo, deMotivo);
+
+      const deProducto = porProducto.get(m.productoId) ?? {
+        nombre: m.producto.nombre,
+        unidades: 0,
+        centavos: 0,
+      };
+      deProducto.unidades += m.cantidad;
+      deProducto.centavos += total(m);
+      porProducto.set(m.productoId, deProducto);
+    }
+
+    const porProveedor = new Map<
+      string,
+      { proveedor: string | null; compras: number; centavos: number }
+    >();
+    for (const m of abastecimientos) {
+      // Sin distinguir mayúsculas ni espacios: "Arca" y "arca " son el mismo.
+      const clave = m.proveedor?.trim().toLowerCase() ?? '';
+      const previo = porProveedor.get(clave) ?? {
+        proveedor: m.proveedor?.trim() || null,
+        compras: 0,
+        centavos: 0,
+      };
+      previo.compras++;
+      previo.centavos += total(m);
+      porProveedor.set(clave, previo);
+    }
+
+    const mayorPrimero = (a: { centavos: number }, b: { centavos: number }) =>
+      b.centavos - a.centavos;
+    return {
+      desde: rango.desde,
+      hasta: rango.hasta,
+      dias: rango.dias,
+      egresoCentavos: abastecimientos.reduce((acc, m) => acc + total(m), 0),
+      cantidadAbastecimientos: abastecimientos.length,
+      perdidaCentavos: mermas.reduce((acc, m) => acc + total(m), 0),
+      cantidadMermas: mermas.length,
+      perdidaPorMotivo: [...porMotivo.values()].sort(mayorPrimero),
+      porProveedor: [...porProveedor.values()].sort(mayorPrimero).slice(0, 5),
+      productosConMasPerdida: [...porProducto.values()]
+        .sort(mayorPrimero)
+        .slice(0, 5),
+    };
   }
 
   /**

@@ -252,3 +252,39 @@ export interface Ticket {
   vueltoCentavos: number;
   anuladoCentavos: number;
 }
+
+// --- Historial de inventario (solo admin) ---
+
+// Un abastecimiento o una merma.
+export interface MovimientoDelHistorial {
+  id: string;
+  tipo: TipoMovimientoInventario;
+  createdAt: string;
+  producto: { id: string; nombre: string };
+  cantidad: number;
+  // Abastecimiento: lo que costó esa compra. Merma: el costo en ese momento.
+  costoUnitarioCentavos: number;
+  totalCentavos: number;
+  proveedor: string | null;
+  motivo: MotivoMerma | null;
+  vencimientoLote: string | null; // 'AAAA-MM-DD'
+  registradoPor: string;
+}
+
+export interface PaginaDeMovimientos {
+  movimientos: MovimientoDelHistorial[];
+  total: number;
+}
+
+export interface ResumenInventarioPeriodo {
+  desde: string;
+  hasta: string;
+  dias: number;
+  egresoCentavos: number;
+  cantidadAbastecimientos: number;
+  perdidaCentavos: number;
+  cantidadMermas: number;
+  perdidaPorMotivo: { motivo: MotivoMerma; unidades: number; centavos: number }[];
+  porProveedor: { proveedor: string | null; compras: number; centavos: number }[];
+  productosConMasPerdida: { nombre: string; unidades: number; centavos: number }[];
+}

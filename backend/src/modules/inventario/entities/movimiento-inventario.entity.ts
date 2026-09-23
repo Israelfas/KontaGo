@@ -10,6 +10,7 @@ import {
 import { Tenant } from '../../tenants/entities/tenant.entity';
 import { Producto } from '../../productos/entities/producto.entity';
 import { Usuario } from '../../auth/entities/usuario.entity';
+import { Lote } from './lote.entity';
 import { TipoMovimientoInventario } from '../../../common/enums/tipo-movimiento-inventario.enum';
 import { MotivoMerma } from '../../../common/enums/motivo-merma.enum';
 
@@ -80,6 +81,10 @@ export class MovimientoInventario {
   // la merma tocó varios.
   @Column({ name: 'lote_id', type: 'uuid', nullable: true })
   loteId: string | null;
+
+  @ManyToOne(() => Lote, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'lote_id' })
+  lote: Lote | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

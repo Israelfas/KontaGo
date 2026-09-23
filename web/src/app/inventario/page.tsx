@@ -5,7 +5,8 @@ import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
 import { Button, EmptyState, ErrorState, LoadingState, SectionHeader } from '@/components/ui';
 import { Banda, Hoja } from '@/components/banda';
-import { AlertIcon, BoxIcon, MinusIcon, PlusIcon } from '@/components/icons';
+import Link from 'next/link';
+import { AlertIcon, BoxIcon, MinusIcon, PlusIcon, ReceiptIcon } from '@/components/icons';
 import { useAuth } from '@/lib/auth-context';
 import {
   corregirLotes,
@@ -849,6 +850,12 @@ function ContenidoInventario() {
           resumen
             ? `Gastado hoy en abastecimiento · ${formatearCentavos(resumen.perdidaCentavos)} perdidos por merma.`
             : 'Entradas y pérdidas de mercadería, y las alertas de tu catálogo.'
+        }
+        accion={
+          <Link href="/inventario/historial" className="button button-claro">
+            <ReceiptIcon className="h-4 w-4" />
+            Historial
+          </Link>
         }
       />
 
