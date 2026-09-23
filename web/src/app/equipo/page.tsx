@@ -3,7 +3,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
-import { Button, ErrorState, LoadingState, PageHeader } from '@/components/ui';
+import { Button, ErrorState, LoadingState } from '@/components/ui';
+import { Banda, Hoja } from '@/components/banda';
 import { PlusIcon } from '@/components/icons';
 import { useAuth } from '@/lib/auth-context';
 import {
@@ -15,10 +16,17 @@ import {
   ApiError,
 } from '@/lib/api';
 import type { UsuarioEquipo } from '@/lib/tipos';
+import { usePantallaChica } from '@/lib/use-pantalla-chica';
 
 const ETIQUETA_ROL: Record<UsuarioEquipo['rol'], string> = {
   admin: 'Admin',
   cajero: 'Cajero',
+};
+
+// Mismo ámbar que la etiqueta de rol del nav para el admin.
+const CLASE_ROL: Record<UsuarioEquipo['rol'], string> = {
+  admin: 'status-pill-warning',
+  cajero: 'status-pill-neutral',
 };
 
 function FormularioNuevaPersona({
@@ -198,6 +206,7 @@ function FormularioCambiarPassword({
 
 function ContenidoEquipo() {
   const { token, usuario } = useAuth();
+  const pantallaChica = usePantallaChica();
   const [equipo, setEquipo] = useState<UsuarioEquipo[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -250,22 +259,27 @@ function ContenidoEquipo() {
   const personaCambiandoPassword = equipo.find((u) => u.id === cambiandoPasswordId);
 
   return (
-    <div className="app-page">
-      <div className="app-container">
-        <PageHeader
-          eyebrow="Tienda"
-          title="Equipo"
-          description="Las personas que usan KontaGo en tu tienda. Los cajeros venden y consultan productos; no ven ganancias ni inventario."
-          action={
-            !formularioAbierto && (
-              <Button variant="primary" onClick={() => setFormularioAbierto(true)}>
-                <PlusIcon className="h-4 w-4" />
-                Agregar persona
-              </Button>
-            )
-          }
-        />
+    <div>
+      <Banda
+        eyebrow="Tienda"
+        titulo="Equipo"
+        valor={equipo.length > 0 ? String(equipo.length) : undefined}
+        detalle={
+          equipo.length > 0
+            ? `${equipo.filter((p) => p.activo).length} con acceso · los cajeros venden y consultan productos, no ven ganancias ni inventario.`
+            : 'Las personas que usan KontaGo en tu tienda.'
+        }
+        accion={
+          !formularioAbierto ? (
+            <Button variant="claro" onClick={() => setFormularioAbierto(true)}>
+              <PlusIcon className="h-4 w-4" />
+              Agregar persona
+            </Button>
+          ) : undefined
+        }
+      />
 
+      <Hoja>
         <div className="mt-8 space-y-6">
           {formularioAbierto && (
             <FormularioNuevaPersona
@@ -293,7 +307,64 @@ function ContenidoEquipo() {
             </p>
           )}
 
-          {!cargando && !error && (
+          {/* En celular la tabla cortaba el rol y las acciones: tarjetas. */}
+          {!cargando && !error && pantallaChica && (
+            <ul className="space-y-3">
+              {equipo.map((persona) => {
+                const esVos = persona.id === usuario?.sub;
+                return (
+                  <li
+                    key={persona.id}
+                    className={`app-card p-4 ${persona.activo ? '' : 'opacity-60'}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-medium text-tinta">
+                          {persona.nombre}
+                          {esVos && <span className="ml-1 text-xs text-tinta-suave">(vos)</span>}
+                        </p>
+                        <p className="break-all text-xs text-tinta-suave">{persona.email}</p>
+                        {!persona.activo && (
+                          <p className="mt-1 text-xs text-rojo-perdida">Desactivado</p>
+                        )}
+                      </div>
+                      <span className={`status-pill ${CLASE_ROL[persona.rol]} shrink-0 text-xs`}>
+                        {ETIQUETA_ROL[persona.rol]}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex gap-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAviso(null);
+                          setCambiandoPasswordId(persona.id);
+                        }}
+                        className="text-xs font-medium text-tinta-suave underline hover:text-tinta"
+                      >
+                        Cambiar contraseña
+                      </button>
+                      {!esVos && (
+                        <button
+                          type="button"
+                          disabled={procesandoId !== null}
+                          onClick={() => alternarActivo(persona)}
+                          className="text-xs font-medium text-tinta-suave underline hover:text-tinta disabled:opacity-50"
+                        >
+                          {procesandoId === persona.id
+                            ? 'Guardando…'
+                            : persona.activo
+                              ? 'Desactivar'
+                              : 'Reactivar'}
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {!cargando && !error && !pantallaChica && (
             <div className="table-shell">
               <table className="w-full text-left text-sm">
                 <thead>
@@ -321,7 +392,7 @@ function ContenidoEquipo() {
                         </td>
                         <td className="px-4 py-3 text-tinta-suave">{persona.email}</td>
                         <td className="px-4 py-3">
-                          <span className="status-pill font-ticket text-xs">
+                          <span className={`status-pill ${CLASE_ROL[persona.rol]} text-xs`}>
                             {ETIQUETA_ROL[persona.rol]}
                           </span>
                         </td>
@@ -374,7 +445,7 @@ function ContenidoEquipo() {
             />
           )}
         </div>
-      </div>
+      </Hoja>
     </div>
   );
 }

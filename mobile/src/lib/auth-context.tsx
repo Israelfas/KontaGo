@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from 'react';
 import * as SecureStore from 'expo-secure-store';
+import { useAuth as useClerkAuth } from '@clerk/expo';
 import * as api from './api';
 import type { RegistroInput } from './api';
 import type { TokenPair } from './tipos';
@@ -66,6 +67,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { signOut: cerrarSesionDeClerk } = useClerkAuth();
   const [token, setToken] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
 
@@ -129,10 +131,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await guardarSesion(await api.loginConClerk(clerkToken));
   }
 
+  // Cierra las DOS sesiones: si solo se borra el token de KontaGo, la
+  // sesión de Clerk sigue viva y el próximo "Continuar con Google" entra
+  // sin preguntar nada.
   async function cerrarSesion() {
     await SecureStore.deleteItemAsync(STORAGE_KEY);
     await SecureStore.deleteItemAsync(REFRESH_STORAGE_KEY);
     setToken(null);
+    try {
+      await cerrarSesionDeClerk();
+    } catch {
+      // Si Clerk falla, igual salimos de KontaGo.
+    }
   }
 
   const usuario = token ? decodificarPayload(token) : null;

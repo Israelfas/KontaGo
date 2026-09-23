@@ -33,7 +33,18 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${spaceGrotesk.variable} ${inter.variable} ${ibmPlexMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-papel text-tinta">
-        <ClerkProvider>
+        {/* signInUrl/signUpUrl: nuestras pantallas. Sin esto, cuando un
+            flujo de Clerk no puede continuar (por ejemplo si se pierde la
+            transacción al volver de Google), Clerk manda a SU portal de
+            cuentas alojado en accounts.dev en vez de a KontaGo.
+            Los fallback marcan a dónde volver cuando el flujo sí termina. */}
+        <ClerkProvider
+          signInUrl="/login"
+          signUpUrl="/registro"
+          signInFallbackRedirectUrl="/clerk-bridge"
+          signUpFallbackRedirectUrl="/clerk-bridge"
+          afterSignOutUrl="/login"
+        >
           <AuthProvider>{children}</AuthProvider>
         </ClerkProvider>
       </body>

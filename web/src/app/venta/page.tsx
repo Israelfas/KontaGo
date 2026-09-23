@@ -4,11 +4,14 @@ import { useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
 import { ScannerCamara } from '@/components/scanner-camara';
-import { Button, EmptyState, PageHeader } from '@/components/ui';
+import { Button, EmptyState } from '@/components/ui';
+import { Banda, Hoja } from '@/components/banda';
 import { CameraIcon, CartIcon, CheckIcon, MinusIcon, PlusIcon, TrashIcon } from '@/components/icons';
 import { useAuth } from '@/lib/auth-context';
 import { buscarPorCodigoBarras, crearProducto, crearVenta, ApiError } from '@/lib/api';
 import { formatearCentavos } from '@/lib/formato';
+import { centavosATexto, montosRapidos } from '@/lib/montos-rapidos';
+import { usePantallaChica } from '@/lib/use-pantalla-chica';
 import type { Producto, Venta } from '@/lib/tipos';
 
 interface ItemCarrito {
@@ -149,6 +152,7 @@ function FormularioProductoNuevo({
 
 function ContenidoVenta() {
   const { token, usuario } = useAuth();
+  const pantallaChica = usePantallaChica();
   const [codigoInput, setCodigoInput] = useState('');
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
   const [errorBusqueda, setErrorBusqueda] = useState<string | null>(null);
@@ -327,185 +331,299 @@ function ContenidoVenta() {
   }
 
   // --- Pantalla de armado del carrito ---
-  return (
-    <div className="app-page">
-      <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
-        <PageHeader eyebrow="Caja" title="Vender" />
+  const unidades = carrito.reduce((acc, item) => acc + item.cantidad, 0);
 
-        <form onSubmit={manejarSubmitBusqueda} className="mt-6">
-          <label className="field-label" htmlFor="codigo-barras">
-            Código de barras
-          </label>
-          <div className="flex gap-2">
-            <input
-              id="codigo-barras"
-              ref={inputCodigoRef}
-              autoFocus
-              value={codigoInput}
-              onChange={(e) => setCodigoInput(e.target.value)}
-              onKeyDown={manejarTecla}
-              className="field flex-1 font-ticket"
-              placeholder="Escaneá o tipeá el código y presioná Enter"
-            />
-            <Button type="submit" variant="primary" disabled={buscando}>
-              Agregar
-            </Button>
-          </div>
-          {errorBusqueda && <p className="mt-2 text-sm text-rojo-perdida">{errorBusqueda}</p>}
-        </form>
+  // Panel de cobro: en escritorio queda fijo a la derecha (como la
+  // pantalla de una caja registradora); en celular cae debajo del ticket.
+  const panelCobro = (
+    <div className="app-card p-5">
+      <label className="field-label" htmlFor="monto-recibido">
+        Monto recibido
+      </label>
+      <input
+        id="monto-recibido"
+        type="number"
+        step="0.01"
+        min="0"
+        disabled={carrito.length === 0}
+        value={montoRecibido}
+        onChange={(e) => setMontoRecibido(e.target.value)}
+        className="field font-ticket !mb-0 disabled:opacity-50"
+        placeholder="0.00"
+      />
 
-        {/* Fuera del <form> de búsqueda: un form dentro de otro es HTML
-            inválido, y en React el submit del de adentro también dispara
-            el onSubmit del de afuera (volvía a buscar el código). */}
-        {codigoNoEncontrado && (
-          <FormularioProductoNuevo
-            codigoBarras={codigoNoEncontrado}
-            onCreado={manejarProductoNuevoCreado}
-            onCancelar={() => setCodigoNoEncontrado(null)}
-          />
-        )}
-
-        <div className="mt-3">
-          {camaraActiva ? (
-            <ScannerCamara
-              onDetectado={(codigo) => buscarYAgregar(codigo)}
-              onCerrar={() => setCamaraActiva(false)}
-              confirmacion={confirmacionEscaneo}
-            />
-          ) : (
-            <button
-              onClick={() => setCamaraActiva(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-papel-linea py-3 text-sm text-tinta-suave transition-colors hover:border-tinta hover:text-tinta"
-            >
-              <CameraIcon className="h-4 w-4" />
-              Escanear con la cámara
-            </button>
-          )}
+      {carrito.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2" aria-label="Montos rápidos">
+          {[totalCentavos, ...montosRapidos(totalCentavos)].map((centavos, i) => {
+            const activo = montoRecibidoCentavos === centavos;
+            return (
+              <button
+                key={centavos}
+                type="button"
+                onClick={() => setMontoRecibido(centavosATexto(centavos))}
+                className={`rounded-full border px-3 py-1.5 font-ticket text-xs font-semibold transition-colors ${
+                  activo
+                    ? 'border-tinta bg-tinta text-papel'
+                    : 'border-papel-linea bg-white text-tinta hover:border-tinta'
+                }`}
+              >
+                {i === 0 ? 'Exacto' : formatearCentavos(centavos)}
+              </button>
+            );
+          })}
         </div>
+      )}
 
-        {carrito.length === 0 ? (
-          <div className="mt-8">
-            <EmptyState
-              icon={<CartIcon className="h-6 w-6" />}
-              title="El carrito está vacío"
-              description="Buscá un producto por su código de barras para empezar."
-            />
-          </div>
-        ) : (
-          <div className="table-shell mt-8">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="table-header">
-                  <th className="px-4 py-3">Producto</th>
-                  <th className="px-4 py-3 text-center">Cant.</th>
-                  <th className="px-4 py-3 text-right">Subtotal</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody>
+      {vueltoCentavos !== null && carrito.length > 0 && (
+        <div
+          className={`mt-4 flex items-baseline justify-between rounded-xl px-3.5 py-3 ${
+            vueltoCentavos >= 0 ? 'bg-ambar/10' : 'bg-rojo-perdida/10'
+          }`}
+        >
+          <span className="text-sm font-medium text-tinta">
+            {vueltoCentavos >= 0 ? 'Vuelto' : 'Falta'}
+          </span>
+          <span
+            className={`font-ticket text-2xl font-semibold ${
+              vueltoCentavos >= 0 ? 'text-ambar' : 'text-rojo-perdida'
+            }`}
+          >
+            {formatearCentavos(Math.abs(vueltoCentavos))}
+          </span>
+        </div>
+      )}
+
+      {errorVenta && (
+        <p className="mt-3 rounded-lg bg-rojo-perdida/10 px-3 py-2 text-sm text-rojo-perdida">
+          {errorVenta}
+        </p>
+      )}
+
+      <Button
+        variant="success"
+        onClick={confirmarVenta}
+        disabled={
+          procesando ||
+          carrito.length === 0 ||
+          montoRecibidoCentavos === null ||
+          vueltoCentavos === null ||
+          vueltoCentavos < 0
+        }
+        className="mt-4 w-full"
+      >
+        {procesando ? 'Confirmando…' : 'Confirmar venta'}
+      </Button>
+
+      {carrito.length > 0 && (
+        <button
+          type="button"
+          disabled={procesando}
+          onClick={() => {
+            if (window.confirm('¿Vaciar el carrito? Se quitan todos los productos.')) {
+              setCarrito([]);
+              setMontoRecibido('');
+              setErrorVenta(null);
+            }
+          }}
+          className="mt-3 w-full text-center text-xs font-medium text-tinta-suave underline hover:text-tinta"
+        >
+          Vaciar carrito
+        </button>
+      )}
+    </div>
+  );
+
+  return (
+    <div>
+      <Banda
+        eyebrow="Caja"
+        titulo="Vender"
+        valor={formatearCentavos(totalCentavos)}
+        detalle={
+          carrito.length === 0
+            ? 'Escaneá o tipeá un código para empezar el ticket.'
+            : `Total a cobrar · ${unidades} unidad${unidades === 1 ? '' : 'es'} de ${
+                carrito.length
+              } producto${carrito.length === 1 ? '' : 's'}`
+        }
+      />
+
+      <Hoja>
+
+        {/* Dos columnas en escritorio: el ticket a la izquierda y el cobro
+            siempre a la vista a la derecha. Antes todo iba en una columna
+            angosta al medio, con media pantalla vacía. */}
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
+          <div>
+            <form onSubmit={manejarSubmitBusqueda}>
+              <label className="field-label" htmlFor="codigo-barras">
+                Código de barras
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="codigo-barras"
+                  ref={inputCodigoRef}
+                  autoFocus
+                  value={codigoInput}
+                  onChange={(e) => setCodigoInput(e.target.value)}
+                  onKeyDown={manejarTecla}
+                  className="field flex-1 font-ticket !mb-0"
+                  placeholder="Escaneá o tipeá el código y presioná Enter"
+                />
+                <Button type="submit" variant="primary" disabled={buscando}>
+                  Agregar
+                </Button>
+              </div>
+              {errorBusqueda && <p className="mt-2 text-sm text-rojo-perdida">{errorBusqueda}</p>}
+            </form>
+
+            {/* Fuera del <form> de búsqueda: un form dentro de otro es HTML
+                inválido, y en React el submit del de adentro también dispara
+                el onSubmit del de afuera (volvía a buscar el código). */}
+            {codigoNoEncontrado && (
+              <FormularioProductoNuevo
+                codigoBarras={codigoNoEncontrado}
+                onCreado={manejarProductoNuevoCreado}
+                onCancelar={() => setCodigoNoEncontrado(null)}
+              />
+            )}
+
+            <div className="mt-3">
+              {camaraActiva ? (
+                <ScannerCamara
+                  onDetectado={(codigo) => buscarYAgregar(codigo)}
+                  onCerrar={() => setCamaraActiva(false)}
+                  confirmacion={confirmacionEscaneo}
+                />
+              ) : (
+                <button
+                  onClick={() => setCamaraActiva(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-papel-linea py-3 text-sm text-tinta-suave transition-colors hover:border-tinta hover:text-tinta"
+                >
+                  <CameraIcon className="h-4 w-4" />
+                  Escanear con la cámara
+                </button>
+              )}
+            </div>
+
+            {carrito.length === 0 ? (
+              <div className="mt-5">
+                <EmptyState
+                  icon={<CartIcon className="h-6 w-6" />}
+                  title="El carrito está vacío"
+                  description="Buscá un producto por su código de barras para empezar."
+                />
+              </div>
+            ) : pantallaChica ? (
+              <ul className="mt-5 space-y-2">
                 {carrito.map((item) => (
-                  <tr key={item.producto.id} className="border-t border-papel-linea">
-                    <td className="px-4 py-3 text-tinta">{item.producto.nombre}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-2">
+                  <li key={item.producto.id} className="app-card p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-tinta">{item.producto.nombre}</p>
+                        <p className="font-ticket text-xs text-tinta-suave">
+                          {formatearCentavos(item.producto.precioVentaCentavos)} c/u
+                        </p>
+                      </div>
+                      <p className="shrink-0 font-ticket font-semibold text-tinta">
+                        {formatearCentavos(item.producto.precioVentaCentavos * item.cantidad)}
+                      </p>
+                    </div>
+                    <div className="mt-2.5 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 rounded-full border border-papel-linea bg-white p-1">
                         <button
                           onClick={() => cambiarCantidad(item.producto.id, -1)}
-                          className="flex h-6 w-6 items-center justify-center rounded-md border border-papel-linea text-tinta-suave hover:bg-papel-linea/60"
-                          aria-label="Restar"
+                          className="flex h-8 w-8 items-center justify-center rounded-full text-tinta-suave"
+                          aria-label={`Quitar una unidad de ${item.producto.nombre}`}
                         >
-                          <MinusIcon className="h-3 w-3" />
+                          <MinusIcon className="h-3.5 w-3.5" />
                         </button>
-                        <span className="w-6 text-center font-ticket text-tinta">
+                        <span className="w-6 text-center font-ticket font-semibold text-tinta">
                           {item.cantidad}
                         </span>
                         <button
                           onClick={() => cambiarCantidad(item.producto.id, 1)}
-                          className="flex h-6 w-6 items-center justify-center rounded-md border border-papel-linea text-tinta-suave hover:bg-papel-linea/60"
-                          aria-label="Sumar"
+                          className="flex h-8 w-8 items-center justify-center rounded-full text-tinta-suave"
+                          aria-label={`Agregar una unidad de ${item.producto.nombre}`}
                         >
-                          <PlusIcon className="h-3 w-3" />
+                          <PlusIcon className="h-3.5 w-3.5" />
                         </button>
                       </div>
-                    </td>
-                    <td className="px-4 py-3 text-right font-ticket text-tinta">
-                      {formatearCentavos(item.producto.precioVentaCentavos * item.cantidad)}
-                    </td>
-                    <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => quitarDelCarrito(item.producto.id)}
-                        className="text-tinta-suave hover:text-rojo-perdida"
-                        aria-label="Quitar del carrito"
+                        className="flex h-8 w-8 items-center justify-center text-tinta-suave"
+                        aria-label={`Quitar ${item.producto.nombre} del carrito`}
                       >
                         <TrashIcon className="h-4 w-4" />
                       </button>
-                    </td>
-                  </tr>
+                    </div>
+                  </li>
                 ))}
-              </tbody>
-            </table>
-
-            <div className="border-t border-papel-linea bg-white/60 p-5">
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-tinta">Total</span>
-                <span className="font-ticket text-xl font-semibold text-tinta">
-                  {formatearCentavos(totalCentavos)}
-                </span>
+              </ul>
+            ) : (
+              <div className="table-shell mt-5">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="table-header">
+                      <th className="px-4 py-3">Producto</th>
+                      <th className="px-4 py-3 text-center">Cant.</th>
+                      <th className="px-4 py-3 text-right">Subtotal</th>
+                      <th className="px-4 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {carrito.map((item) => (
+                      <tr key={item.producto.id} className="border-t border-papel-linea">
+                        <td className="px-4 py-3">
+                          <p className="text-tinta">{item.producto.nombre}</p>
+                          <p className="font-ticket text-xs text-tinta-suave">
+                            {formatearCentavos(item.producto.precioVentaCentavos)} c/u
+                          </p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => cambiarCantidad(item.producto.id, -1)}
+                              className="flex h-7 w-7 items-center justify-center rounded-md border border-papel-linea text-tinta-suave transition-colors hover:border-tinta hover:text-tinta"
+                              aria-label={`Quitar una unidad de ${item.producto.nombre}`}
+                            >
+                              <MinusIcon className="h-3 w-3" />
+                            </button>
+                            <span className="w-7 text-center font-ticket text-tinta">
+                              {item.cantidad}
+                            </span>
+                            <button
+                              onClick={() => cambiarCantidad(item.producto.id, 1)}
+                              className="flex h-7 w-7 items-center justify-center rounded-md border border-papel-linea text-tinta-suave transition-colors hover:border-tinta hover:text-tinta"
+                              aria-label={`Agregar una unidad de ${item.producto.nombre}`}
+                            >
+                              <PlusIcon className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right font-ticket font-medium text-tinta">
+                          {formatearCentavos(item.producto.precioVentaCentavos * item.cantidad)}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => quitarDelCarrito(item.producto.id)}
+                            className="text-tinta-suave transition-colors hover:text-rojo-perdida"
+                            aria-label={`Quitar ${item.producto.nombre} del carrito`}
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-
-              <div className="mt-4">
-                <label className="field-label" htmlFor="monto-recibido">
-                  Monto recibido
-                </label>
-                <input
-                  id="monto-recibido"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={montoRecibido}
-                  onChange={(e) => setMontoRecibido(e.target.value)}
-                  className="field font-ticket"
-                  placeholder="0.00"
-                />
-              </div>
-
-              {vueltoCentavos !== null && (
-                <div className="mt-3 flex items-center justify-between text-sm">
-                  <span className="text-tinta-suave">
-                    {vueltoCentavos >= 0 ? 'Vuelto' : 'Falta'}
-                  </span>
-                  <span
-                    className={`font-ticket font-semibold ${
-                      vueltoCentavos >= 0 ? 'text-ambar' : 'text-rojo-perdida'
-                    }`}
-                  >
-                    {formatearCentavos(Math.abs(vueltoCentavos))}
-                  </span>
-                </div>
-              )}
-
-              {errorVenta && (
-                <p className="mt-3 rounded-lg bg-rojo-perdida/10 px-3 py-2 text-sm text-rojo-perdida">
-                  {errorVenta}
-                </p>
-              )}
-
-              <Button
-                variant="success"
-                onClick={confirmarVenta}
-                disabled={
-                  procesando ||
-                  montoRecibidoCentavos === null ||
-                  vueltoCentavos === null ||
-                  vueltoCentavos < 0
-                }
-                className="mt-4 w-full"
-              >
-                {procesando ? 'Confirmando…' : 'Confirmar venta'}
-              </Button>
-            </div>
+            )}
           </div>
-        )}
-      </div>
+
+          <div className="lg:sticky lg:top-24">{panelCobro}</div>
+        </div>
+      </Hoja>
     </div>
   );
 }

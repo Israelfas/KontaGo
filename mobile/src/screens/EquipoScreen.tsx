@@ -22,6 +22,7 @@ import {
 } from '../components/ui';
 import { colores, espaciado, radios } from '../theme/colores';
 import type { UsuarioEquipo } from '../lib/tipos';
+import { Banda, LabioHoja } from '../components/banda';
 
 const ETIQUETA_ROL: Record<UsuarioEquipo['rol'], string> = {
   admin: 'Admin',
@@ -273,6 +274,17 @@ export function EquipoScreen() {
 
   return (
     <SafeAreaView style={styles.contenedor} edges={['bottom']}>
+      <Banda
+        eyebrow="Tienda"
+        titulo="Equipo"
+        valor={equipo.length > 0 ? String(equipo.length) : undefined}
+        detalle={
+          equipo.length > 0
+            ? `${equipo.filter((p) => p.activo).length} con acceso · los cajeros venden y consultan productos, no ven ganancias ni inventario`
+            : undefined
+        }
+      />
+      <LabioHoja />
       <FlatList
         data={cargando || error ? [] : equipo}
         keyExtractor={(u) => u.id}
@@ -289,10 +301,6 @@ export function EquipoScreen() {
         contentContainerStyle={styles.listaContenido}
         ListHeaderComponent={
           <View style={{ gap: espaciado.md, marginBottom: espaciado.md }}>
-            <Text style={styles.descripcion}>
-              Las personas que usan KontaGo en tu tienda. Los cajeros venden y consultan
-              productos; no ven ganancias ni inventario.
-            </Text>
             {formularioAbierto ? (
               <FormularioNuevaPersona
                 onCreado={(u) => setEquipo((prev) => [...prev, u])}

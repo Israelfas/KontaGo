@@ -1,5 +1,5 @@
-import { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../lib/auth-context';
@@ -11,11 +11,10 @@ import {
   registrarMerma,
   ApiError,
 } from '../lib/api';
-import { formatearCentavos } from '../lib/formato';
+import { formatearCentavos, formatearFechaCorta } from '../lib/formato';
 import {
   BarraProporcional,
   Boton,
-  EncabezadoPantalla,
   EstadoCargando,
   EstadoError,
   EstadoVacio,
@@ -25,6 +24,8 @@ import {
   estilosCampo,
 } from '../components/ui';
 import { colores, espaciado, radios } from '../theme/colores';
+import { SelectorProducto } from '../components/selector-producto';
+import { Banda, Hoja, Mosaico, Pieza } from '../components/banda';
 import {
   ETIQUETAS_MOTIVO_MERMA,
   type AlertasProductos,
@@ -35,46 +36,17 @@ import {
 
 const MOTIVOS: MotivoMerma[] = ['vencido', 'danado', 'robado', 'otro'];
 
-// Selector de producto simple: RN no tiene <select> nativo, así que se
-// arma con botones apilados. Alcanza para catálogos chicos/medianos; si
-// el catálogo crece mucho conviene cambiar esto por un modal con buscador.
-function SelectorProducto({
-  productos,
-  seleccionadoId,
-  onSeleccionar,
-}: {
-  productos: Producto[];
-  seleccionadoId: string;
-  onSeleccionar: (id: string) => void;
-}) {
-  return (
-    <View style={styles.selectorContenedor}>
-      {productos.map((p) => {
-        const activo = p.id === seleccionadoId;
-        return (
-          <Boton
-            key={p.id}
-            variante={activo ? 'primary' : 'secondary'}
-            onPress={() => onSeleccionar(p.id)}
-            style={styles.selectorItem}
-          >
-            {`${p.nombre} · stock ${p.stock}`}
-          </Boton>
-        );
-      })}
-    </View>
-  );
-}
-
 function FormularioAbastecimiento({
   productos,
   onRegistrado,
+  productoInicialId = '',
 }: {
   productos: Producto[];
   onRegistrado: () => void;
+  productoInicialId?: string;
 }) {
   const { token } = useAuth();
-  const [productoId, setProductoId] = useState('');
+  const [productoId, setProductoId] = useState(productoInicialId);
   const [cantidad, setCantidad] = useState('');
   const [costoUnitario, setCostoUnitario] = useState('');
   const [proveedor, setProveedor] = useState('');
@@ -120,7 +92,7 @@ function FormularioAbastecimiento({
         onChangeText={setCantidad}
         keyboardType="number-pad"
         style={estilosCampo.input}
-        placeholder="50"
+        placeholder="Ej: 50"
       />
 
       <Etiqueta>Costo unitario</Etiqueta>
@@ -129,7 +101,7 @@ function FormularioAbastecimiento({
         onChangeText={setCostoUnitario}
         keyboardType="decimal-pad"
         style={estilosCampo.input}
-        placeholder="0.90"
+        placeholder="Ej: 0.90"
       />
 
       <Etiqueta>Proveedor (opcional)</Etiqueta>
@@ -137,7 +109,7 @@ function FormularioAbastecimiento({
         value={proveedor}
         onChangeText={setProveedor}
         style={estilosCampo.input}
-        placeholder="Distribuidora Central"
+        placeholder="Ej: Distribuidora Central"
       />
 
       {error && <Text style={styles.error}>{error}</Text>}
@@ -196,7 +168,7 @@ function FormularioMerma({
         onChangeText={setCantidad}
         keyboardType="number-pad"
         style={estilosCampo.input}
-        placeholder="3"
+        placeholder="Ej: 3"
       />
 
       <Etiqueta>Motivo</Etiqueta>
@@ -222,7 +194,13 @@ function FormularioMerma({
   );
 }
 
-function SeccionAlertas({ alertas }: { alertas: AlertasProductos | null }) {
+function SeccionAlertas({
+  alertas,
+  onAbastecer,
+}: {
+  alertas: AlertasProductos | null;
+  onAbastecer?: (productoId: string) => void;
+}) {
   if (!alertas) return null;
   const sinAlertas = alertas.stockBajo.length === 0 && alertas.porVencer.length === 0;
 
@@ -238,9 +216,16 @@ function SeccionAlertas({ alertas }: { alertas: AlertasProductos | null }) {
           {alertas.stockBajo.map((p) => (
             <View key={p.id} style={styles.alertaFila}>
               <Text style={styles.alertaNombre}>{p.nombre}</Text>
-              <Text style={[styles.alertaValor, { color: colores.ambar }]}>
-                {p.stock} / mín. {p.stockMinimo}
-              </Text>
+              <View style={styles.alertaDerecha}>
+                <Text style={[styles.alertaValor, { color: colores.ambar }]}>
+                  {p.stock} / mín. {p.stockMinimo}
+                </Text>
+                {onAbastecer && (
+                  <Pressable onPress={() => onAbastecer(p.id)} hitSlop={8}>
+                    <Text style={styles.alertaAccion}>Abastecer</Text>
+                  </Pressable>
+                )}
+              </View>
             </View>
           ))}
         </View>
@@ -253,7 +238,7 @@ function SeccionAlertas({ alertas }: { alertas: AlertasProductos | null }) {
               <Text style={styles.alertaNombre}>{p.nombre}</Text>
               <Text style={[styles.alertaValor, { color: colores.rojoPerdida }]}>
                 {p.fechaVencimiento
-                  ? new Date(p.fechaVencimiento + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })
+                  ? formatearFechaCorta(p.fechaVencimiento)
                   : '—'}
               </Text>
             </View>
@@ -272,6 +257,18 @@ export function InventarioScreen() {
   const [alertas, setAlertas] = useState<AlertasProductos | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Producto elegido desde "Abastecer" en una alerta. `vez` fuerza a
+  // rearmar el formulario aunque se toque dos veces el mismo producto.
+  const [sugerido, setSugerido] = useState<{ id: string; vez: number } | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const formularioYRef = useRef(0);
+
+  function abastecerDesdeAlerta(productoId: string) {
+    setSugerido({ id: productoId, vez: Date.now() });
+    requestAnimationFrame(() =>
+      scrollRef.current?.scrollTo({ y: formularioYRef.current, animated: true }),
+    );
+  }
 
   const cargarTodo = useCallback(async () => {
     if (!token) return;
@@ -301,9 +298,18 @@ export function InventarioScreen() {
 
   return (
     <SafeAreaView style={styles.contenedor} edges={[]}>
-      <EncabezadoPantalla eyebrow="CONTROL DE STOCK" titulo="Inventario" icono="clipboard" />
-
-      <ScrollView contentContainerStyle={{ padding: espaciado.lg, paddingTop: 0, gap: espaciado.lg }}>
+      <ScrollView ref={scrollRef} contentContainerStyle={{ flexGrow: 1 }}>
+        <Banda
+          eyebrow="Control de stock"
+          titulo="Inventario"
+          valor={resumen ? formatearCentavos(resumen.egresoCentavos) : undefined}
+          detalle={
+            resumen
+              ? `Gastado hoy en abastecimiento · ${formatearCentavos(resumen.perdidaCentavos)} perdidos por merma`
+              : undefined
+          }
+        />
+        <Hoja style={{ paddingHorizontal: espaciado.lg, paddingBottom: espaciado.xxl, gap: espaciado.lg }}>
         {cargando && <EstadoCargando texto="Cargando inventario…" />}
         {error && !cargando && <EstadoError mensaje={error} onReintentar={cargarTodo} />}
 
@@ -350,19 +356,32 @@ export function InventarioScreen() {
           />
         )}
 
-        {!cargando && !error && esAdmin && productos.length > 0 && (
-          <>
-            <FormularioAbastecimiento productos={productos} onRegistrado={cargarTodo} />
-            <FormularioMerma productos={productos} onRegistrado={cargarTodo} />
-          </>
-        )}
-
+        {/* Las alertas van antes que los formularios: es lo que más se
+            consulta, y quedaban al fondo de la pantalla. */}
         {!cargando && !error && (
           <View>
             <Text style={styles.seccionTitulo}>Alertas</Text>
-            <SeccionAlertas alertas={alertas} />
+            <SeccionAlertas
+              alertas={alertas}
+              onAbastecer={esAdmin ? abastecerDesdeAlerta : undefined}
+            />
           </View>
         )}
+
+        {!cargando && !error && esAdmin && productos.length > 0 && (
+          <>
+            <View onLayout={(e) => (formularioYRef.current = e.nativeEvent.layout.y)}>
+              <FormularioAbastecimiento
+                key={sugerido?.vez ?? 'inicial'}
+                productos={productos}
+                onRegistrado={cargarTodo}
+                productoInicialId={sugerido?.id}
+              />
+            </View>
+            <FormularioMerma productos={productos} onRegistrado={cargarTodo} />
+          </>
+        )}
+        </Hoja>
       </ScrollView>
     </SafeAreaView>
   );
@@ -410,6 +429,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colores.papelLinea,
   },
-  alertaNombre: { fontSize: 13, color: colores.tinta },
+  alertaDerecha: { flexDirection: 'row', alignItems: 'center', gap: espaciado.md },
+  alertaAccion: { fontSize: 13, fontWeight: '600', color: colores.tinta, textDecorationLine: 'underline' },
+  alertaNombre: { flex: 1, fontSize: 13, color: colores.tinta, marginRight: espaciado.sm },
   alertaValor: { fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
 });

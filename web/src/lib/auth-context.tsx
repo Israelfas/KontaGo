@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth as useClerkAuth } from '@clerk/nextjs';
 import * as api from './api';
 import type { RegistroInput } from './api';
 import type { TokenPair } from './tipos';
@@ -53,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const router = useRouter();
+  const { signOut: cerrarSesionDeClerk } = useClerkAuth();
 
   // Único punto que renueva la sesión: lo usa api.ts cuando recibe un
   // 401, y el arranque cuando el accessToken guardado ya venció. Devuelve
@@ -135,8 +137,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
   }
 
-  function cerrarSesion() {
+  // Cierra las DOS sesiones. Antes solo borraba el token de KontaGo, así
+  // que la sesión de Clerk seguía viva: al tocar "Continuar con Google"
+  // otra vez, entraba de una sin preguntar nada.
+  async function cerrarSesion() {
     limpiarSesion();
+    try {
+      await cerrarSesionDeClerk();
+    } catch {
+      // Si Clerk no está disponible, igual salimos de KontaGo.
+    }
     router.push('/login');
   }
 

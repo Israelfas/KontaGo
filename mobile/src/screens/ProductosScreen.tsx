@@ -13,10 +13,9 @@ import {
   listarProductosDadosDeBaja,
   ApiError,
 } from '../lib/api';
-import { formatearCentavos } from '../lib/formato';
+import { formatearCentavos, formatearFechaCorta } from '../lib/formato';
 import {
   Boton,
-  EncabezadoPantalla,
   EstadoCargando,
   EstadoError,
   EstadoVacio,
@@ -25,7 +24,14 @@ import {
   estilosCampo,
 } from '../components/ui';
 import { colores, espaciado, radios } from '../theme/colores';
+import { Banda, LabioHoja } from '../components/banda';
 import type { Producto } from '../lib/tipos';
+import {
+  estaPorVencer,
+  filtrarProductos,
+  tieneStockBajo,
+  type FiltroProductos,
+} from '../lib/filtro-productos';
 
 // El backend exige exactamente "AAAA-MM-DD" (una fecha de calendario,
 // sin hora ni zona horaria). Sin librería de selector de fecha (para no
@@ -93,10 +99,7 @@ function ChipFechaVencimiento({
   }
 
   const fechaLegible = producto.fechaVencimiento
-    ? new Date(producto.fechaVencimiento + 'T00:00:00').toLocaleDateString('es', {
-        day: 'numeric',
-        month: 'short',
-      })
+    ? formatearFechaCorta(producto.fechaVencimiento)
     : null;
 
   if (soloLectura) {
@@ -510,6 +513,62 @@ function SeccionDadosDeBaja({
   );
 }
 
+function BarraBusqueda({
+  productos,
+  busqueda,
+  onBusqueda,
+  filtro,
+  onFiltro,
+}: {
+  productos: Producto[];
+  busqueda: string;
+  onBusqueda: (v: string) => void;
+  filtro: FiltroProductos;
+  onFiltro: (f: FiltroProductos) => void;
+}) {
+  const opciones: { id: FiltroProductos; texto: string; cantidad?: number }[] = [
+    { id: 'todos', texto: 'Todos' },
+    { id: 'stock_bajo', texto: 'Stock bajo', cantidad: productos.filter(tieneStockBajo).length },
+    { id: 'por_vencer', texto: 'Por vencer', cantidad: productos.filter(estaPorVencer).length },
+  ];
+  return (
+    <View style={{ gap: espaciado.sm, marginBottom: espaciado.md }}>
+      <View style={styles.busquedaCampo}>
+        <Ionicons name="search" size={16} color={colores.tintaSuave} />
+        <TextInput
+          value={busqueda}
+          onChangeText={onBusqueda}
+          placeholder="Buscar por nombre o código"
+          autoCorrect={false}
+          style={styles.busquedaInput}
+        />
+        {busqueda ? (
+          <Pressable onPress={() => onBusqueda('')} hitSlop={8}>
+            <Ionicons name="close-circle" size={18} color={colores.tintaSuave} />
+          </Pressable>
+        ) : null}
+      </View>
+      <View style={{ flexDirection: 'row', gap: espaciado.xs }}>
+        {opciones.map((o) => {
+          const activo = filtro === o.id;
+          return (
+            <Pressable
+              key={o.id}
+              onPress={() => onFiltro(o.id)}
+              style={[styles.chip, activo && styles.chipActivo]}
+            >
+              <Text style={[styles.chipTexto, activo && styles.chipTextoActivo]}>
+                {o.texto}
+                {o.cantidad ? ` ${o.cantidad}` : ''}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 export function ProductosScreen() {
   const { token, usuario } = useAuth();
   const esAdmin = usuario?.rol === 'admin';
@@ -521,6 +580,9 @@ export function ProductosScreen() {
   const [error, setError] = useState<string | null>(null);
   const [formularioAbierto, setFormularioAbierto] = useState(false);
   const [productoEditandoId, setProductoEditandoId] = useState<string | null>(null);
+  const [busqueda, setBusqueda] = useState('');
+  const [filtro, setFiltro] = useState<FiltroProductos>('todos');
+  const productosVisibles = filtrarProductos(productos, busqueda, filtro);
 
   const cargar = useCallback(() => {
     if (!token) return;
@@ -562,21 +624,30 @@ export function ProductosScreen() {
 
   return (
     <SafeAreaView style={styles.contenedor} edges={[]}>
-      <EncabezadoPantalla
-        eyebrow="CATÁLOGO"
+      <Banda
+        eyebrow="Catálogo"
         titulo="Productos"
-        descripcion={productos.length > 0 ? `${productos.length} en tu catálogo` : undefined}
+        valor={productos.length > 0 ? String(productos.length) : undefined}
+        detalle={
+          productos.length > 0
+            ? `${productos.length === 1 ? 'producto activo' : 'productos activos'}${
+                esAdmin ? '' : ' · solo consulta'
+              }`
+            : undefined
+        }
         accion={
           esAdmin && !formularioAbierto ? (
-            <Boton onPress={() => setFormularioAbierto(true)} style={styles.botonNuevo}>
-              + Nuevo
-            </Boton>
+            <Pressable onPress={() => setFormularioAbierto(true)} style={styles.botonNuevo} hitSlop={8}>
+              <Ionicons name="add" size={18} color={colores.tinta} />
+              <Text style={styles.botonNuevoTexto}>Nuevo</Text>
+            </Pressable>
           ) : undefined
         }
       />
+      <LabioHoja />
 
       <FlatList
-        data={productos}
+        data={productosVisibles}
         keyExtractor={(p) => p.id}
         renderItem={({ item }) =>
           productoEditandoId === item.id ? (
@@ -601,15 +672,28 @@ export function ProductosScreen() {
         }
         ItemSeparatorComponent={() => <View style={{ height: espaciado.sm }} />}
         contentContainerStyle={styles.listaContenido}
+        keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
-          formularioAbierto ? (
-            <FormularioNuevoProducto
-              onCreado={(p) => setProductos((prev) => [p, ...prev])}
-              onCerrar={() => setFormularioAbierto(false)}
-            />
-          ) : null
+          <View>
+            {formularioAbierto && (
+              <View style={{ marginBottom: espaciado.md }}>
+                <FormularioNuevoProducto
+                  onCreado={(p) => setProductos((prev) => [p, ...prev])}
+                  onCerrar={() => setFormularioAbierto(false)}
+                />
+              </View>
+            )}
+            {!cargando && !error && productos.length > 0 && (
+              <BarraBusqueda
+                productos={productos}
+                busqueda={busqueda}
+                onBusqueda={setBusqueda}
+                filtro={filtro}
+                onFiltro={setFiltro}
+              />
+            )}
+          </View>
         }
-        ListHeaderComponentStyle={{ marginBottom: formularioAbierto ? espaciado.md : 0 }}
         ListFooterComponent={
           !cargando && !error && esAdmin ? (
             <SeccionDadosDeBaja
@@ -621,7 +705,13 @@ export function ProductosScreen() {
           ) : null
         }
         ListEmptyComponent={
-          !cargando && !error ? (
+          !cargando && !error && productos.length > 0 ? (
+            <EstadoVacio
+              icono="search-outline"
+              titulo="Ningún producto coincide"
+              descripcion="Probá con otro nombre o código, o quitá el filtro."
+            />
+          ) : !cargando && !error ? (
             <EstadoVacio
               icono="cube-outline"
               titulo="Todavía no hay productos"
@@ -639,7 +729,39 @@ export function ProductosScreen() {
 
 const styles = StyleSheet.create({
   contenedor: { flex: 1, backgroundColor: colores.papel },
-  botonNuevo: { paddingHorizontal: espaciado.lg, minHeight: 42 },
+  // Va sobre la franja oscura: borde claro en vez de fondo oscuro.
+  botonNuevo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: espaciado.xs,
+    paddingHorizontal: espaciado.md,
+    paddingVertical: espaciado.xs,
+    borderRadius: radios.full,
+    backgroundColor: colores.papel,
+  },
+  botonNuevoTexto: { fontSize: 13, fontWeight: '700', color: colores.tinta },
+  busquedaCampo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: espaciado.sm,
+    paddingHorizontal: espaciado.md,
+    borderWidth: 1,
+    borderColor: colores.papelLinea,
+    borderRadius: radios.md,
+    backgroundColor: colores.blanco,
+  },
+  busquedaInput: { flex: 1, paddingVertical: espaciado.md, fontSize: 15, color: colores.tinta },
+  chip: {
+    paddingHorizontal: espaciado.md,
+    paddingVertical: 6,
+    borderRadius: radios.full,
+    borderWidth: 1,
+    borderColor: colores.papelLinea,
+    backgroundColor: colores.superficie,
+  },
+  chipActivo: { backgroundColor: colores.tinta, borderColor: colores.tinta },
+  chipTexto: { fontSize: 12, fontWeight: '600', color: colores.tintaSuave },
+  chipTextoActivo: { color: colores.papel },
   listaContenido: { padding: espaciado.lg, paddingTop: 0, flexGrow: 1 },
   formulario: { marginHorizontal: 0 },
   formularioTituloFila: { flexDirection: 'row', alignItems: 'center', gap: espaciado.xs, marginBottom: espaciado.md },

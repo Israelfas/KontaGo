@@ -42,18 +42,23 @@ export function LoginScreen({ navigation }: Props) {
     setCargandoGoogle(true);
     try {
       const redirectUrl = Linking.createURL('/sso-callback');
-      console.log('Google SSO redirectUrl:', redirectUrl);
       const { createdSessionId, setActive } = await startSSOFlow({
         strategy: 'oauth_google',
         redirectUrl,
       });
-      if (!createdSessionId || !setActive) return;
+      // Sin sesión: o cancelaste en la pantalla de Google, o Clerk pide
+      // pasos extra para crear la cuenta. Antes esto no decía nada y la
+      // pantalla se quedaba como si el botón no hubiera hecho nada.
+      if (!createdSessionId || !setActive) {
+        setError('No se completó el ingreso con Google. Probá de nuevo o entrá con tu email.');
+        return;
+      }
       await setActive({ session: createdSessionId });
       const token = await getToken();
       if (!token) throw new Error('Sin token de Clerk');
       await loginConClerk(token);
     } catch (err) {
-      console.error('Google SSO:', JSON.stringify(err, null, 2), err);
+      console.error('Login con Google falló', err);
       setError(
         err instanceof ApiError
           ? err.message

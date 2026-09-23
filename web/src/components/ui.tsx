@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { StoreIcon } from './icons';
 
-type ButtonVariant = 'primary' | 'secondary' | 'success' | 'danger' | 'ghost';
+type ButtonVariant = 'primary' | 'secondary' | 'success' | 'danger' | 'ghost' | 'claro';
 
 const BUTTON_STYLES: Record<ButtonVariant, string> = {
   primary: 'button-primary',
@@ -9,6 +9,8 @@ const BUTTON_STYLES: Record<ButtonVariant, string> = {
   success: 'button-success',
   danger: 'button-danger',
   ghost: 'button-ghost',
+  // Sobre la franja oscura del encabezado.
+  claro: 'button-claro',
 };
 
 export function Button({
@@ -82,7 +84,7 @@ export function MetricCard({
         {icon && <span className="metric-icon">{icon}</span>}
       </div>
       <p className="metric-value">{value}</p>
-      {detail && <p className="metric-detail mt-3">{detail}</p>}
+      {detail && <p className="metric-detail mt-auto pt-2">{detail}</p>}
     </article>
   );
 }

@@ -3,7 +3,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
-import { Button, EmptyState, ErrorState, LoadingState, PageHeader } from '@/components/ui';
+import { Button, EmptyState, ErrorState, LoadingState } from '@/components/ui';
+import { Banda, Hoja } from '@/components/banda';
 import { BoxIcon, PlusIcon } from '@/components/icons';
 import { useAuth } from '@/lib/auth-context';
 import {
@@ -15,7 +16,14 @@ import {
   listarProductosDadosDeBaja,
   ApiError,
 } from '@/lib/api';
-import { formatearCentavos } from '@/lib/formato';
+import { formatearCentavos, formatearFechaCorta } from '@/lib/formato';
+import { usePantallaChica } from '@/lib/use-pantalla-chica';
+import {
+  estaPorVencer,
+  filtrarProductos,
+  tieneStockBajo,
+  type FiltroProductos,
+} from '@/lib/filtro-productos';
 import type { Producto } from '@/lib/tipos';
 
 function FormularioNuevoProducto({
@@ -406,10 +414,7 @@ function CeldaFechaVencimiento({
   }
 
   const fechaLegible = producto.fechaVencimiento
-    ? new Date(producto.fechaVencimiento + 'T00:00:00').toLocaleDateString('es', {
-        day: 'numeric',
-        month: 'short',
-      })
+    ? formatearFechaCorta(producto.fechaVencimiento)
     : null;
 
   if (soloLectura) {
@@ -447,6 +452,71 @@ function TablaProductos({
   onDadoDeBaja: (p: Producto) => void;
   onCerrarEdicion: () => void;
 }) {
+  const pantallaChica = usePantallaChica();
+
+  // En celular la tabla no entra (se cortaban Vence y Editar): tarjetas,
+  // y la edición se abre en el lugar del producto, no al final de la lista.
+  if (pantallaChica) {
+    return (
+      <ul className="space-y-3">
+        {productos.map((p) => {
+          if (!soloLectura && p.id === productoEditandoId) {
+            return (
+              <li key={p.id}>
+                <FormularioEditarProducto
+                  producto={p}
+                  onActualizado={onActualizado}
+                  onDadoDeBaja={onDadoDeBaja}
+                  onCerrar={onCerrarEdicion}
+                />
+              </li>
+            );
+          }
+          const stockBajo = p.stock <= p.stockMinimo && p.stockMinimo > 0;
+          return (
+            <li key={p.id} className="app-card p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-medium text-tinta">{p.nombre}</p>
+                  <p className="font-ticket text-xs text-tinta-suave">{p.codigoBarras}</p>
+                </div>
+                <p className="shrink-0 font-ticket font-semibold text-tinta">
+                  {formatearCentavos(p.precioVentaCentavos)}
+                </p>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-tinta-suave">
+                {stockBajo ? (
+                  <span className="status-pill status-pill-warning font-ticket">
+                    Stock {p.stock} · bajo
+                  </span>
+                ) : (
+                  <span className="font-ticket">Stock {p.stock}</span>
+                )}
+                <span className="flex items-center gap-1">
+                  Vence
+                  <CeldaFechaVencimiento
+                    producto={p}
+                    onActualizado={onActualizado}
+                    soloLectura={soloLectura}
+                  />
+                </span>
+                {!soloLectura && (
+                  <button
+                    type="button"
+                    onClick={() => onEditar(p.id)}
+                    className="ml-auto text-xs font-medium text-tinta-suave underline hover:text-tinta"
+                  >
+                    Editar
+                  </button>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+
   return (
     <div className="space-y-3">
       <div className="table-shell">
@@ -538,6 +608,7 @@ function SeccionDadosDeBaja({
   onReactivado: (p: Producto) => void;
 }) {
   const { token } = useAuth();
+  const pantallaChica = usePantallaChica();
   const [reactivandoId, setReactivandoId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -575,7 +646,29 @@ function SeccionDadosDeBaja({
           {dadosDeBaja?.length === 0 && (
             <p className="text-sm text-tinta-suave">No hay productos dados de baja.</p>
           )}
-          {dadosDeBaja && dadosDeBaja.length > 0 && (
+          {dadosDeBaja && dadosDeBaja.length > 0 && pantallaChica && (
+            <ul className="space-y-2">
+              {dadosDeBaja.map((p) => (
+                <li key={p.id} className="app-card flex items-center justify-between gap-3 p-4">
+                  <div className="min-w-0">
+                    <p className="text-sm text-tinta-suave">{p.nombre}</p>
+                    <p className="font-ticket text-xs text-tinta-suave">
+                      {p.codigoBarras} · stock {p.stock}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={reactivandoId !== null}
+                    onClick={() => reactivar(p)}
+                    className="shrink-0 text-xs font-medium text-tinta-suave underline hover:text-tinta disabled:opacity-50"
+                  >
+                    {reactivandoId === p.id ? 'Reactivando…' : 'Reactivar'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {dadosDeBaja && dadosDeBaja.length > 0 && !pantallaChica && (
             <div className="table-shell">
               <table className="w-full text-left text-sm">
                 <thead>
@@ -618,6 +711,58 @@ function SeccionDadosDeBaja({
   );
 }
 
+function BarraBusqueda({
+  productos,
+  busqueda,
+  onBusqueda,
+  filtro,
+  onFiltro,
+}: {
+  productos: Producto[];
+  busqueda: string;
+  onBusqueda: (v: string) => void;
+  filtro: FiltroProductos;
+  onFiltro: (f: FiltroProductos) => void;
+}) {
+  const opciones: { id: FiltroProductos; texto: string; cantidad?: number }[] = [
+    { id: 'todos', texto: 'Todos' },
+    { id: 'stock_bajo', texto: 'Stock bajo', cantidad: productos.filter(tieneStockBajo).length },
+    { id: 'por_vencer', texto: 'Por vencer', cantidad: productos.filter(estaPorVencer).length },
+  ];
+  return (
+    <div className="flex flex-col gap-3 md:flex-row md:items-center">
+      <input
+        type="search"
+        value={busqueda}
+        onChange={(e) => onBusqueda(e.target.value)}
+        placeholder="Buscar por nombre o código"
+        aria-label="Buscar productos"
+        className="field !mb-0 md:max-w-sm"
+      />
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar productos">
+        {opciones.map((o) => (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => onFiltro(o.id)}
+            aria-pressed={filtro === o.id}
+            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+              filtro === o.id
+                ? 'border-tinta bg-tinta text-papel'
+                : 'border-papel-linea bg-white/60 text-tinta-suave hover:text-tinta'
+            }`}
+          >
+            {o.texto}
+            {o.cantidad !== undefined && o.cantidad > 0 && (
+              <span className="ml-1 font-ticket">{o.cantidad}</span>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ContenidoProductos() {
   const { token, usuario } = useAuth();
   const esAdmin = usuario?.rol === 'admin';
@@ -629,6 +774,9 @@ function ContenidoProductos() {
   const [error, setError] = useState<string | null>(null);
   const [formularioAbierto, setFormularioAbierto] = useState(false);
   const [productoEditandoId, setProductoEditandoId] = useState<string | null>(null);
+  const [busqueda, setBusqueda] = useState('');
+  const [filtro, setFiltro] = useState<FiltroProductos>('todos');
+  const productosVisibles = filtrarProductos(productos, busqueda, filtro);
 
   function cargar() {
     if (!token) return;
@@ -671,23 +819,33 @@ function ContenidoProductos() {
   }, [token]);
 
   return (
-    <div className="app-page">
-      <div className="app-container">
-        <PageHeader
-          eyebrow="Catálogo"
-          title="Productos"
-          description="Gestioná los artículos de tu tienda: precio, costo y stock."
-          action={
-            esAdmin &&
-            !formularioAbierto && (
-              <Button variant="primary" onClick={() => setFormularioAbierto(true)}>
-                <PlusIcon className="h-4 w-4" />
-                Nuevo producto
-              </Button>
-            )
-          }
-        />
+    <div>
+      <Banda
+        eyebrow="Catálogo"
+        titulo="Productos"
+        valor={productos.length > 0 ? String(productos.length) : undefined}
+        detalle={
+          productos.length > 0
+            ? `${productos.length === 1 ? 'producto activo' : 'productos activos'}${
+                productos.filter(tieneStockBajo).length > 0
+                  ? ` · ${productos.filter(tieneStockBajo).length} con stock bajo`
+                  : ''
+              }`
+            : esAdmin
+              ? 'Cargá tu primer producto para empezar a vender.'
+              : 'Todavía no hay productos en el catálogo.'
+        }
+        accion={
+          esAdmin && !formularioAbierto ? (
+            <Button variant="claro" onClick={() => setFormularioAbierto(true)}>
+              <PlusIcon className="h-4 w-4" />
+              Nuevo producto
+            </Button>
+          ) : undefined
+        }
+      />
 
+      <Hoja>
         <div className="mt-8 space-y-6">
           {formularioAbierto && (
             <FormularioNuevoProducto
@@ -713,8 +871,34 @@ function ContenidoProductos() {
           )}
 
           {!cargando && !error && productos.length > 0 && (
-            <TablaProductos
+            <BarraBusqueda
               productos={productos}
+              busqueda={busqueda}
+              onBusqueda={setBusqueda}
+              filtro={filtro}
+              onFiltro={setFiltro}
+            />
+          )}
+
+          {!cargando && !error && productos.length > 0 && productosVisibles.length === 0 && (
+            <p className="text-sm text-tinta-suave">
+              Ningún producto coincide.{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setBusqueda('');
+                  setFiltro('todos');
+                }}
+                className="font-medium text-tinta underline"
+              >
+                Ver todos
+              </button>
+            </p>
+          )}
+
+          {!cargando && !error && productosVisibles.length > 0 && (
+            <TablaProductos
+              productos={productosVisibles}
               soloLectura={!esAdmin}
               productoEditandoId={productoEditandoId}
               onEditar={(id) => setProductoEditandoId(id)}
@@ -737,7 +921,7 @@ function ContenidoProductos() {
             />
           )}
         </div>
-      </div>
+      </Hoja>
     </div>
   );
 }

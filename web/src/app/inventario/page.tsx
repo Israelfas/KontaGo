@@ -3,15 +3,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
-import {
-  Button,
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  MetricCard,
-  PageHeader,
-  SectionHeader,
-} from '@/components/ui';
+import { Button, EmptyState, ErrorState, LoadingState, SectionHeader } from '@/components/ui';
+import { Banda, Hoja } from '@/components/banda';
 import { AlertIcon, BoxIcon, MinusIcon, PlusIcon } from '@/components/icons';
 import { useAuth } from '@/lib/auth-context';
 import {
@@ -22,7 +15,7 @@ import {
   registrarMerma,
   ApiError,
 } from '@/lib/api';
-import { formatearCentavos } from '@/lib/formato';
+import { formatearCentavos, formatearFechaCorta } from '@/lib/formato';
 import {
   ETIQUETAS_MOTIVO_MERMA,
   type AlertasProductos,
@@ -32,38 +25,6 @@ import {
 } from '@/lib/tipos';
 
 // --- Resumen del día (egreso por abastecimiento + pérdida por merma) ---
-
-function TarjetasResumenInventario({
-  resumen,
-}: {
-  resumen: ResumenMovimientosDelDia | null;
-}) {
-  if (!resumen) return null;
-
-  return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <MetricCard
-        label="Gastado en abastecimiento hoy"
-        value={formatearCentavos(resumen.egresoCentavos)}
-        detail={`${resumen.cantidadAbastecimientos} ${
-          resumen.cantidadAbastecimientos === 1 ? 'movimiento' : 'movimientos'
-        }`}
-        icon={<PlusIcon className="h-5 w-5" />}
-      />
-      <MetricCard
-        label="Pérdida por merma hoy"
-        value={formatearCentavos(resumen.perdidaCentavos)}
-        detail={`${resumen.cantidadMermas} ${
-          resumen.cantidadMermas === 1 ? 'movimiento' : 'movimientos'
-        }`}
-        icon={<MinusIcon className="h-5 w-5" />}
-        tone="danger"
-      />
-    </div>
-  );
-}
-
-// --- Selector de producto compartido por ambos formularios ---
 
 function SelectorProducto({
   id,
@@ -101,12 +62,14 @@ function SelectorProducto({
 function FormularioAbastecimiento({
   productos,
   onRegistrado,
+  productoInicialId = '',
 }: {
   productos: Producto[];
   onRegistrado: () => void;
+  productoInicialId?: string;
 }) {
   const { token } = useAuth();
-  const [productoId, setProductoId] = useState('');
+  const [productoId, setProductoId] = useState(productoInicialId);
   const [cantidad, setCantidad] = useState('');
   const [costoUnitario, setCostoUnitario] = useState('');
   const [proveedor, setProveedor] = useState('');
@@ -173,6 +136,7 @@ function FormularioAbastecimiento({
               Cantidad
             </label>
             <input
+              autoFocus={!!productoInicialId}
               id="abastecimiento-cantidad"
               required
               type="number"
@@ -180,7 +144,7 @@ function FormularioAbastecimiento({
               value={cantidad}
               onChange={(e) => setCantidad(e.target.value)}
               className="field font-ticket"
-              placeholder="50"
+              placeholder="Ej: 50"
             />
           </div>
           <div>
@@ -196,7 +160,7 @@ function FormularioAbastecimiento({
               value={costoUnitario}
               onChange={(e) => setCostoUnitario(e.target.value)}
               className="field font-ticket"
-              placeholder="0.90"
+              placeholder="Ej: 0.90"
             />
           </div>
         </div>
@@ -209,7 +173,7 @@ function FormularioAbastecimiento({
             value={proveedor}
             onChange={(e) => setProveedor(e.target.value)}
             className="field"
-            placeholder="Distribuidora Central"
+            placeholder="Ej: Distribuidora Central"
           />
         </div>
       </div>
@@ -311,7 +275,7 @@ function FormularioMerma({
               value={cantidad}
               onChange={(e) => setCantidad(e.target.value)}
               className="field font-ticket"
-              placeholder="3"
+              placeholder="Ej: 3"
             />
           </div>
           <div>
@@ -355,7 +319,13 @@ function FormularioMerma({
 
 // --- Alertas: stock bajo + por vencer ---
 
-function TablaAlertas({ alertas }: { alertas: AlertasProductos | null }) {
+function TablaAlertas({
+  alertas,
+  onAbastecer,
+}: {
+  alertas: AlertasProductos | null;
+  onAbastecer?: (productoId: string) => void;
+}) {
   if (!alertas) return null;
 
   const sinAlertas = alertas.stockBajo.length === 0 && alertas.porVencer.length === 0;
@@ -387,6 +357,15 @@ function TablaAlertas({ alertas }: { alertas: AlertasProductos | null }) {
                     <span className="status-pill status-pill-warning font-ticket">
                       {p.stock} / mín. {p.stockMinimo}
                     </span>
+                    {onAbastecer && (
+                      <button
+                        type="button"
+                        onClick={() => onAbastecer(p.id)}
+                        className="ml-3 text-xs font-medium text-tinta underline"
+                      >
+                        Abastecer
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -409,10 +388,7 @@ function TablaAlertas({ alertas }: { alertas: AlertasProductos | null }) {
                   <td className="px-4 py-3 text-right">
                     <span className="status-pill status-pill-danger font-ticket">
                       {p.fechaVencimiento
-                        ? new Date(p.fechaVencimiento + 'T00:00:00').toLocaleDateString('es', {
-                            day: 'numeric',
-                            month: 'short',
-                          })
+                        ? formatearFechaCorta(p.fechaVencimiento)
                         : '—'}
                     </span>
                   </td>
@@ -436,6 +412,18 @@ function ContenidoInventario() {
   const [alertas, setAlertas] = useState<AlertasProductos | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Producto elegido desde "Abastecer" en una alerta. `vez` fuerza a
+  // rearmar el formulario aunque se toque dos veces el mismo producto.
+  const [sugerido, setSugerido] = useState<{ id: string; vez: number } | null>(null);
+
+  function abastecerDesdeAlerta(productoId: string) {
+    setSugerido({ id: productoId, vez: Date.now() });
+    requestAnimationFrame(() =>
+      document
+        .getElementById('formulario-abastecimiento')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    );
+  }
 
   async function cargarTodo() {
     if (!token) return;
@@ -463,13 +451,19 @@ function ContenidoInventario() {
   }, [token]);
 
   return (
-    <div className="app-page">
-      <div className="app-container">
-        <PageHeader
-          eyebrow="Control de stock"
-          title="Inventario"
-          description="Registrá entradas y pérdidas de mercadería, y revisá las alertas de tu catálogo."
-        />
+    <div>
+      <Banda
+        eyebrow="Control de stock"
+        titulo="Inventario"
+        valor={resumen ? formatearCentavos(resumen.egresoCentavos) : undefined}
+        detalle={
+          resumen
+            ? `Gastado hoy en abastecimiento · ${formatearCentavos(resumen.perdidaCentavos)} perdidos por merma.`
+            : 'Entradas y pérdidas de mercadería, y las alertas de tu catálogo.'
+        }
+      />
+
+      <Hoja>
 
         <div className="mt-8">
           {cargando && <LoadingState label="Cargando inventario…" />}
@@ -482,7 +476,20 @@ function ContenidoInventario() {
 
           {!cargando && !error && (
             <div className="space-y-8">
-              <TarjetasResumenInventario resumen={resumen} />
+              {/* Las alertas van antes que los formularios: es lo que más se
+                  consulta, y en el celular quedaban al fondo de la página. */}
+              <div>
+                <SectionHeader
+                  title="Alertas"
+                  description="Stock por debajo del mínimo y productos próximos a vencer."
+                />
+                <div className="mt-4">
+                  <TablaAlertas
+                    alertas={alertas}
+                    onAbastecer={esAdmin ? abastecerDesdeAlerta : undefined}
+                  />
+                </div>
+              </div>
 
               {esAdmin &&
                 (productos.length === 0 ? (
@@ -493,24 +500,21 @@ function ContenidoInventario() {
                   />
                 ) : (
                   <div className="grid gap-6 lg:grid-cols-2">
-                    <FormularioAbastecimiento productos={productos} onRegistrado={cargarTodo} />
+                    <div id="formulario-abastecimiento" className="scroll-mt-24">
+                      <FormularioAbastecimiento
+                        key={sugerido?.vez ?? 'inicial'}
+                        productos={productos}
+                        onRegistrado={cargarTodo}
+                        productoInicialId={sugerido?.id}
+                      />
+                    </div>
                     <FormularioMerma productos={productos} onRegistrado={cargarTodo} />
                   </div>
                 ))}
-
-              <div>
-                <SectionHeader
-                  title="Alertas"
-                  description="Stock por debajo del mínimo y productos próximos a vencer."
-                />
-                <div className="mt-4">
-                  <TablaAlertas alertas={alertas} />
-                </div>
-              </div>
             </div>
           )}
         </div>
-      </div>
+      </Hoja>
     </div>
   );
 }

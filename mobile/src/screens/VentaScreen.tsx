@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import {
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -10,7 +11,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -18,99 +18,16 @@ import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useAuth } from '../lib/auth-context';
 import { buscarPorCodigoBarras, crearProducto, crearVenta, ApiError } from '../lib/api';
 import { formatearCentavos } from '../lib/formato';
-import { Boton, EncabezadoPantalla, EstadoVacio, Etiqueta, estilosCampo } from '../components/ui';
+import { centavosATexto, montosRapidos } from '../lib/montos-rapidos';
+import { Boton, EstadoVacio, Etiqueta, estilosCampo } from '../components/ui';
 import { colores, espaciado, radios } from '../theme/colores';
 import type { Producto, Venta } from '../lib/tipos';
+import { EscanerCamara } from '../components/escaner-camara';
+import { Banda, LabioHoja } from '../components/banda';
 
 interface ItemCarrito {
   producto: Producto;
   cantidad: number;
-}
-
-// La cámara solo detecta estos formatos — son los que efectivamente
-// aparecen en productos de supermercado/almacén (ver spec 3.1).
-const TIPOS_CODIGO_BARRAS = ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128'] as const;
-
-// IMPORTANTE: este objeto debe ser una referencia ESTABLE, no crearse
-// dentro del render. Si se recrea en cada render (ej. `{ barcodeTypes:
-// [...TIPOS_CODIGO_BARRAS] }` inline en el JSX), CameraView interpreta
-// que la config de escaneo "cambió" y reinicia el detector nativo cada
-// vez que la pantalla re-renderiza por cualquier motivo — incluso uno
-// sin relación con la cámara — y el escaneo nunca llega a estabilizarse
-// lo suficiente para reportar una lectura. Este fue el bug real detrás
-// de "el sensor no hace nada": si tipeabas algo, cambiaba cualquier
-// estado de VentaScreen mientras la cámara estaba abierta, el escáner
-// se reiniciaba en loop.
-const CONFIGURACION_ESCANER = { barcodeTypes: [...TIPOS_CODIGO_BARRAS] };
-
-function EscanerCamara({
-  onDetectado,
-  onCerrar,
-  confirmacion,
-}: {
-  onDetectado: (codigo: string) => void;
-  onCerrar: () => void;
-  confirmacion: string | null;
-}) {
-  const [permiso, solicitarPermiso] = useCameraPermissions();
-  // Evita disparar el mismo código repetidamente mientras la cámara sigue
-  // detectando el mismo código de barras en frames consecutivos.
-  const ultimoDetectadoRef = useRef<{ codigo: string; ts: number } | null>(null);
-
-  function manejarEscaneo(resultado: BarcodeScanningResult) {
-    const ahora = Date.now();
-    const ultimo = ultimoDetectadoRef.current;
-    if (ultimo && ultimo.codigo === resultado.data && ahora - ultimo.ts < 2000) {
-      return;
-    }
-    ultimoDetectadoRef.current = { codigo: resultado.data, ts: ahora };
-    onDetectado(resultado.data);
-  }
-
-  if (!permiso) {
-    return null;
-  }
-
-  if (!permiso.granted) {
-    return (
-      <View style={styles.camaraPermisoContenedor}>
-        <Text style={styles.camaraPermisoTexto}>
-          KontaGo necesita acceso a la cámara para escanear códigos de barras.
-        </Text>
-        <Boton onPress={solicitarPermiso} style={{ marginTop: espaciado.sm }}>
-          Dar permiso
-        </Boton>
-        <Boton variante="ghost" onPress={onCerrar} style={{ marginTop: espaciado.xs }}>
-          Cancelar
-        </Boton>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.camaraContenedor}>
-      <CameraView
-        style={{ flex: 1 }}
-        facing="back"
-        barcodeScannerSettings={CONFIGURACION_ESCANER}
-        onBarcodeScanned={manejarEscaneo}
-      />
-      <View style={styles.camaraOverlay}>
-        <View style={styles.camaraMarco} />
-      </View>
-      {confirmacion && (
-        <View style={styles.confirmacionFlash}>
-          <Ionicons name="checkmark-circle" size={18} color="#fff" />
-          <Text style={styles.confirmacionFlashTexto} numberOfLines={1}>
-            {confirmacion}
-          </Text>
-        </View>
-      )}
-      <Boton variante="secondary" onPress={onCerrar} style={styles.camaraCerrar}>
-        Cerrar cámara
-      </Boton>
-    </View>
-  );
 }
 
 // --- Alta rápida de producto no encontrado durante la venta ---
@@ -374,20 +291,29 @@ export function VentaScreen() {
 
   const encabezadoYEntrada = (
     <View>
-      <EncabezadoPantalla
-        eyebrow="CAJA"
+      <Banda
+        eyebrow="Caja"
         titulo="Vender"
+        valor={formatearCentavos(totalCentavos)}
+        detalle={
+          carrito.length === 0
+            ? 'Escaneá un producto para empezar el ticket.'
+            : `Total a cobrar · ${carrito.reduce((acc, i) => acc + i.cantidad, 0)} unidad${
+                carrito.reduce((acc, i) => acc + i.cantidad, 0) === 1 ? '' : 'es'
+              }`
+        }
         accion={
           <Pressable
             onPress={() => navigation.navigate('VentasHoy')}
             style={styles.botonVentasHoy}
             hitSlop={8}
           >
-            <Ionicons name="receipt-outline" size={18} color={colores.tinta} />
-            <Text style={styles.botonVentasHoyTexto}>Ventas de hoy</Text>
+            <Ionicons name="receipt-outline" size={18} color={colores.papel} />
+            <Text style={styles.botonVentasHoyTexto}>Hoy</Text>
           </Pressable>
         }
       />
+      <LabioHoja />
 
       {camaraActiva ? (
         <EscanerCamara
@@ -397,21 +323,37 @@ export function VentaScreen() {
         />
       ) : (
         <View style={{ paddingHorizontal: espaciado.lg }}>
-          <Etiqueta>Código de barras</Etiqueta>
+          <Pressable onPress={() => setCamaraActiva(true)} style={styles.escanear}>
+            <Ionicons name="barcode-outline" size={24} color={colores.papel} />
+            <Text style={styles.escanearTexto}>Escanear producto</Text>
+          </Pressable>
+
+          <View style={styles.separadorO}>
+            <View style={styles.separadorLinea} />
+            <Text style={styles.separadorTexto}>o tipeá el código</Text>
+            <View style={styles.separadorLinea} />
+          </View>
+
           <View style={{ flexDirection: 'row', gap: espaciado.sm }}>
             <TextInput
               value={codigoInput}
               onChangeText={setCodigoInput}
               onSubmitEditing={() => buscarYAgregar(codigoInput)}
-              style={[estilosCampo.input, { flex: 1 }]}
-              placeholder="Tipeá el código"
+              style={[estilosCampo.input, { flex: 1, marginBottom: 0 }]}
+              placeholder="7861001234567"
               keyboardType="number-pad"
+              returnKeyType="search"
             />
-            <Boton onPress={() => buscarYAgregar(codigoInput)} style={{ paddingHorizontal: espaciado.lg }}>
-              +
+            <Boton
+              variante="secondary"
+              onPress={() => buscarYAgregar(codigoInput)}
+              disabled={!codigoInput.trim()}
+              style={{ paddingHorizontal: espaciado.lg }}
+            >
+              Agregar
             </Boton>
           </View>
-          {errorBusqueda && <Text style={styles.error}>{errorBusqueda}</Text>}
+          {errorBusqueda && <Text style={[styles.error, { marginTop: espaciado.sm }]}>{errorBusqueda}</Text>}
 
           {codigoNoEncontrado && (
             <FormularioProductoNuevo
@@ -420,10 +362,6 @@ export function VentaScreen() {
               onCancelar={() => setCodigoNoEncontrado(null)}
             />
           )}
-
-          <Boton variante="secondary" onPress={() => setCamaraActiva(true)} style={{ marginBottom: espaciado.md }}>
-            Escanear con la cámara
-          </Boton>
         </View>
       )}
     </View>
@@ -432,11 +370,6 @@ export function VentaScreen() {
   const piePagina =
     carrito.length === 0 ? null : (
       <View style={styles.footer}>
-        <View style={styles.footerFila}>
-          <Text style={styles.footerTotalLabel}>Total</Text>
-          <Text style={styles.footerTotalValor}>{formatearCentavos(totalCentavos)}</Text>
-        </View>
-
         <Etiqueta>Monto recibido</Etiqueta>
         <TextInput
           value={montoRecibido}
@@ -445,9 +378,35 @@ export function VentaScreen() {
           style={estilosCampo.input}
           placeholder="0.00"
         />
+        {/* Cobro rápido: la mayoría de las ventas se pagan con el monto
+            exacto o con un billete, sin tener que tipear. */}
+        <View style={styles.montosRapidos}>
+          {[totalCentavos, ...montosRapidos(totalCentavos)].map((centavos, i) => {
+            const activo = montoRecibidoCentavos === centavos;
+            return (
+              <Pressable
+                key={centavos}
+                onPress={() => setMontoRecibido(centavosATexto(centavos))}
+                style={[styles.montoRapido, activo && styles.montoRapidoActivo]}
+              >
+                <Text style={[styles.montoRapidoTexto, activo && styles.montoRapidoTextoActivo]}>
+                  {i === 0 ? 'Exacto' : formatearCentavos(centavos)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
 
         {vueltoCentavos !== null && (
-          <View style={styles.footerFila}>
+          <View
+            style={[
+              styles.vueltoCaja,
+              {
+                backgroundColor:
+                  vueltoCentavos >= 0 ? 'rgba(217,140,43,0.12)' : 'rgba(182,70,47,0.1)',
+              },
+            ]}
+          >
             <Text style={styles.footerVueltoLabel}>{vueltoCentavos >= 0 ? 'Vuelto' : 'Falta'}</Text>
             <Text
               style={[
@@ -471,6 +430,28 @@ export function VentaScreen() {
         >
           Confirmar venta
         </Boton>
+
+        <Pressable
+          onPress={() =>
+            Alert.alert('Vaciar carrito', 'Se quitan todos los productos de esta venta.', [
+              { text: 'Cancelar', style: 'cancel' },
+              {
+                text: 'Vaciar',
+                style: 'destructive',
+                onPress: () => {
+                  setCarrito([]);
+                  setMontoRecibido('');
+                  setErrorVenta(null);
+                },
+              },
+            ])
+          }
+          disabled={procesando}
+          hitSlop={8}
+          style={{ alignSelf: 'center', marginTop: espaciado.md }}
+        >
+          <Text style={styles.vaciarTexto}>Vaciar carrito</Text>
+        </Pressable>
       </View>
     );
 
@@ -506,14 +487,33 @@ export function VentaScreen() {
           }
           renderItem={({ item }) => (
             <View style={[styles.itemCarrito, { marginHorizontal: espaciado.lg }]}>
-              <Text style={{ flex: 1, color: colores.tinta, fontSize: 14 }}>{item.producto.nombre}</Text>
-              <Boton variante="ghost" onPress={() => cambiarCantidad(item.producto.id, -1)} style={styles.botonCantidad}>
-                −
-              </Boton>
-              <Text style={styles.cantidadTexto}>{item.cantidad}</Text>
-              <Boton variante="ghost" onPress={() => cambiarCantidad(item.producto.id, 1)} style={styles.botonCantidad}>
-                +
-              </Boton>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.itemNombre} numberOfLines={1}>
+                  {item.producto.nombre}
+                </Text>
+                <Text style={styles.itemPrecioUnitario}>
+                  {formatearCentavos(item.producto.precioVentaCentavos)} c/u
+                </Text>
+              </View>
+              <View style={styles.contadorCantidad}>
+                <Pressable
+                  onPress={() => cambiarCantidad(item.producto.id, -1)}
+                  style={styles.botonCantidad}
+                  hitSlop={6}
+                  accessibilityLabel={`Quitar una unidad de ${item.producto.nombre}`}
+                >
+                  <Ionicons name="remove" size={18} color={colores.tinta} />
+                </Pressable>
+                <Text style={styles.cantidadTexto}>{item.cantidad}</Text>
+                <Pressable
+                  onPress={() => cambiarCantidad(item.producto.id, 1)}
+                  style={styles.botonCantidad}
+                  hitSlop={6}
+                  accessibilityLabel={`Agregar una unidad de ${item.producto.nombre}`}
+                >
+                  <Ionicons name="add" size={18} color={colores.tinta} />
+                </Pressable>
+              </View>
               <Text style={styles.subtotalTexto}>
                 {formatearCentavos(item.producto.precioVentaCentavos * item.cantidad)}
               </Text>
@@ -526,30 +526,85 @@ export function VentaScreen() {
 }
 
 const styles = StyleSheet.create({
+  montosRapidos: { flexDirection: 'row', flexWrap: 'wrap', gap: espaciado.xs, marginBottom: espaciado.sm },
+  montoRapido: {
+    paddingHorizontal: espaciado.md,
+    paddingVertical: espaciado.sm,
+    borderRadius: radios.full,
+    borderWidth: 1,
+    borderColor: colores.papelLinea,
+    backgroundColor: colores.blanco,
+  },
+  montoRapidoActivo: { backgroundColor: colores.tinta, borderColor: colores.tinta },
+  montoRapidoTexto: { fontSize: 13, fontWeight: '700', color: colores.tinta, fontVariant: ['tabular-nums'] },
+  montoRapidoTextoActivo: { color: colores.papel },
+  vaciarTexto: { fontSize: 13, color: colores.tintaSuave, fontWeight: '600', textDecorationLine: 'underline' },
   botonVentasHoy: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: espaciado.xs,
-    paddingHorizontal: espaciado.sm,
+    paddingHorizontal: espaciado.md,
     paddingVertical: espaciado.xs,
+    borderRadius: radios.full,
+    borderWidth: 1,
+    borderColor: 'rgba(246,243,236,0.35)',
+  },
+  botonVentasHoyTexto: { fontSize: 12, fontWeight: '700', color: colores.papel },
+  contenedor: { flex: 1, backgroundColor: colores.papel },
+  error: { color: colores.rojoPerdida, fontSize: 13, marginVertical: espaciado.xs },
+  escanear: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: espaciado.sm,
+    minHeight: 56,
+    borderRadius: radios.lg,
+    backgroundColor: colores.tinta,
+  },
+  escanearTexto: { fontSize: 16, fontWeight: '700', color: colores.papel },
+  separadorO: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: espaciado.sm,
+    marginVertical: espaciado.md,
+  },
+  separadorLinea: { flex: 1, height: 1, backgroundColor: colores.papelLinea },
+  separadorTexto: { fontSize: 12, color: colores.tintaSuave },
+  itemCarrito: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: espaciado.sm,
+    paddingVertical: espaciado.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colores.papelLinea,
+  },
+  itemNombre: { fontSize: 14, color: colores.tinta, fontWeight: '600' },
+  itemPrecioUnitario: { fontSize: 12, color: colores.tintaSuave, marginTop: 2, fontVariant: ['tabular-nums'] },
+  contadorCantidad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: espaciado.xs,
+    padding: 2,
     borderRadius: radios.full,
     borderWidth: 1,
     borderColor: colores.papelLinea,
     backgroundColor: colores.superficie,
   },
-  botonVentasHoyTexto: { fontSize: 12, fontWeight: '600', color: colores.tinta },
-  contenedor: { flex: 1, backgroundColor: colores.papel },
-  error: { color: colores.rojoPerdida, fontSize: 13, marginVertical: espaciado.xs },
-  itemCarrito: {
-    flexDirection: 'row',
+  botonCantidad: {
+    width: 32,
+    height: 32,
     alignItems: 'center',
-    gap: espaciado.xs,
-    paddingVertical: espaciado.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colores.papelLinea,
+    justifyContent: 'center',
+    borderRadius: radios.full,
   },
-  botonCantidad: { minHeight: 28, paddingVertical: 0, paddingHorizontal: espaciado.sm },
-  cantidadTexto: { width: 20, textAlign: 'center', color: colores.tinta, fontVariant: ['tabular-nums'] },
+  cantidadTexto: {
+    width: 22,
+    textAlign: 'center',
+    fontSize: 15,
+    fontWeight: '700',
+    color: colores.tinta,
+    fontVariant: ['tabular-nums'],
+  },
   subtotalTexto: {
     width: 70,
     textAlign: 'right',
@@ -565,45 +620,23 @@ const styles = StyleSheet.create({
   },
   footerFila: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: espaciado.sm },
   footerTotalLabel: { fontSize: 15, fontWeight: '600', color: colores.tinta },
-  footerTotalValor: { fontSize: 20, fontWeight: '700', color: colores.tinta },
-  footerVueltoLabel: { fontSize: 14, color: colores.tintaSuave },
-  footerVueltoValor: { fontSize: 17, fontWeight: '700' },
-  camaraContenedor: { height: 320, marginHorizontal: espaciado.lg, borderRadius: radios.lg, overflow: 'hidden' },
-  camaraOverlay: {
-    ...StyleSheet.absoluteFill,
-    alignItems: 'center',
-    justifyContent: 'center',
+  footerTotalValor: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: colores.tinta,
+    fontVariant: ['tabular-nums'],
   },
-  camaraMarco: {
-    width: '75%',
-    height: 100,
-    borderWidth: 2,
-    borderColor: colores.papel,
-    borderRadius: radios.md,
-  },
-  camaraCerrar: { position: 'absolute', bottom: espaciado.md, alignSelf: 'center' },
-  confirmacionFlash: {
-    position: 'absolute',
-    top: espaciado.sm,
-    left: espaciado.sm,
-    right: espaciado.sm,
+  vueltoCaja: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: espaciado.xs,
-    backgroundColor: 'rgba(47,111,79,0.92)',
-    borderRadius: radios.md,
-    paddingVertical: espaciado.sm,
+    justifyContent: 'space-between',
     paddingHorizontal: espaciado.md,
+    paddingVertical: espaciado.sm,
+    borderRadius: radios.md,
+    marginBottom: espaciado.sm,
   },
-  confirmacionFlashTexto: { color: '#fff', fontSize: 13, fontWeight: '700', flexShrink: 1 },
-  camaraPermisoContenedor: {
-    margin: espaciado.lg,
-    padding: espaciado.lg,
-    backgroundColor: colores.superficie,
-    borderRadius: radios.lg,
-    alignItems: 'center',
-  },
-  camaraPermisoTexto: { color: colores.tintaSuave, fontSize: 13, textAlign: 'center' },
+  footerVueltoLabel: { fontSize: 14, fontWeight: '600', color: colores.tinta },
+  footerVueltoValor: { fontSize: 20, fontWeight: '800', fontVariant: ['tabular-nums'] },
   formularioNuevo: {
     marginTop: espaciado.sm,
     marginBottom: espaciado.md,
