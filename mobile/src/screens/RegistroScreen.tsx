@@ -4,7 +4,14 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../lib/auth-context';
 import { ApiError } from '../lib/api';
 import { AuthFrame } from '../components/auth-frame';
-import { Boton, Etiqueta, estilosCampo } from '../components/ui';
+import { AvisoDeCampo, Boton, Etiqueta, estilosCampo } from '../components/ui';
+import { useCamposTocados } from '../lib/use-campos-tocados';
+import {
+  ayudaDeLaContrasena,
+  problemaDeLaContrasena,
+  problemaDelEmail,
+  problemaDelNombre,
+} from '../lib/validacion';
 import { colores, espaciado } from '../theme/colores';
 import type { AuthStackParamList } from '../navigation/AuthNavigator';
 
@@ -18,8 +25,28 @@ export function RegistroScreen({ navigation }: Props) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
+  const { salir, tocarTodos, error: errorDe } = useCamposTocados<
+    'tienda' | 'admin' | 'email' | 'password'
+  >();
+  const problemas = {
+    tienda: problemaDelNombre(nombreTienda),
+    admin: problemaDelNombre(nombreAdmin),
+    email: problemaDelEmail(email),
+    password: problemaDeLaContrasena(password),
+  };
+  const errores = {
+    tienda: errorDe('tienda', nombreTienda, problemas.tienda),
+    admin: errorDe('admin', nombreAdmin, problemas.admin),
+    email: errorDe('email', email, problemas.email),
+    password: errorDe('password', password, problemas.password),
+  };
 
   async function manejarSubmit() {
+    const falta = [nombreTienda, nombreAdmin, email, password].some((v) => !v.trim());
+    if (falta || Object.values(problemas).some(Boolean)) {
+      tocarTodos(['tienda', 'admin', 'email', 'password']);
+      return;
+    }
     setError(null);
     setCargando(true);
     try {
@@ -53,49 +80,57 @@ export function RegistroScreen({ navigation }: Props) {
         <TextInput
           value={nombreTienda}
           onChangeText={setNombreTienda}
-          style={estilosCampo.input}
+          onBlur={salir('tienda')}
+          style={[estilosCampo.input, errores.tienda && estilosCampo.inputInvalido]}
           placeholder="Mi Tienda"
           placeholderTextColor={colores.tintaSuave}
           autoComplete="organization"
           returnKeyType="next"
         />
+        <AvisoDeCampo error={errores.tienda} />
 
         <Etiqueta>Tu nombre</Etiqueta>
         <TextInput
           value={nombreAdmin}
           onChangeText={setNombreAdmin}
-          style={estilosCampo.input}
+          onBlur={salir('admin')}
+          style={[estilosCampo.input, errores.admin && estilosCampo.inputInvalido]}
           placeholder="Tu nombre"
           placeholderTextColor={colores.tintaSuave}
           autoComplete="name"
           returnKeyType="next"
         />
+        <AvisoDeCampo error={errores.admin} />
 
         <Etiqueta>Correo</Etiqueta>
         <TextInput
           value={email}
           onChangeText={setEmail}
+          onBlur={salir('email')}
           autoCapitalize="none"
           keyboardType="email-address"
-          style={estilosCampo.input}
+          style={[estilosCampo.input, errores.email && estilosCampo.inputInvalido]}
           placeholder="admin@tutienda.com"
           placeholderTextColor={colores.tintaSuave}
           autoComplete="email"
           returnKeyType="next"
         />
+        <AvisoDeCampo error={errores.email} />
 
         <Etiqueta>Contraseña</Etiqueta>
         <TextInput
           value={password}
           onChangeText={setPassword}
+          onBlur={salir('password')}
           secureTextEntry
-          style={estilosCampo.input}
+          style={[estilosCampo.input, errores.password && estilosCampo.inputInvalido]}
           placeholder="Mínimo 6 caracteres"
           placeholderTextColor={colores.tintaSuave}
           autoComplete="new-password"
           returnKeyType="go"
           onSubmitEditing={manejarSubmit}
         />
+        <AvisoDeCampo error={errores.password} ayuda={ayudaDeLaContrasena(password)} />
 
         {error && (
           <View style={styles.error}>

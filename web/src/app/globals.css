@@ -276,6 +276,16 @@ select:focus-visible {
   outline: none;
 }
 
+/* Advertencia bajo un campo: el ámbar de la marca es muy claro para
+   texto chico sobre el papel; este llega a 5:1. */
+.aviso-advertencia {
+  color: #93550a;
+}
+
+.field[aria-invalid='true'] {
+  border-color: var(--rojo-perdida);
+}
+
 .field-label {
   display: block;
   margin-bottom: 0.45rem;
@@ -683,6 +693,30 @@ select:focus-visible {
   }
 }
 
+/* Quien apagó la transparencia en su sistema (Windows: "Efectos de
+   transparencia"; iPhone y Mac: "Reducir transparencia") o pidió más
+   contraste recibe superficies sólidas en vez de vidrio esmerilado: el
+   texto no queda sobre lo que se desplaza por debajo. */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .vidrio {
+    background-color: var(--papel);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .vidrio-oscuro {
+    background: #14222f;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .vidrio {
+    border-color: var(--tinta);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -919,6 +953,13 @@ select:focus-visible {
 .chip-periodo:hover {
   border-color: rgba(246, 243, 236, 0.5);
   color: var(--papel);
+}
+
+.chip-periodo:active:not([aria-pressed='true']) {
+  /* Al apretar, sin esperar a soltar ni a la transición. */
+  border-color: rgba(246, 243, 236, 0.6);
+  background: rgba(255, 255, 255, 0.16);
+  transition: none;
 }
 
 .chip-periodo[aria-pressed='true'] {

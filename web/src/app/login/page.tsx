@@ -4,9 +4,10 @@ import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useSignIn } from '@clerk/nextjs/legacy';
 import { AuthShell } from '@/components/auth-shell';
-import { Button, ErrorState } from '@/components/ui';
+import { AvisoDeCampo, Button, ErrorState } from '@/components/ui';
 import { useAuth } from '@/lib/auth-context';
 import { ApiError } from '@/lib/api';
+import { problemaDelEmail } from '@/lib/validacion';
 
 export default function LoginPage() {
   const { iniciarSesion } = useAuth();
@@ -16,9 +17,15 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [conGoogle, setConGoogle] = useState(false);
+  const [salioDelEmail, setSalioDelEmail] = useState(false);
+  const problemaEmail = problemaDelEmail(email);
 
   async function manejarSubmit(evento: FormEvent) {
     evento.preventDefault();
+    if (problemaEmail) {
+      setSalioDelEmail(true);
+      return;
+    }
     setError(null);
     setEnviando(true);
     try {
@@ -79,9 +86,13 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(evento) => setEmail(evento.target.value)}
+              onBlur={() => setSalioDelEmail(true)}
+              aria-invalid={salioDelEmail && !!problemaEmail}
+              aria-describedby="email-aviso"
               className="field"
               placeholder="admin@tutienda.com"
             />
+            <AvisoDeCampo id="email-aviso" error={salioDelEmail ? problemaEmail : null} />
           </div>
           <div>
             <label className="field-label" htmlFor="password">

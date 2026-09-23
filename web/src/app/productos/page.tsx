@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
-import { Button, EmptyState, ErrorState, LoadingState } from '@/components/ui';
+import { AvisoDeCampo, Button, EmptyState, ErrorState, LoadingState } from '@/components/ui';
 import { Banda, Hoja } from '@/components/banda';
 import { BoxIcon, PlusIcon } from '@/components/icons';
 import { useAuth } from '@/lib/auth-context';
@@ -20,6 +20,7 @@ import { formatearCentavos, formatearFechaCorta } from '@/lib/formato';
 import Link from 'next/link';
 import { resumenDeLotes, tieneVariosLotes } from '@/lib/lotes';
 import { usePantallaChica } from '@/lib/use-pantalla-chica';
+import { aCentavos, avisoDelMargen, avisoDelVencimiento } from '@/lib/validacion';
 import {
   estaPorVencer,
   filtrarProductos,
@@ -47,6 +48,8 @@ function FormularioNuevoProducto({
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const sinStockInicial = !(parseInt(stockInicial, 10) > 0);
+  const avisoMargen = avisoDelMargen(aCentavos(precioVenta), aCentavos(costoUnitario));
+  const avisoFecha = sinStockInicial ? null : avisoDelVencimiento(fechaVencimiento);
 
   async function manejarSubmit(e: FormEvent) {
     e.preventDefault();
@@ -137,6 +140,11 @@ function FormularioNuevoProducto({
             placeholder="0.90"
           />
         </div>
+        {avisoMargen && (
+          <p className="aviso-advertencia col-span-2 -mt-2 text-xs" aria-live="polite">
+            {avisoMargen}
+          </p>
+        )}
         <div className="col-span-2">
           <label className="field-label" htmlFor="producto-stock">
             Stock inicial
@@ -179,9 +187,11 @@ function FormularioNuevoProducto({
             aria-describedby="producto-vencimiento-ayuda"
             className="field font-ticket disabled:opacity-50"
           />
-          <p id="producto-vencimiento-ayuda" className="mt-1 text-xs text-tinta-suave">
-            {sinStockInicial ? 'Primero cargá el stock inicial.' : 'La del stock inicial.'}
-          </p>
+          <AvisoDeCampo
+            id="producto-vencimiento-ayuda"
+            advertencia={avisoFecha}
+            ayuda={sinStockInicial ? 'Primero cargá el stock inicial.' : 'La del stock inicial.'}
+          />
         </div>
         <div className="col-span-2">
           <label className="flex items-center gap-2 text-sm text-tinta">
@@ -234,6 +244,7 @@ function FormularioEditarProducto({
   const [confirmandoBaja, setConfirmandoBaja] = useState(false);
   const variosLotes = tieneVariosLotes(producto);
   const cambioLaFecha = !variosLotes && fechaVencimiento !== (producto.fechaVencimiento ?? '');
+  const avisoMargen = avisoDelMargen(aCentavos(precioVenta), producto.costoUnitarioCentavos);
 
   async function darDeBaja() {
     if (!token) return;
@@ -292,7 +303,17 @@ function FormularioEditarProducto({
             min="0"
             value={precioVenta}
             onChange={(e) => setPrecioVenta(e.target.value)}
+            aria-describedby={`editar-precio-${producto.id}-aviso`}
             className="field font-ticket"
+          />
+          <AvisoDeCampo
+            id={`editar-precio-${producto.id}-aviso`}
+            advertencia={avisoMargen}
+            ayuda={
+              producto.costoUnitarioCentavos > 0
+                ? `Costo: ${formatearCentavos(producto.costoUnitarioCentavos)}`
+                : null
+            }
           />
         </div>
         <div>
@@ -331,9 +352,14 @@ function FormularioEditarProducto({
                 type="date"
                 value={fechaVencimiento}
                 onChange={(e) => setFechaVencimiento(e.target.value)}
+                aria-describedby={`editar-vencimiento-${producto.id}-aviso`}
                 className="field font-ticket"
               />
-              <p className="mt-1 text-xs text-tinta-suave">Dejá vacío para quitar la fecha.</p>
+              <AvisoDeCampo
+                id={`editar-vencimiento-${producto.id}-aviso`}
+                advertencia={cambioLaFecha ? avisoDelVencimiento(fechaVencimiento) : null}
+                ayuda="Dejá vacío para quitar la fecha."
+              />
             </>
           )}
         </div>
@@ -784,8 +810,16 @@ function BarraBusqueda({
 }) {
   const opciones: { id: FiltroProductos; texto: string; cantidad?: number }[] = [
     { id: 'todos', texto: 'Todos' },
-    { id: 'stock_bajo', texto: 'Stock bajo', cantidad: productos.filter(tieneStockBajo).length },
-    { id: 'por_vencer', texto: 'Por vencer', cantidad: productos.filter(estaPorVencer).length },
+    {
+      id: 'stock_bajo',
+      texto: 'Stock bajo',
+      cantidad: productos.filter(tieneStockBajo).length,
+    },
+    {
+      id: 'por_vencer',
+      texto: 'Por vencer',
+      cantidad: productos.filter(estaPorVencer).length,
+    },
   ];
   return (
     <div className="flex flex-col gap-3 md:flex-row md:items-center">

@@ -20,7 +20,9 @@ import {
   formatearFechaCorta,
 } from '../lib/formato';
 import { resumenDeLotes, tieneVariosLotes } from '../lib/lotes';
+import { aCentavos, avisoDelMargen, avisoDelVencimiento } from '../lib/validacion';
 import {
+  AvisoDeCampo,
   Boton,
   EstadoCargando,
   EstadoError,
@@ -212,6 +214,7 @@ function FormularioNuevoProducto({
   // La fecha es del stock inicial: sin unidades no hay qué venza.
   const sinStockInicial = !(parseInt(stockInicial, 10) > 0);
   const fechaValida = sinStockInicial || !fechaVencimiento || esFechaValida(fechaVencimiento);
+  const avisoMargen = avisoDelMargen(aCentavos(precioVenta), aCentavos(costoUnitario));
 
   async function manejarSubmit() {
     if (!token || !fechaValida) return;
@@ -275,6 +278,7 @@ function FormularioNuevoProducto({
         style={estilosCampo.input}
         placeholder="0.90"
       />
+      <AvisoDeCampo advertencia={avisoMargen} />
       <Etiqueta>Stock inicial (opcional)</Etiqueta>
       <TextInput
         value={stockInicial}
@@ -301,9 +305,12 @@ function FormularioNuevoProducto({
         keyboardType="number-pad"
         maxLength={10}
       />
-      {!fechaValida && fechaVencimiento.length === 10 && (
-        <Text style={styles.error}>Esa fecha no existe.</Text>
-      )}
+      <AvisoDeCampo
+        error={!fechaValida && fechaVencimiento.length === 10 ? 'Esa fecha no existe.' : null}
+        advertencia={
+          sinStockInicial || !fechaValida ? null : avisoDelVencimiento(fechaVencimiento)
+        }
+      />
 
       {error && <Text style={styles.error}>{error}</Text>}
 
@@ -346,6 +353,7 @@ function FormularioEditarProducto({
   const variosLotes = tieneVariosLotes(producto);
   const cambioLaFecha = !variosLotes && fechaVencimiento !== (producto.fechaVencimiento ?? '');
   const fechaValida = !cambioLaFecha || !fechaVencimiento || esFechaValida(fechaVencimiento);
+  const avisoMargen = avisoDelMargen(aCentavos(precioVenta), producto.costoUnitarioCentavos);
 
   async function darDeBaja() {
     if (!token) return;
@@ -403,6 +411,14 @@ function FormularioEditarProducto({
         keyboardType="decimal-pad"
         style={estilosCampo.input}
       />
+      <AvisoDeCampo
+        advertencia={avisoMargen}
+        ayuda={
+          producto.costoUnitarioCentavos > 0
+            ? `Costo: ${formatearCentavos(producto.costoUnitarioCentavos)}`
+            : null
+        }
+      />
       <Etiqueta>Stock mínimo</Etiqueta>
       <TextInput
         value={stockMinimo}
@@ -425,9 +441,10 @@ function FormularioEditarProducto({
           maxLength={10}
         />
       )}
-      {!fechaValida && fechaVencimiento.length === 10 && (
-        <Text style={styles.error}>Esa fecha no existe.</Text>
-      )}
+      <AvisoDeCampo
+        error={!fechaValida && fechaVencimiento.length === 10 ? 'Esa fecha no existe.' : null}
+        advertencia={cambioLaFecha && fechaValida ? avisoDelVencimiento(fechaVencimiento) : null}
+      />
 
       {error && <Text style={styles.error}>{error}</Text>}
 

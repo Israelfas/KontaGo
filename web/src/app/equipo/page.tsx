@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
-import { Button, ErrorState, LoadingState } from '@/components/ui';
+import { AvisoDeCampo, Button, ErrorState, LoadingState } from '@/components/ui';
 import { Banda, Hoja } from '@/components/banda';
 import { PlusIcon } from '@/components/icons';
 import { useAuth } from '@/lib/auth-context';
@@ -17,6 +17,13 @@ import {
 } from '@/lib/api';
 import type { UsuarioEquipo } from '@/lib/tipos';
 import { usePantallaChica } from '@/lib/use-pantalla-chica';
+import { useCamposTocados } from '@/lib/use-campos-tocados';
+import {
+  ayudaDeLaContrasena,
+  problemaDeLaContrasena,
+  problemaDelEmail,
+  problemaDelNombre,
+} from '@/lib/validacion';
 
 const ETIQUETA_ROL: Record<UsuarioEquipo['rol'], string> = {
   admin: 'Admin',
@@ -43,10 +50,20 @@ function FormularioNuevaPersona({
   const [rol, setRol] = useState<UsuarioEquipo['rol']>('cajero');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const { tocado, salir, tocarTodos } = useCamposTocados<'nombre' | 'email' | 'password'>();
+  const problemas = {
+    nombre: problemaDelNombre(nombre),
+    email: problemaDelEmail(email),
+    password: problemaDeLaContrasena(password),
+  };
 
   async function manejarSubmit(e: FormEvent) {
     e.preventDefault();
     if (!token) return;
+    if (Object.values(problemas).some(Boolean)) {
+      tocarTodos(['nombre', 'email', 'password']);
+      return;
+    }
     setError(null);
     setEnviando(true);
     try {
@@ -72,8 +89,15 @@ function FormularioNuevaPersona({
             minLength={2}
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
+            onBlur={salir('nombre')}
+            aria-invalid={tocado('nombre') && !!problemas.nombre}
+            aria-describedby="persona-nombre-aviso"
             className="field"
             placeholder="Pedro Gómez"
+          />
+          <AvisoDeCampo
+            id="persona-nombre-aviso"
+            error={tocado('nombre') ? problemas.nombre : null}
           />
         </div>
         <div className="col-span-2 sm:col-span-1">
@@ -86,9 +110,13 @@ function FormularioNuevaPersona({
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            onBlur={salir('email')}
+            aria-invalid={tocado('email') && !!problemas.email}
+            aria-describedby="persona-email-aviso"
             className="field"
             placeholder="pedro@correo.com"
           />
+          <AvisoDeCampo id="persona-email-aviso" error={tocado('email') ? problemas.email : null} />
         </div>
         <div className="col-span-2 sm:col-span-1">
           <label className="field-label" htmlFor="persona-password">
@@ -102,12 +130,20 @@ function FormularioNuevaPersona({
             autoComplete="off"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onBlur={salir('password')}
+            aria-invalid={tocado('password') && !!problemas.password}
+            aria-describedby="persona-password-aviso"
             className="field font-ticket"
             placeholder="Mínimo 6 caracteres"
           />
-          <p className="mt-1 text-xs text-tinta-suave">
-            Pasásela a la persona; podés cambiarla después desde acá.
-          </p>
+          <AvisoDeCampo
+            id="persona-password-aviso"
+            error={tocado('password') ? problemas.password : null}
+            ayuda={
+              ayudaDeLaContrasena(password) ??
+              'Pasásela a la persona; podés cambiarla después desde acá.'
+            }
+          />
         </div>
         <div className="col-span-2 sm:col-span-1">
           <label className="field-label" htmlFor="persona-rol">
@@ -156,10 +192,16 @@ function FormularioCambiarPassword({
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [salio, setSalio] = useState(false);
+  const problema = problemaDeLaContrasena(password);
 
   async function manejarSubmit(e: FormEvent) {
     e.preventDefault();
     if (!token) return;
+    if (problema) {
+      setSalio(true);
+      return;
+    }
     setError(null);
     setEnviando(true);
     try {
@@ -183,9 +225,17 @@ function FormularioCambiarPassword({
         autoFocus
         value={password}
         onChange={(e) => setPassword(e.target.value)}
+        onBlur={() => setSalio(true)}
+        aria-invalid={salio && !!problema}
+        aria-describedby={`password-${persona.id}-aviso`}
         className="field mt-3 font-ticket"
         placeholder="Mínimo 6 caracteres"
         aria-label="Nueva contraseña"
+      />
+      <AvisoDeCampo
+        id={`password-${persona.id}-aviso`}
+        error={salio ? problema : null}
+        ayuda={ayudaDeLaContrasena(password)}
       />
       {error && (
         <p className="mt-3 rounded-lg bg-rojo-perdida/10 px-3 py-2 text-sm text-rojo-perdida">
@@ -291,7 +341,13 @@ function ContenidoEquipo() {
           {cargando && <LoadingState label="Cargando equipo…" />}
 
           {error && !cargando && (
-            <ErrorState action={<Button variant="secondary" onClick={cargar}>Reintentar</Button>}>
+            <ErrorState
+              action={
+                <Button variant="secondary" onClick={cargar}>
+                  Reintentar
+                </Button>
+              }
+            >
               {error}
             </ErrorState>
           )}

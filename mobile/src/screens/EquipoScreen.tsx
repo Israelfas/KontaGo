@@ -13,6 +13,7 @@ import {
   ApiError,
 } from '../lib/api';
 import {
+  AvisoDeCampo,
   Boton,
   EstadoCargando,
   EstadoError,
@@ -23,6 +24,14 @@ import {
 import { colores, espaciado, radios } from '../theme/colores';
 import type { UsuarioEquipo } from '../lib/tipos';
 import { Banda, LabioHoja } from '../components/banda';
+import { useCamposTocados } from '../lib/use-campos-tocados';
+import {
+  ayudaDeLaContrasena,
+  faltanALaContrasena,
+  problemaDeLaContrasena,
+  problemaDelEmail,
+  problemaDelNombre,
+} from '../lib/validacion';
 
 const ETIQUETA_ROL: Record<UsuarioEquipo['rol'], string> = {
   admin: 'Admin',
@@ -44,7 +53,19 @@ function FormularioNuevaPersona({
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
-  const valido = nombre.trim().length >= 2 && email.includes('@') && password.length >= 6;
+  // El botón queda gris hasta que esté todo; los avisos dicen qué falta.
+  const valido =
+    !!nombre.trim() &&
+    !!email.trim() &&
+    !problemaDelNombre(nombre) &&
+    !problemaDelEmail(email) &&
+    faltanALaContrasena(password) === 0;
+  const { salir, error: errorDe } = useCamposTocados<'nombre' | 'email' | 'password'>();
+  const errores = {
+    nombre: errorDe('nombre', nombre, problemaDelNombre(nombre)),
+    email: errorDe('email', email, problemaDelEmail(email)),
+    password: errorDe('password', password, problemaDeLaContrasena(password)),
+  };
 
   async function manejarSubmit() {
     if (!token || !valido) return;
@@ -73,28 +94,34 @@ function FormularioNuevaPersona({
       <TextInput
         value={nombre}
         onChangeText={setNombre}
-        style={estilosCampo.input}
+        onBlur={salir('nombre')}
+        style={[estilosCampo.input, errores.nombre && estilosCampo.inputInvalido]}
         placeholder="Pedro Gómez"
       />
+      <AvisoDeCampo error={errores.nombre} />
       <Etiqueta>Email (con este entra)</Etiqueta>
       <TextInput
         value={email}
         onChangeText={setEmail}
-        style={estilosCampo.input}
+        onBlur={salir('email')}
+        style={[estilosCampo.input, errores.email && estilosCampo.inputInvalido]}
         placeholder="pedro@correo.com"
         keyboardType="email-address"
         autoCapitalize="none"
         autoCorrect={false}
       />
+      <AvisoDeCampo error={errores.email} />
       <Etiqueta>Contraseña inicial (mínimo 6)</Etiqueta>
       <TextInput
         value={password}
         onChangeText={setPassword}
-        style={estilosCampo.input}
+        onBlur={salir('password')}
+        style={[estilosCampo.input, errores.password && estilosCampo.inputInvalido]}
         placeholder="Pasásela a la persona"
         autoCapitalize="none"
         autoCorrect={false}
       />
+      <AvisoDeCampo error={errores.password} ayuda={ayudaDeLaContrasena(password)} />
 
       <Etiqueta>Rol</Etiqueta>
       <View style={styles.selectorRol}>
@@ -194,6 +221,7 @@ function FilaPersona({
             autoCorrect={false}
             autoFocus
           />
+          <AvisoDeCampo ayuda={ayudaDeLaContrasena(password)} />
           {error && <Text style={styles.error}>{error}</Text>}
           <View style={{ flexDirection: 'row', gap: espaciado.sm }}>
             <Boton

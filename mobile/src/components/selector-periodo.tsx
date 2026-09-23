@@ -86,7 +86,11 @@ function Chip({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected: activo }}
-      style={({ pressed }) => [styles.chip, activo && styles.chipActivo, pressed && !activo && styles.chipPresionado]}
+      style={({ pressed }) => [
+        styles.chip,
+        activo && styles.chipActivo,
+        pressed && (activo ? styles.chipActivoPresionado : styles.chipPresionado),
+      ]}
     >
       {icono && (
         <Ionicons name={icono} size={14} color={activo ? colores.tinta : 'rgba(246,243,236,0.84)'} />
@@ -168,6 +172,7 @@ function CalendarioRango({
           <Pressable
             onPress={() => setMes(new Date(mes.getFullYear(), mes.getMonth() - 1, 1))}
             hitSlop={10}
+            style={({ pressed }) => [styles.flecha, pressed && styles.flechaPresionada]}
             accessibilityLabel="Mes anterior"
           >
             <Ionicons name="chevron-back" size={22} color={colores.tinta} />
@@ -177,6 +182,7 @@ function CalendarioRango({
             onPress={() => setMes(new Date(mes.getFullYear(), mes.getMonth() + 1, 1))}
             disabled={esMesActual}
             hitSlop={10}
+            style={({ pressed }) => [styles.flecha, pressed && styles.flechaPresionada]}
             accessibilityLabel="Mes siguiente"
             accessibilityState={{ disabled: esMesActual }}
           >
@@ -213,7 +219,8 @@ function CalendarioRango({
                 })}
                 accessibilityState={{ selected: extremo || dentro, disabled: futuro }}
               >
-                <View style={[styles.numero, extremo && styles.numeroExtremo]}>
+                {({ pressed }) => (
+                <View style={[styles.numero, extremo && styles.numeroExtremo, pressed && !extremo && styles.numeroPresionado]}>
                   <Text
                     style={[
                       styles.numeroTexto,
@@ -225,6 +232,7 @@ function CalendarioRango({
                     {aFecha(dia).getDate()}
                   </Text>
                 </View>
+                )}
               </Pressable>
             );
           })}
@@ -259,7 +267,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.05)',
   },
   chipActivo: { backgroundColor: colores.papel, borderColor: colores.papel },
-  chipPresionado: { backgroundColor: 'rgba(255,255,255,0.12)' },
+  chipPresionado: { backgroundColor: 'rgba(255,255,255,0.16)', borderColor: 'rgba(246,243,236,0.6)' },
+  chipActivoPresionado: { opacity: 0.85 },
   chipTexto: { color: 'rgba(246,243,236,0.84)', fontSize: 13, fontWeight: '700' },
   chipTextoActivo: { color: colores.tinta },
 
@@ -281,6 +290,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: espaciado.xs,
   },
+  flecha: { width: 36, height: 36, borderRadius: radios.full, alignItems: 'center', justifyContent: 'center' },
+  flechaPresionada: { backgroundColor: 'rgba(28,43,58,0.08)' },
   tituloMes: { fontSize: 15, fontWeight: '700', color: colores.tinta },
   grilla: { flexDirection: 'row', flexWrap: 'wrap' },
   celda: { width: `${100 / 7}%`, height: 42, alignItems: 'center', justifyContent: 'center' },
@@ -288,6 +299,7 @@ const styles = StyleSheet.create({
   diaSemana: { height: 28, fontSize: 12, fontWeight: '700', color: colores.tintaSuave, textAlign: 'center' },
   numero: { width: 36, height: 36, borderRadius: radios.full, alignItems: 'center', justifyContent: 'center' },
   numeroExtremo: { backgroundColor: colores.tinta },
+  numeroPresionado: { backgroundColor: 'rgba(28,43,58,0.12)' },
   numeroTexto: { fontSize: 14, color: colores.tinta, fontVariant: ['tabular-nums'] },
   numeroHoy: { fontWeight: '800', textDecorationLine: 'underline' },
   numeroTextoExtremo: { color: colores.papel, fontWeight: '700' },

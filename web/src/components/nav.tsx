@@ -126,7 +126,7 @@ export function Nav() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-papel-linea/80 bg-papel/90 backdrop-blur-xl">
+      <header className="vidrio sticky top-0 z-40 border-b border-papel-linea/80 bg-papel/90 backdrop-blur-xl">
         <div className="app-container">
           <div className="flex h-[72px] items-center justify-between gap-4">
             <Link href={rutaInicial(usuario?.rol)} aria-label="Ir al inicio de KontaGo">
@@ -184,7 +184,7 @@ export function Nav() {
           quedaban cortadas sin ninguna pista de que existían. */}
       <nav
         aria-label="Secciones"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-papel-linea bg-papel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden"
+        className="vidrio fixed inset-x-0 bottom-0 z-40 border-t border-papel-linea bg-papel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden"
       >
         <div
           className="grid"

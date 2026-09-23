@@ -26,7 +26,16 @@ import {
 import { formatearCentavos, numeroDeTicket } from '../lib/formato';
 import { compartirTicket } from '../lib/ticket-texto';
 import { centavosATexto, montosRapidos } from '../lib/montos-rapidos';
-import { Boton, EstadoCargando, EstadoError, EstadoVacio, Etiqueta, estilosCampo } from '../components/ui';
+import {
+  AvisoDeCampo,
+  Boton,
+  EstadoCargando,
+  EstadoError,
+  EstadoVacio,
+  Etiqueta,
+  estilosCampo,
+} from '../components/ui';
+import { aCentavos, avisoDelMargen } from '../lib/validacion';
 import { FormularioAbrirCaja } from '../components/caja';
 import { colores, espaciado, radios } from '../theme/colores';
 import type { MetodoPago, Producto, TurnoCaja, Venta } from '../lib/tipos';
@@ -56,6 +65,7 @@ function FormularioProductoNuevo({
   const [stockInicial, setStockInicial] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const avisoMargen = avisoDelMargen(aCentavos(precioVenta), aCentavos(costoUnitario));
 
   async function manejarSubmit() {
     if (!token) return;
@@ -109,6 +119,7 @@ function FormularioProductoNuevo({
         style={estilosCampo.input}
         placeholder="0.90"
       />
+      <AvisoDeCampo advertencia={avisoMargen} />
       <Etiqueta>Stock inicial (opcional)</Etiqueta>
       <TextInput
         value={stockInicial}

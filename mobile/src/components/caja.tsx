@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Boton, Etiqueta, Tarjeta, estilosCampo } from './ui';
+import { AvisoDeCampo, Boton, Etiqueta, Tarjeta, estilosCampo } from './ui';
 import { colores, espaciado, radios } from '../theme/colores';
 import { useAuth } from '../lib/auth-context';
 import { abrirCaja, cerrarCaja, registrarMovimientoCaja, ApiError } from '../lib/api';
 import { formatearCentavos } from '../lib/formato';
+import { aCentavos, problemaDelLargo } from '../lib/validacion';
 import {
   DENOMINACIONES,
   FONDOS_RAPIDOS,
@@ -18,12 +19,6 @@ import type { MovimientoCaja, TipoMovimientoCaja, TurnoCaja } from '../lib/tipos
 /**
  * Piezas de la caja para la app (misma lógica que web/src/components/caja.tsx).
  */
-
-function aCentavos(texto: string): number | null {
-  if (!texto.trim()) return null;
-  const valor = Math.round(parseFloat(texto.replace(',', '.')) * 100);
-  return Number.isFinite(valor) && valor >= 0 ? valor : null;
-}
 
 function Chip({ texto, activo, onPress }: { texto: string; activo: boolean; onPress: () => void }) {
   return (
@@ -143,6 +138,8 @@ export function FormularioMovimiento({
         maxLength={200}
         placeholder={tipo === 'retiro' ? 'Ej: pago al proveedor del pan' : 'Ej: monedas para cambio'}
       />
+      {/* El botón queda gris hasta que alcance: acá se dice por qué. */}
+      <AvisoDeCampo ayuda={problemaDelLargo(motivo, 3)} />
       {error && <Text style={styles.error}>{error}</Text>}
       <View style={styles.fila}>
         <Boton

@@ -98,13 +98,7 @@ export function LoadingState({ label = 'Cargando información…' }: { label?: s
   );
 }
 
-export function ErrorState({
-  children,
-  action,
-}: {
-  children: ReactNode;
-  action?: ReactNode;
-}) {
+export function ErrorState({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
     <div className="error-state" role="alert">
       <div>
@@ -154,5 +148,31 @@ export function SectionHeader({
       </div>
       {action}
     </div>
+  );
+}
+
+/**
+ * Lo que se dice bajo un campo mientras se escribe: `error` en rojo (así no
+ * se puede enviar), `advertencia` en ámbar (se puede, pero ojo) o `ayuda`
+ * neutra. Se anuncia sin interrumpir (aria-live polite), porque cambia con
+ * cada tecla.
+ */
+export function AvisoDeCampo({
+  id,
+  error,
+  advertencia,
+  ayuda,
+}: {
+  id: string;
+  error?: string | null;
+  advertencia?: string | null;
+  ayuda?: string | null;
+}) {
+  const texto = error || advertencia || ayuda;
+  const tono = error ? 'text-rojo-perdida' : advertencia ? 'aviso-advertencia' : 'text-tinta-suave';
+  return (
+    <p id={id} className={`mt-1 min-h-4 text-xs ${tono}`} aria-live="polite">
+      {texto}
+    </p>
   );
 }

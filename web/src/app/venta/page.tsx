@@ -28,6 +28,7 @@ import {
 import { formatearCentavos, numeroDeTicket } from '@/lib/formato';
 import { centavosATexto, montosRapidos } from '@/lib/montos-rapidos';
 import { usePantallaChica } from '@/lib/use-pantalla-chica';
+import { aCentavos, avisoDelMargen } from '@/lib/validacion';
 import type { MetodoPago, Producto, TurnoCaja, Venta } from '@/lib/tipos';
 
 interface ItemCarrito {
@@ -53,6 +54,7 @@ function FormularioProductoNuevo({
   const [stockInicial, setStockInicial] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const avisoMargen = avisoDelMargen(aCentavos(precioVenta), aCentavos(costoUnitario));
 
   async function manejarSubmit(e: FormEvent) {
     e.preventDefault();
@@ -132,6 +134,11 @@ function FormularioProductoNuevo({
             placeholder="0.90"
           />
         </div>
+        {avisoMargen && (
+          <p className="aviso-advertencia col-span-2 -mt-1 text-xs" aria-live="polite">
+            {avisoMargen}
+          </p>
+        )}
         <div className="col-span-2">
           <label className="field-label" htmlFor="np-stock">
             Stock inicial

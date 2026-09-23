@@ -3,9 +3,16 @@
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { AuthShell } from '@/components/auth-shell';
-import { Button, ErrorState } from '@/components/ui';
+import { AvisoDeCampo, Button, ErrorState } from '@/components/ui';
 import { useAuth } from '@/lib/auth-context';
 import { ApiError } from '@/lib/api';
+import { useCamposTocados } from '@/lib/use-campos-tocados';
+import {
+  ayudaDeLaContrasena,
+  problemaDeLaContrasena,
+  problemaDelEmail,
+  problemaDelNombre,
+} from '@/lib/validacion';
 
 export default function RegistroPage() {
   const { registrarse } = useAuth();
@@ -15,9 +22,23 @@ export default function RegistroPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const { tocado, salir, tocarTodos } = useCamposTocados<
+    'tienda' | 'admin' | 'email' | 'password'
+  >();
+
+  const problemas = {
+    tienda: problemaDelNombre(nombreTienda),
+    admin: problemaDelNombre(nombreAdmin),
+    email: problemaDelEmail(email),
+    password: problemaDeLaContrasena(password),
+  };
 
   async function manejarSubmit(evento: FormEvent) {
     evento.preventDefault();
+    if (Object.values(problemas).some(Boolean)) {
+      tocarTodos(['tienda', 'admin', 'email', 'password']);
+      return;
+    }
     setError(null);
     setEnviando(true);
     try {
@@ -57,8 +78,15 @@ export default function RegistroPage() {
               required
               value={nombreTienda}
               onChange={(evento) => setNombreTienda(evento.target.value)}
+              onBlur={salir('tienda')}
+              aria-invalid={tocado('tienda') && !!problemas.tienda}
+              aria-describedby="nombre-tienda-aviso"
               className="field"
               placeholder="Mini Market El Sol"
+            />
+            <AvisoDeCampo
+              id="nombre-tienda-aviso"
+              error={tocado('tienda') ? problemas.tienda : null}
             />
           </div>
           <div>
@@ -71,8 +99,15 @@ export default function RegistroPage() {
               required
               value={nombreAdmin}
               onChange={(evento) => setNombreAdmin(evento.target.value)}
+              onBlur={salir('admin')}
+              aria-invalid={tocado('admin') && !!problemas.admin}
+              aria-describedby="nombre-admin-aviso"
               className="field"
               placeholder="Juan Pérez"
+            />
+            <AvisoDeCampo
+              id="nombre-admin-aviso"
+              error={tocado('admin') ? problemas.admin : null}
             />
           </div>
           <div>
@@ -86,8 +121,15 @@ export default function RegistroPage() {
               required
               value={email}
               onChange={(evento) => setEmail(evento.target.value)}
+              onBlur={salir('email')}
+              aria-invalid={tocado('email') && !!problemas.email}
+              aria-describedby="registro-email-aviso"
               className="field"
               placeholder="admin@tutienda.com"
+            />
+            <AvisoDeCampo
+              id="registro-email-aviso"
+              error={tocado('email') ? problemas.email : null}
             />
           </div>
           <div>
@@ -102,8 +144,18 @@ export default function RegistroPage() {
               minLength={6}
               value={password}
               onChange={(evento) => setPassword(evento.target.value)}
+              onBlur={salir('password')}
+              aria-invalid={tocado('password') && !!problemas.password}
+              aria-describedby="registro-password-aviso"
               className="field"
               placeholder="Mínimo 6 caracteres"
+            />
+            {/* La cuenta regresiva va desde la primera tecla: no es un error,
+                es cuánto falta. En rojo recién si se sale sin completarla. */}
+            <AvisoDeCampo
+              id="registro-password-aviso"
+              error={tocado('password') ? problemas.password : null}
+              ayuda={ayudaDeLaContrasena(password)}
             />
           </div>
         </div>

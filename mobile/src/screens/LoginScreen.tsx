@@ -7,7 +7,8 @@ import { useSSO, useAuth as useClerkAuth } from '@clerk/expo';
 import { useAuth } from '../lib/auth-context';
 import { ApiError } from '../lib/api';
 import { AuthFrame } from '../components/auth-frame';
-import { Boton, Etiqueta, estilosCampo } from '../components/ui';
+import { AvisoDeCampo, Boton, Etiqueta, estilosCampo } from '../components/ui';
+import { problemaDelEmail } from '../lib/validacion';
 import { colores, espaciado } from '../theme/colores';
 import type { AuthStackParamList } from '../navigation/AuthNavigator';
 
@@ -24,8 +25,14 @@ export function LoginScreen({ navigation }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
   const [cargandoGoogle, setCargandoGoogle] = useState(false);
+  const [salioDelEmail, setSalioDelEmail] = useState(false);
+  const problemaEmail = salioDelEmail ? problemaDelEmail(email) : null;
 
   async function manejarSubmit() {
+    if (problemaDelEmail(email)) {
+      setSalioDelEmail(true);
+      return;
+    }
     setError(null);
     setCargando(true);
     try {
@@ -86,14 +93,16 @@ export function LoginScreen({ navigation }: Props) {
         <TextInput
           value={email}
           onChangeText={setEmail}
+          onBlur={() => setSalioDelEmail(true)}
           autoCapitalize="none"
           keyboardType="email-address"
-          style={estilosCampo.input}
+          style={[estilosCampo.input, problemaEmail && estilosCampo.inputInvalido]}
           placeholder="admin@tutienda.com"
           placeholderTextColor={colores.tintaSuave}
           autoComplete="email"
           returnKeyType="next"
         />
+        <AvisoDeCampo error={problemaEmail} />
 
         <Etiqueta>Contraseña</Etiqueta>
         <TextInput

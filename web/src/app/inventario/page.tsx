@@ -3,7 +3,14 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
-import { Button, EmptyState, ErrorState, LoadingState, SectionHeader } from '@/components/ui';
+import {
+  AvisoDeCampo,
+  Button,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  SectionHeader,
+} from '@/components/ui';
 import { Banda, Hoja } from '@/components/banda';
 import Link from 'next/link';
 import { AlertIcon, BoxIcon, MinusIcon, PlusIcon, ReceiptIcon } from '@/components/icons';
@@ -19,6 +26,7 @@ import {
   type FilaDeLote,
 } from '@/lib/api';
 import { formatearCentavos, formatearFechaCorta } from '@/lib/formato';
+import { aCentavos, avisoDelMargen, avisoDelVencimiento } from '@/lib/validacion';
 import {
   lotesPorVencer,
   lotesVencidos,
@@ -88,6 +96,9 @@ function FormularioAbastecimiento({
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const elegido = productos.find((p) => p.id === productoId);
+  const avisoCosto = elegido
+    ? avisoDelMargen(elegido.precioVentaCentavos, aCentavos(costoUnitario))
+    : null;
 
   async function manejarSubmit(e: FormEvent) {
     e.preventDefault();
@@ -176,6 +187,13 @@ function FormularioAbastecimiento({
               placeholder="Ej: 0.90"
             />
           </div>
+          {/* Contra el precio al que se vende hoy: un costo mayor casi
+              siempre es un precio mal tipeado (o hay que subir el de venta). */}
+          {avisoCosto && elegido && (
+            <p className="aviso-advertencia col-span-2 -mt-2 text-xs" aria-live="polite">
+              {`Hoy lo vendés a ${formatearCentavos(elegido.precioVentaCentavos)}. ${avisoCosto}`}
+            </p>
+          )}
         </div>
         <div>
           <label className="field-label" htmlFor="abastecimiento-proveedor">
@@ -198,8 +216,18 @@ function FormularioAbastecimiento({
             type="date"
             value={fechaVencimiento}
             onChange={(e) => setFechaVencimiento(e.target.value)}
+            aria-describedby="abastecimiento-vence-aviso"
             className="field font-ticket"
           />
+          {avisoDelVencimiento(fechaVencimiento) && (
+            <p
+              id="abastecimiento-vence-aviso"
+              className="aviso-advertencia mt-1 text-xs"
+              aria-live="polite"
+            >
+              {avisoDelVencimiento(fechaVencimiento)}
+            </p>
+          )}
           {/* Lo que ya hay en la góndola: si la mercadería nueva trae otra
               fecha, no se mezcla con esa. */}
           <p className="mt-1.5 text-xs text-tinta-suave">
@@ -247,8 +275,16 @@ function FormularioMerma({
   const [loteId, setLoteId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
-  const lotes = productos.find((p) => p.id === productoId)?.lotes ?? [];
+  const producto = productos.find((p) => p.id === productoId);
+  const lotes = producto?.lotes ?? [];
   const loteElegido = lotes.find((l) => l.id === loteId);
+  // No se puede dar de baja más de lo que hay (el backend lo rechaza).
+  const disponible = loteElegido?.cantidad ?? producto?.stock;
+  const pedida = parseInt(cantidad, 10);
+  const problemaCantidad =
+    disponible !== undefined && pedida > disponible
+      ? `Solo hay ${unidades(disponible)}${loteElegido ? ' en ese lote' : ''}.`
+      : null;
 
   async function manejarSubmit(e: FormEvent) {
     e.preventDefault();
@@ -333,12 +369,15 @@ function FormularioMerma({
               required
               type="number"
               min="1"
-              max={loteElegido?.cantidad}
+              max={disponible}
               value={cantidad}
               onChange={(e) => setCantidad(e.target.value)}
+              aria-invalid={!!problemaCantidad}
+              aria-describedby="merma-cantidad-aviso"
               className="field font-ticket"
               placeholder="Ej: 3"
             />
+            <AvisoDeCampo id="merma-cantidad-aviso" error={problemaCantidad} />
           </div>
           <div>
             <label className="field-label" htmlFor="merma-motivo">
@@ -370,7 +409,7 @@ function FormularioMerma({
       <Button
         type="submit"
         variant="danger"
-        disabled={enviando || !productoId}
+        disabled={enviando || !productoId || !!problemaCantidad}
         className="mt-5 w-full"
       >
         {enviando ? 'Registrando…' : 'Registrar merma'}
@@ -621,7 +660,11 @@ function EditorLotes({
       await corregirLotes(
         token,
         producto.id,
-        filas.map(({ id, fechaVencimiento, cantidad }) => ({ id, fechaVencimiento, cantidad })),
+        filas.map(({ id, fechaVencimiento, cantidad }) => ({
+          id,
+          fechaVencimiento,
+          cantidad,
+        })),
       );
       onGuardado();
     } catch (err) {
@@ -642,7 +685,11 @@ function EditorLotes({
               id={`lote-fecha-${fila.clave}`}
               type="date"
               value={fila.fechaVencimiento ?? ''}
-              onChange={(e) => cambiar(fila.clave, { fechaVencimiento: e.target.value || null })}
+              onChange={(e) =>
+                cambiar(fila.clave, {
+                  fechaVencimiento: e.target.value || null,
+                })
+              }
               className="field font-ticket !mb-0"
               aria-describedby={fila.fechaVencimiento ? undefined : `lote-sin-${fila.clave}`}
             />
@@ -683,7 +730,11 @@ function EditorLotes({
         onClick={() =>
           setFilas((prev) => [
             ...prev,
-            { clave: `nueva-${Date.now()}`, fechaVencimiento: null, cantidad: 0 },
+            {
+              clave: `nueva-${Date.now()}`,
+              fechaVencimiento: null,
+              cantidad: 0,
+            },
           ])
         }
         className="text-xs font-medium text-tinta underline"

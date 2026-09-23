@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { Button } from '@/components/ui';
+import { AvisoDeCampo, Button } from '@/components/ui';
 import { useAuth } from '@/lib/auth-context';
 import { abrirCaja, cerrarCaja, registrarMovimientoCaja, ApiError } from '@/lib/api';
 import { formatearCentavos } from '@/lib/formato';
+import { aCentavos, problemaDelLargo } from '@/lib/validacion';
 import {
   DENOMINACIONES,
   FONDOS_RAPIDOS,
@@ -14,12 +15,6 @@ import {
   totalDelConteo,
 } from '@/lib/caja';
 import type { MovimientoCaja, TipoMovimientoCaja, TurnoCaja } from '@/lib/tipos';
-
-function aCentavos(texto: string): number | null {
-  if (!texto.trim()) return null;
-  const valor = Math.round(parseFloat(texto.replace(',', '.')) * 100);
-  return Number.isFinite(valor) && valor >= 0 ? valor : null;
-}
 
 function MensajeError({ children }: { children: string }) {
   return (
@@ -121,6 +116,8 @@ export function FormularioMovimiento({
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const montoCentavos = aCentavos(monto);
+  // Mientras se escribe: el botón queda gris y acá se dice por qué.
+  const problemaMotivo = problemaDelLargo(motivo, 3);
 
   async function registrar(e: FormEvent) {
     e.preventDefault();
@@ -191,11 +188,13 @@ export function FormularioMovimiento({
             maxLength={200}
             value={motivo}
             onChange={(e) => setMotivo(e.target.value)}
+            aria-describedby="movimiento-motivo-aviso"
             className="field !mb-0"
             placeholder={
               tipo === 'retiro' ? 'Ej: pago al proveedor del pan' : 'Ej: monedas para cambio'
             }
           />
+          <AvisoDeCampo id="movimiento-motivo-aviso" ayuda={problemaMotivo} />
         </div>
       </div>
       {error && <MensajeError>{error}</MensajeError>}

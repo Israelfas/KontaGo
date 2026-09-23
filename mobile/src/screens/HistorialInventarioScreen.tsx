@@ -1,21 +1,10 @@
-import { useCallback, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect } from "@react-navigation/native";
-import { useAuth } from "../lib/auth-context";
-import {
-  listarMovimientosInventario,
-  obtenerResumenInventario,
-  ApiError,
-} from "../lib/api";
-import { formatearCentavos, formatearFechaCorta } from "../lib/formato";
+import { useCallback, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
+import { useAuth } from '../lib/auth-context';
+import { listarMovimientosInventario, obtenerResumenInventario, ApiError } from '../lib/api';
+import { formatearCentavos, formatearFechaCorta } from '../lib/formato';
 import {
   esHoy,
   fechaISO,
@@ -25,27 +14,27 @@ import {
   periodoDeHoy,
   rangoLegible,
   type Periodo,
-} from "../lib/periodo";
-import { SelectorPeriodo } from "../components/selector-periodo";
-import { Banda, LabioHoja, Mosaico, Pieza } from "../components/banda";
-import { EstadoCargando, EstadoError, EstadoVacio } from "../components/ui";
-import { colores, espaciado, radios } from "../theme/colores";
+} from '../lib/periodo';
+import { SelectorPeriodo } from '../components/selector-periodo';
+import { Banda, LabioHoja, Mosaico, Pieza } from '../components/banda';
+import { EstadoCargando, EstadoError, EstadoVacio } from '../components/ui';
+import { colores, espaciado, radios } from '../theme/colores';
 import {
   ETIQUETAS_MOTIVO_MERMA,
   type MovimientoDelHistorial,
   type ResumenInventarioPeriodo,
   type TipoMovimientoInventario,
-} from "../lib/tipos";
+} from '../lib/tipos';
 
 const POR_PAGINA = 50;
 // Mismo color de serie que los gráficos (ver components/graficos.tsx).
-const SERIE = "#b06f1c";
+const SERIE = '#b06f1c';
 
 function hora(iso: string): string {
-  return new Date(iso).toLocaleTimeString("es-EC", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
+  return new Date(iso).toLocaleTimeString('es-EC', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
   });
 }
 
@@ -74,12 +63,7 @@ function ListaConBarras({
               <Text style={styles.monto}>{formatearCentavos(f.centavos)}</Text>
             </View>
             <View style={styles.barraFondo}>
-              <View
-                style={[
-                  styles.barra,
-                  { width: `${Math.max(2, (f.centavos / maximo) * 100)}%` },
-                ]}
-              />
+              <View style={[styles.barra, { width: `${Math.max(2, (f.centavos / maximo) * 100)}%` }]} />
             </View>
           </View>
         ))}
@@ -88,20 +72,17 @@ function ListaConBarras({
   );
 }
 
-const TIPOS: { valor: TipoMovimientoInventario | undefined; texto: string }[] =
-  [
-    { valor: undefined, texto: "Todo" },
-    { valor: "abastecimiento", texto: "Abastecimientos" },
-    { valor: "merma", texto: "Mermas" },
-  ];
+const TIPOS: { valor: TipoMovimientoInventario | undefined; texto: string }[] = [
+  { valor: undefined, texto: 'Todo' },
+  { valor: 'abastecimiento', texto: 'Abastecimientos' },
+  { valor: 'merma', texto: 'Mermas' },
+];
 
 /** Abastecimientos y mermas de un período, con lo gastado y lo perdido. Solo admin. */
 export function HistorialInventarioScreen() {
   const { token } = useAuth();
   const [periodo, setPeriodo] = useState<Periodo>(periodoDeHoy);
-  const [tipo, setTipo] = useState<TipoMovimientoInventario | undefined>(
-    undefined,
-  );
+  const [tipo, setTipo] = useState<TipoMovimientoInventario | undefined>(undefined);
   const [resumen, setResumen] = useState<ResumenInventarioPeriodo | null>(null);
   const [movimientos, setMovimientos] = useState<MovimientoDelHistorial[]>([]);
   const [total, setTotal] = useState(0);
@@ -127,11 +108,7 @@ export function HistorialInventarioScreen() {
       })
       .catch((err) => {
         if (numero === ultimaConsulta.current)
-          setError(
-            err instanceof ApiError
-              ? err.message
-              : "No se pudo cargar el historial",
-          );
+          setError(err instanceof ApiError ? err.message : 'No se pudo cargar el historial');
       })
       .finally(() => {
         if (numero === ultimaConsulta.current) setCargando(false);
@@ -145,8 +122,7 @@ export function HistorialInventarioScreen() {
   );
 
   async function cargarMas() {
-    if (!token || cargando || cargandoMas || movimientos.length >= total)
-      return;
+    if (!token || cargando || cargandoMas || movimientos.length >= total) return;
     setCargandoMas(true);
     try {
       const pagina = await listarMovimientosInventario(token, periodo, {
@@ -156,18 +132,11 @@ export function HistorialInventarioScreen() {
       });
       setMovimientos((previos) => {
         const vistos = new Set(previos.map((m) => m.id));
-        return [
-          ...previos,
-          ...pagina.movimientos.filter((m) => !vistos.has(m.id)),
-        ];
+        return [...previos, ...pagina.movimientos.filter((m) => !vistos.has(m.id))];
       });
       setTotal(pagina.total);
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : "No se pudieron cargar más movimientos",
-      );
+      setError(err instanceof ApiError ? err.message : 'No se pudieron cargar más movimientos');
     } finally {
       setCargandoMas(false);
     }
@@ -179,15 +148,13 @@ export function HistorialInventarioScreen() {
   const encabezado = (
     <View>
       <Banda
-        eyebrow={
-          hoy ? "Inventario · hoy" : `Inventario · ${rangoLegible(periodo)}`
-        }
-        titulo={hoy ? "Historial de inventario" : nombreDelPeriodo(periodo)}
+        eyebrow={hoy ? 'Inventario · hoy' : `Inventario · ${rangoLegible(periodo)}`}
+        titulo={hoy ? 'Historial de inventario' : nombreDelPeriodo(periodo)}
         valor={resumen ? formatearCentavos(resumen.egresoCentavos) : undefined}
         detalle={
           resumen
             ? `Gastado en mercadería · ${formatearCentavos(resumen.perdidaCentavos)} perdidos en ${resumen.cantidadMermas} merma${
-                resumen.cantidadMermas === 1 ? "" : "s"
+                resumen.cantidadMermas === 1 ? '' : 's'
               }`
             : undefined
         }
@@ -204,16 +171,16 @@ export function HistorialInventarioScreen() {
               <Pieza
                 etiqueta="Gastado"
                 valor={formatearCentavos(resumen.egresoCentavos)}
-                detalle={`${resumen.cantidadAbastecimientos} compra${resumen.cantidadAbastecimientos === 1 ? "" : "s"}`}
+                detalle={`${resumen.cantidadAbastecimientos} compra${resumen.cantidadAbastecimientos === 1 ? '' : 's'}`}
               />
               <Pieza
                 etiqueta="Perdido"
                 valor={formatearCentavos(resumen.perdidaCentavos)}
-                tono={resumen.perdidaCentavos > 0 ? "rojo" : "neutro"}
+                tono={resumen.perdidaCentavos > 0 ? 'rojo' : 'neutro'}
                 detalle={
                   resumen.egresoCentavos > 0 && resumen.perdidaCentavos > 0
                     ? `${((resumen.perdidaCentavos / resumen.egresoCentavos) * 100).toFixed(1)}% de lo comprado`
-                    : `${resumen.cantidadMermas} merma${resumen.cantidadMermas === 1 ? "" : "s"}`
+                    : `${resumen.cantidadMermas} merma${resumen.cantidadMermas === 1 ? '' : 's'}`
                 }
               />
               <ListaConBarras
@@ -237,9 +204,9 @@ export function HistorialInventarioScreen() {
               <ListaConBarras
                 titulo="A quién le comprás"
                 filas={resumen.porProveedor.map((p) => ({
-                  clave: p.proveedor ?? "—",
-                  texto: p.proveedor ?? "Sin proveedor",
-                  detalle: `${p.compras} compra${p.compras === 1 ? "" : "s"}`,
+                  clave: p.proveedor ?? '—',
+                  texto: p.proveedor ?? 'Sin proveedor',
+                  detalle: `${p.compras} compra${p.compras === 1 ? '' : 's'}`,
                   centavos: p.centavos,
                 }))}
               />
@@ -253,12 +220,7 @@ export function HistorialInventarioScreen() {
                   accessibilityState={{ selected: tipo === t.valor }}
                   style={[styles.chip, tipo === t.valor && styles.chipActivo]}
                 >
-                  <Text
-                    style={[
-                      styles.chipTexto,
-                      tipo === t.valor && styles.chipTextoActivo,
-                    ]}
-                  >
+                  <Text style={[styles.chipTexto, tipo === t.valor && styles.chipTextoActivo]}>
                     {t.texto}
                   </Text>
                 </Pressable>
@@ -271,25 +233,20 @@ export function HistorialInventarioScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.contenedor} edges={["bottom"]}>
+    <SafeAreaView style={styles.contenedor} edges={['bottom']}>
       <FlatList
         data={cargando && movimientos.length === 0 ? [] : movimientos}
         keyExtractor={(m) => m.id}
         ListHeaderComponent={encabezado}
         renderItem={({ item, index }) => {
           const dia = fechaISO(new Date(item.createdAt));
-          const nuevoDia =
-            index === 0 ||
-            fechaISO(new Date(movimientos[index - 1].createdAt)) !== dia;
-          const esMerma = item.tipo === "merma";
+          const nuevoDia = index === 0 || fechaISO(new Date(movimientos[index - 1].createdAt)) !== dia;
+          const esMerma = item.tipo === 'merma';
           return (
             <View style={styles.fila}>
               {nuevoDia && (
                 <Text style={styles.dia}>
-                  {dia === deHoy
-                    ? "Hoy"
-                    : fechaLarga(dia)[0].toUpperCase() +
-                      fechaLarga(dia).slice(1)}
+                  {dia === deHoy ? 'Hoy' : fechaLarga(dia)[0].toUpperCase() + fechaLarga(dia).slice(1)}
                 </Text>
               )}
               <View style={styles.movimiento}>
@@ -300,36 +257,26 @@ export function HistorialInventarioScreen() {
                       style={[
                         styles.tipo,
                         {
-                          color: esMerma
-                            ? colores.rojoPerdida
-                            : colores.verdeGanancia,
+                          color: esMerma ? colores.rojoPerdida : colores.verdeGanancia,
                         },
                       ]}
                     >
                       {esMerma
-                        ? `Merma · ${ETIQUETAS_MOTIVO_MERMA[item.motivo ?? "otro"]}`
-                        : "Abastecimiento"}
+                        ? `Merma · ${ETIQUETAS_MOTIVO_MERMA[item.motivo ?? 'otro']}`
+                        : 'Abastecimiento'}
                     </Text>
-                    {"  "}
+                    {'  '}
                     {item.producto.nombre}
                   </Text>
                   <Text style={styles.detalle}>
-                    {item.cantidad} u. ×{" "}
-                    {formatearCentavos(item.costoUnitarioCentavos)}
-                    {item.proveedor ? ` · ${item.proveedor}` : ""}
-                    {item.vencimientoLote
-                      ? ` · vence ${formatearFechaCorta(item.vencimientoLote)}`
-                      : ""}
+                    {item.cantidad} u. × {formatearCentavos(item.costoUnitarioCentavos)}
+                    {item.proveedor ? ` · ${item.proveedor}` : ''}
+                    {item.vencimientoLote ? ` · vence ${formatearFechaCorta(item.vencimientoLote)}` : ''}
                     {` · ${item.registradoPor}`}
                   </Text>
                 </View>
-                <Text
-                  style={[
-                    styles.monto,
-                    esMerma && { color: colores.rojoPerdida },
-                  ]}
-                >
-                  {esMerma ? "−" : ""}
+                <Text style={[styles.monto, esMerma && { color: colores.rojoPerdida }]}>
+                  {esMerma ? '−' : ''}
                   {formatearCentavos(item.totalCentavos)}
                 </Text>
               </View>
@@ -349,10 +296,7 @@ export function HistorialInventarioScreen() {
         }
         ListFooterComponent={
           cargandoMas ? (
-            <ActivityIndicator
-              color={colores.tinta}
-              style={{ marginVertical: espaciado.lg }}
-            />
+            <ActivityIndicator color={colores.tinta} style={{ marginVertical: espaciado.lg }} />
           ) : movimientos.length > 0 ? (
             <Text style={styles.pie}>
               {movimientos.length < total
@@ -373,14 +317,14 @@ const styles = StyleSheet.create({
   contenedor: { flex: 1, backgroundColor: colores.papel },
   fila: { paddingHorizontal: espaciado.lg },
   chips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 6,
     marginVertical: espaciado.sm,
   },
   chip: {
     minHeight: 36,
-    justifyContent: "center",
+    justifyContent: 'center',
     paddingHorizontal: 14,
     borderRadius: radios.full,
     borderWidth: 1,
@@ -388,24 +332,24 @@ const styles = StyleSheet.create({
     backgroundColor: colores.superficie,
   },
   chipActivo: { backgroundColor: colores.tinta, borderColor: colores.tinta },
-  chipTexto: { fontSize: 13, fontWeight: "700", color: colores.tinta },
+  chipTexto: { fontSize: 13, fontWeight: '700', color: colores.tinta },
   chipTextoActivo: { color: colores.papel },
   barraFila: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     gap: espaciado.sm,
   },
   barraTexto: { flex: 1, fontSize: 13, color: colores.tinta },
   barraFondo: {
     height: 6,
     borderRadius: 3,
-    backgroundColor: "rgba(228,221,201,0.6)",
+    backgroundColor: 'rgba(228,221,201,0.6)',
     marginTop: 4,
   },
   barra: { height: 6, borderRadius: 3, backgroundColor: SERIE },
   dia: {
     fontSize: 14,
-    fontWeight: "800",
+    fontWeight: '800',
     color: colores.tinta,
     marginTop: espaciado.md,
     paddingBottom: 4,
@@ -413,23 +357,23 @@ const styles = StyleSheet.create({
     borderBottomColor: colores.papelLinea,
   },
   movimiento: {
-    flexDirection: "row",
+    flexDirection: 'row',
     gap: espaciado.sm,
     paddingVertical: espaciado.sm,
     borderBottomWidth: 1,
     borderBottomColor: colores.papelLinea,
   },
-  movimientoTitulo: { fontSize: 14, color: colores.tinta, fontWeight: "600" },
-  tipo: { fontSize: 12, fontWeight: "700" },
-  detalle: { fontSize: 12, color: colores.tintaSuave, fontWeight: "400" },
+  movimientoTitulo: { fontSize: 14, color: colores.tinta, fontWeight: '600' },
+  tipo: { fontSize: 12, fontWeight: '700' },
+  detalle: { fontSize: 12, color: colores.tintaSuave, fontWeight: '400' },
   monto: {
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: '700',
     color: colores.tinta,
-    fontVariant: ["tabular-nums"],
+    fontVariant: ['tabular-nums'],
   },
   pie: {
-    textAlign: "center",
+    textAlign: 'center',
     fontSize: 12,
     color: colores.tintaSuave,
     marginVertical: espaciado.lg,

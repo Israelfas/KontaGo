@@ -1,19 +1,11 @@
-import { useCallback, useRef, useState } from "react";
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Ionicons } from "@expo/vector-icons";
-import type { RootStackParamList } from "../navigation/RootNavigator";
-import { useAuth } from "../lib/auth-context";
+import { useCallback, useRef, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
+import type { RootStackParamList } from '../navigation/RootNavigator';
+import { useAuth } from '../lib/auth-context';
 import {
   corregirLotes,
   listarProductos,
@@ -23,21 +15,23 @@ import {
   registrarMerma,
   ApiError,
   type FilaDeLote,
-} from "../lib/api";
+} from '../lib/api';
 import {
   esFechaValida,
   escribirFecha,
   formatearCentavos,
   formatearFechaCorta,
-} from "../lib/formato";
+} from '../lib/formato';
 import {
   lotesPorVencer,
   lotesVencidos,
   resumenDeLotes,
   textoVencimiento,
   unidades,
-} from "../lib/lotes";
+} from '../lib/lotes';
+import { aCentavos, avisoDelMargen, avisoDelVencimiento } from '../lib/validacion';
 import {
+  AvisoDeCampo,
   BarraProporcional,
   Boton,
   EstadoCargando,
@@ -47,10 +41,10 @@ import {
   Tarjeta,
   TarjetaMetrica,
   estilosCampo,
-} from "../components/ui";
-import { colores, espaciado, radios } from "../theme/colores";
-import { SelectorProducto } from "../components/selector-producto";
-import { Banda, Hoja, Mosaico, Pieza } from "../components/banda";
+} from '../components/ui';
+import { colores, espaciado, radios } from '../theme/colores';
+import { SelectorProducto } from '../components/selector-producto';
+import { Banda, Hoja, Mosaico, Pieza } from '../components/banda';
 import {
   ETIQUETAS_MOTIVO_MERMA,
   type AlertasProductos,
@@ -58,14 +52,14 @@ import {
   type MotivoMerma,
   type Producto,
   type ResumenMovimientosDelDia,
-} from "../lib/tipos";
+} from '../lib/tipos';
 
-const MOTIVOS: MotivoMerma[] = ["vencido", "danado", "robado", "otro"];
+const MOTIVOS: MotivoMerma[] = ['vencido', 'danado', 'robado', 'otro'];
 
 function FormularioAbastecimiento({
   productos,
   onRegistrado,
-  productoInicialId = "",
+  productoInicialId = '',
 }: {
   productos: Producto[];
   onRegistrado: () => void;
@@ -73,14 +67,19 @@ function FormularioAbastecimiento({
 }) {
   const { token } = useAuth();
   const [productoId, setProductoId] = useState(productoInicialId);
-  const [cantidad, setCantidad] = useState("");
-  const [costoUnitario, setCostoUnitario] = useState("");
-  const [proveedor, setProveedor] = useState("");
-  const [fechaVencimiento, setFechaVencimiento] = useState("");
+  const [cantidad, setCantidad] = useState('');
+  const [costoUnitario, setCostoUnitario] = useState('');
+  const [proveedor, setProveedor] = useState('');
+  const [fechaVencimiento, setFechaVencimiento] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const elegido = productos.find((p) => p.id === productoId);
   const fechaValida = !fechaVencimiento || esFechaValida(fechaVencimiento);
+  // Contra el precio al que se vende hoy: un costo mayor casi siempre es
+  // un precio mal tipeado (o hay que subir el de venta).
+  const avisoCosto = elegido
+    ? avisoDelMargen(elegido.precioVentaCentavos, aCentavos(costoUnitario))
+    : null;
 
   async function manejarSubmit() {
     if (!token) return;
@@ -94,18 +93,14 @@ function FormularioAbastecimiento({
         proveedor: proveedor || undefined,
         fechaVencimiento: fechaVencimiento || undefined,
       });
-      setProductoId("");
-      setCantidad("");
-      setCostoUnitario("");
-      setProveedor("");
-      setFechaVencimiento("");
+      setProductoId('');
+      setCantidad('');
+      setCostoUnitario('');
+      setProveedor('');
+      setFechaVencimiento('');
       onRegistrado();
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : "No se pudo registrar el abastecimiento",
-      );
+      setError(err instanceof ApiError ? err.message : 'No se pudo registrar el abastecimiento');
     } finally {
       setEnviando(false);
     }
@@ -119,11 +114,7 @@ function FormularioAbastecimiento({
       </Text>
 
       <Etiqueta>Producto</Etiqueta>
-      <SelectorProducto
-        productos={productos}
-        seleccionadoId={productoId}
-        onSeleccionar={setProductoId}
-      />
+      <SelectorProducto productos={productos} seleccionadoId={productoId} onSeleccionar={setProductoId} />
 
       <Etiqueta>Cantidad</Etiqueta>
       <TextInput
@@ -141,6 +132,13 @@ function FormularioAbastecimiento({
         keyboardType="decimal-pad"
         style={estilosCampo.input}
         placeholder="Ej: 0.90"
+      />
+      <AvisoDeCampo
+        advertencia={
+          avisoCosto && elegido
+            ? `Hoy lo vendés a ${formatearCentavos(elegido.precioVentaCentavos)}. ${avisoCosto}`
+            : null
+        }
       />
 
       <Etiqueta>Proveedor (opcional)</Etiqueta>
@@ -160,14 +158,15 @@ function FormularioAbastecimiento({
         placeholder="AAAA-MM-DD"
         maxLength={10}
       />
-      {!fechaValida && fechaVencimiento.length === 10 && (
-        <Text style={styles.error}>Esa fecha no existe.</Text>
-      )}
+      <AvisoDeCampo
+        error={!fechaValida && fechaVencimiento.length === 10 ? 'Esa fecha no existe.' : null}
+        advertencia={fechaValida ? avisoDelVencimiento(fechaVencimiento) : null}
+      />
       {/* Lo que ya hay: si la mercadería nueva trae otra fecha, no se mezcla. */}
       <Text style={styles.ayuda}>
         {elegido?.lotes && elegido.lotes.length > 0
           ? `Hoy hay ${resumenDeLotes(elegido)}. Si esta mercadería trae otra fecha, queda como un lote aparte.`
-          : "Dejalo vacío si el producto no vence."}
+          : 'Dejalo vacío si el producto no vence.'}
       </Text>
 
       {error && <Text style={styles.error}>{error}</Text>}
@@ -191,14 +190,22 @@ function FormularioMerma({
   onRegistrado: () => void;
 }) {
   const { token } = useAuth();
-  const [productoId, setProductoId] = useState("");
-  const [cantidad, setCantidad] = useState("");
-  const [motivo, setMotivo] = useState<MotivoMerma>("vencido");
+  const [productoId, setProductoId] = useState('');
+  const [cantidad, setCantidad] = useState('');
+  const [motivo, setMotivo] = useState<MotivoMerma>('vencido');
   // '' = del que vence antes (lo mismo que hace una venta).
-  const [loteId, setLoteId] = useState("");
+  const [loteId, setLoteId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
-  const lotes = productos.find((p) => p.id === productoId)?.lotes ?? [];
+  const producto = productos.find((p) => p.id === productoId);
+  const lotes = producto?.lotes ?? [];
+  const loteElegido = lotes.find((l) => l.id === loteId);
+  // No se puede dar de baja más de lo que hay (el backend lo rechaza).
+  const disponible = loteElegido?.cantidad ?? producto?.stock;
+  const problemaCantidad =
+    disponible !== undefined && parseInt(cantidad, 10) > disponible
+      ? `Solo hay ${unidades(disponible)}${loteElegido ? ' en ese lote' : ''}.`
+      : null;
 
   async function manejarSubmit() {
     if (!token) return;
@@ -211,15 +218,13 @@ function FormularioMerma({
         motivo,
         loteId: loteId || undefined,
       });
-      setProductoId("");
-      setCantidad("");
-      setMotivo("vencido");
-      setLoteId("");
+      setProductoId('');
+      setCantidad('');
+      setMotivo('vencido');
+      setLoteId('');
       onRegistrado();
     } catch (err) {
-      setError(
-        err instanceof ApiError ? err.message : "No se pudo registrar la merma",
-      );
+      setError(err instanceof ApiError ? err.message : 'No se pudo registrar la merma');
     } finally {
       setEnviando(false);
     }
@@ -238,7 +243,7 @@ function FormularioMerma({
         seleccionadoId={productoId}
         onSeleccionar={(id) => {
           setProductoId(id);
-          setLoteId("");
+          setLoteId('');
         }}
       />
 
@@ -247,8 +252,8 @@ function FormularioMerma({
           <Etiqueta>De qué lote</Etiqueta>
           <View style={styles.selectorContenedor}>
             <Boton
-              variante={loteId === "" ? "primary" : "secondary"}
-              onPress={() => setLoteId("")}
+              variante={loteId === '' ? 'primary' : 'secondary'}
+              onPress={() => setLoteId('')}
               style={styles.selectorItem}
             >
               El que vence antes
@@ -256,7 +261,7 @@ function FormularioMerma({
             {lotes.map((l) => (
               <Boton
                 key={l.id}
-                variante={loteId === l.id ? "primary" : "secondary"}
+                variante={loteId === l.id ? 'primary' : 'secondary'}
                 onPress={() => setLoteId(l.id)}
                 style={styles.selectorItem}
               >
@@ -272,16 +277,17 @@ function FormularioMerma({
         value={cantidad}
         onChangeText={setCantidad}
         keyboardType="number-pad"
-        style={estilosCampo.input}
+        style={[estilosCampo.input, problemaCantidad && estilosCampo.inputInvalido]}
         placeholder="Ej: 3"
       />
+      <AvisoDeCampo error={problemaCantidad} />
 
       <Etiqueta>Motivo</Etiqueta>
       <View style={styles.selectorContenedor}>
         {MOTIVOS.map((m) => (
           <Boton
             key={m}
-            variante={motivo === m ? "danger" : "secondary"}
+            variante={motivo === m ? 'danger' : 'secondary'}
             onPress={() => setMotivo(m)}
             style={styles.selectorItem}
           >
@@ -292,12 +298,7 @@ function FormularioMerma({
 
       {error && <Text style={styles.error}>{error}</Text>}
 
-      <Boton
-        variante="danger"
-        onPress={manejarSubmit}
-        cargando={enviando}
-        disabled={!productoId || !cantidad}
-      >
+      <Boton variante="danger" onPress={manejarSubmit} cargando={enviando} disabled={!productoId || !cantidad || !!problemaCantidad}>
         Registrar merma
       </Boton>
     </View>
@@ -320,36 +321,23 @@ function SeccionAlertas({
     alertas.vencidos.length === 0;
 
   if (sinAlertas) {
-    return (
-      <EstadoVacio
-        titulo="Todo en orden"
-        descripcion="No hay alertas de stock bajo ni de vencimiento."
-      />
-    );
+    return <EstadoVacio titulo="Todo en orden" descripcion="No hay alertas de stock bajo ni de vencimiento." />;
   }
 
   // Una fila por lote: de 18 leches pueden vencer 6 y las otras 12 no.
-  const porVencer = alertas.porVencer.flatMap((p) =>
-    lotesPorVencer(p).map((lote) => ({ p, lote })),
-  );
-  const vencidos = alertas.vencidos.flatMap((p) =>
-    lotesVencidos(p).map((lote) => ({ p, lote })),
-  );
+  const porVencer = alertas.porVencer.flatMap((p) => lotesPorVencer(p).map((lote) => ({ p, lote })));
+  const vencidos = alertas.vencidos.flatMap((p) => lotesVencidos(p).map((lote) => ({ p, lote })));
 
   return (
     <View style={{ gap: espaciado.md }}>
       {vencidos.length > 0 && (
         <View style={styles.alertaBloque}>
-          <Text style={[styles.alertaTitulo, { color: colores.rojoPerdida }]}>
-            Vencidos en la góndola
-          </Text>
+          <Text style={[styles.alertaTitulo, { color: colores.rojoPerdida }]}>Vencidos en la góndola</Text>
           {vencidos.map(({ p, lote }) => (
             <View key={lote.id} style={styles.alertaFila}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.alertaNombre}>{p.nombre}</Text>
-                <Text
-                  style={[styles.alertaDetalle, { color: colores.rojoPerdida }]}
-                >
+                <Text style={[styles.alertaDetalle, { color: colores.rojoPerdida }]}>
                   {unidades(lote.cantidad)} · {textoVencimiento(lote)}
                 </Text>
               </View>
@@ -364,9 +352,7 @@ function SeccionAlertas({
       )}
       {alertas.stockBajo.length > 0 && (
         <View style={styles.alertaBloque}>
-          <Text style={[styles.alertaTitulo, { color: colores.ambar }]}>
-            Stock bajo
-          </Text>
+          <Text style={[styles.alertaTitulo, { color: colores.ambar }]}>Stock bajo</Text>
           {alertas.stockBajo.map((p) => (
             <View key={p.id} style={styles.alertaFila}>
               <Text style={styles.alertaNombre}>{p.nombre}</Text>
@@ -386,9 +372,7 @@ function SeccionAlertas({
       )}
       {porVencer.length > 0 && (
         <View style={styles.alertaBloque}>
-          <Text style={[styles.alertaTitulo, { color: colores.rojoPerdida }]}>
-            Por vencer
-          </Text>
+          <Text style={[styles.alertaTitulo, { color: colores.rojoPerdida }]}>Por vencer</Text>
           {porVencer.map(({ p, lote }) => (
             <View key={lote.id} style={styles.alertaFila}>
               <View style={{ flex: 1 }}>
@@ -400,9 +384,7 @@ function SeccionAlertas({
                   </Text>
                 )}
               </View>
-              <Text
-                style={[styles.alertaValor, { color: colores.rojoPerdida }]}
-              >
+              <Text style={[styles.alertaValor, { color: colores.rojoPerdida }]}>
                 {formatearFechaCorta(lote.fechaVencimiento!)}
               </Text>
             </View>
@@ -441,23 +423,18 @@ function EditorLotes({
     (producto.lotes ?? []).map((l) => ({
       clave: l.id,
       id: l.id,
-      fecha: l.fechaVencimiento ?? "",
+      fecha: l.fechaVencimiento ?? '',
       cantidad: String(l.cantidad),
     })),
   );
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
-  const suma = filas.reduce(
-    (acc, f) => acc + (parseInt(f.cantidad, 10) || 0),
-    0,
-  );
+  const suma = filas.reduce((acc, f) => acc + (parseInt(f.cantidad, 10) || 0), 0);
   const diferencia = suma - producto.stock;
   const fechasValidas = filas.every((f) => !f.fecha || esFechaValida(f.fecha));
 
   function cambiar(clave: string, cambios: Partial<FilaEditable>) {
-    setFilas((prev) =>
-      prev.map((f) => (f.clave === clave ? { ...f, ...cambios } : f)),
-    );
+    setFilas((prev) => prev.map((f) => (f.clave === clave ? { ...f, ...cambios } : f)));
   }
 
   async function guardar() {
@@ -473,11 +450,7 @@ function EditorLotes({
       await corregirLotes(token, producto.id, lotes);
       onGuardado();
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : "No se pudieron guardar los lotes",
-      );
+      setError(err instanceof ApiError ? err.message : 'No se pudieron guardar los lotes');
       setEnviando(false);
     }
   }
@@ -490,9 +463,7 @@ function EditorLotes({
             <Text style={styles.editorEtiqueta}>Vence el</Text>
             <TextInput
               value={fila.fecha}
-              onChangeText={(t) =>
-                cambiar(fila.clave, { fecha: escribirFecha(t) })
-              }
+              onChangeText={(t) => cambiar(fila.clave, { fecha: escribirFecha(t) })}
               keyboardType="number-pad"
               style={[estilosCampo.input, styles.editorInput]}
               placeholder="Sin fecha"
@@ -504,9 +475,7 @@ function EditorLotes({
             <Text style={styles.editorEtiqueta}>Unidades</Text>
             <TextInput
               value={fila.cantidad}
-              onChangeText={(t) =>
-                cambiar(fila.clave, { cantidad: t.replace(/\D/g, "") })
-              }
+              onChangeText={(t) => cambiar(fila.clave, { cantidad: t.replace(/\D/g, '') })}
               keyboardType="number-pad"
               style={[estilosCampo.input, styles.editorInput]}
               accessibilityLabel="Unidades"
@@ -517,35 +486,25 @@ function EditorLotes({
 
       <Pressable
         onPress={() =>
-          setFilas((prev) => [
-            ...prev,
-            { clave: `nueva-${Date.now()}`, fecha: "", cantidad: "0" },
-          ])
+          setFilas((prev) => [...prev, { clave: `nueva-${Date.now()}`, fecha: '', cantidad: '0' }])
         }
         hitSlop={8}
       >
         <Text style={styles.alertaAccion}>+ Agregar otra fecha</Text>
       </Pressable>
 
-      <Text
-        style={[
-          styles.ayuda,
-          diferencia !== 0 && { color: colores.rojoPerdida, fontWeight: "600" },
-        ]}
-      >
+      <Text style={[styles.ayuda, diferencia !== 0 && { color: colores.rojoPerdida, fontWeight: '600' }]}>
         Suman {suma} de {producto.stock} en stock
-        {diferencia > 0 ? ` · sobran ${diferencia}` : ""}
-        {diferencia < 0 ? ` · faltan ${-diferencia}` : ""}.
+        {diferencia > 0 ? ` · sobran ${diferencia}` : ''}
+        {diferencia < 0 ? ` · faltan ${-diferencia}` : ''}.
         {diferencia !== 0
-          ? " Si en la góndola hay otra cantidad, registrá la diferencia como merma o abastecimiento."
-          : ""}
+          ? ' Si en la góndola hay otra cantidad, registrá la diferencia como merma o abastecimiento.'
+          : ''}
       </Text>
-      {!fechasValidas && (
-        <Text style={styles.error}>Hay una fecha que no existe.</Text>
-      )}
+      {!fechasValidas && <Text style={styles.error}>Hay una fecha que no existe.</Text>}
       {error && <Text style={styles.error}>{error}</Text>}
 
-      <View style={{ flexDirection: "row", gap: espaciado.sm }}>
+      <View style={{ flexDirection: 'row', gap: espaciado.sm }}>
         <Boton
           onPress={guardar}
           cargando={enviando}
@@ -562,13 +521,7 @@ function EditorLotes({
   );
 }
 
-function SeccionLotes({
-  productos,
-  onCambio,
-}: {
-  productos: Producto[];
-  onCambio: () => void;
-}) {
+function SeccionLotes({ productos, onCambio }: { productos: Producto[]; onCambio: () => void }) {
   const [editando, setEditando] = useState<string | null>(null);
   const conLotes = productos.filter((p) => (p.lotes?.length ?? 0) > 0);
 
@@ -576,13 +529,12 @@ function SeccionLotes({
     <View>
       <Text style={styles.seccionTitulo}>Lotes</Text>
       <Text style={[styles.ayuda, { marginBottom: espaciado.sm }]}>
-        Cuántas unidades vencen en cada fecha. Las ventas y las mermas
-        descuentan primero lo que vence antes.
+        Cuántas unidades vencen en cada fecha. Las ventas y las mermas descuentan primero lo que
+        vence antes.
       </Text>
       {conLotes.length === 0 ? (
         <Text style={styles.ayuda}>
-          Todavía ningún producto tiene fecha de vencimiento. Se carga al
-          abastecer.
+          Todavía ningún producto tiene fecha de vencimiento. Se carga al abastecer.
         </Text>
       ) : (
         <View style={{ gap: espaciado.sm }}>
@@ -594,9 +546,7 @@ function SeccionLotes({
                 <View style={styles.loteCabecera}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.loteNombre}>{p.nombre}</Text>
-                    <Text style={styles.alertaDetalle}>
-                      {unidades(p.stock)} en stock
-                    </Text>
+                    <Text style={styles.alertaDetalle}>{unidades(p.stock)} en stock</Text>
                   </View>
                   {editando !== p.id && (
                     <Pressable onPress={() => setEditando(p.id)} hitSlop={8}>
@@ -640,9 +590,8 @@ function SeccionLotes({
 
 export function InventarioScreen() {
   const { token, usuario } = useAuth();
-  const esAdmin = usuario?.rol === "admin";
-  const navigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const esAdmin = usuario?.rol === 'admin';
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [productos, setProductos] = useState<Producto[]>([]);
   const [resumen, setResumen] = useState<ResumenMovimientosDelDia | null>(null);
   const [alertas, setAlertas] = useState<AlertasProductos | null>(null);
@@ -650,36 +599,31 @@ export function InventarioScreen() {
   const [error, setError] = useState<string | null>(null);
   // Producto elegido desde "Abastecer" en una alerta. `vez` fuerza a
   // rearmar el formulario aunque se toque dos veces el mismo producto.
-  const [sugerido, setSugerido] = useState<{ id: string; vez: number } | null>(
-    null,
-  );
+  const [sugerido, setSugerido] = useState<{ id: string; vez: number } | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const formularioYRef = useRef(0);
 
   function darDeBaja(producto: Producto, lote: Lote) {
     Alert.alert(
-      "Dar de baja lo vencido",
+      'Dar de baja lo vencido',
       `${unidades(lote.cantidad)} de ${producto.nombre} (${textoVencimiento(lote)}) salen del stock como pérdida.`,
       [
-        { text: "Cancelar", style: "cancel" },
+        { text: 'Cancelar', style: 'cancel' },
         {
-          text: "Dar de baja",
-          style: "destructive",
+          text: 'Dar de baja',
+          style: 'destructive',
           onPress: async () => {
             if (!token) return;
             try {
               await registrarMerma(token, {
                 productoId: producto.id,
                 cantidad: lote.cantidad,
-                motivo: "vencido",
+                motivo: 'vencido',
                 loteId: lote.id,
               });
               cargarTodo();
             } catch (err) {
-              Alert.alert(
-                "No se pudo dar de baja",
-                err instanceof ApiError ? err.message : "",
-              );
+              Alert.alert('No se pudo dar de baja', err instanceof ApiError ? err.message : '');
             }
           },
         },
@@ -690,10 +634,7 @@ export function InventarioScreen() {
   function abastecerDesdeAlerta(productoId: string) {
     setSugerido({ id: productoId, vez: Date.now() });
     requestAnimationFrame(() =>
-      scrollRef.current?.scrollTo({
-        y: formularioYRef.current,
-        animated: true,
-      }),
+      scrollRef.current?.scrollTo({ y: formularioYRef.current, animated: true }),
     );
   }
 
@@ -711,11 +652,7 @@ export function InventarioScreen() {
       setResumen(resumenResp);
       setAlertas(alertasResp);
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : "No se pudo cargar el inventario",
-      );
+      setError(err instanceof ApiError ? err.message : 'No se pudo cargar el inventario');
     } finally {
       setCargando(false);
     }
@@ -733,9 +670,7 @@ export function InventarioScreen() {
         <Banda
           eyebrow="Control de stock"
           titulo="Inventario"
-          valor={
-            resumen ? formatearCentavos(resumen.egresoCentavos) : undefined
-          }
+          valor={resumen ? formatearCentavos(resumen.egresoCentavos) : undefined}
           detalle={
             resumen
               ? `Gastado hoy en abastecimiento · ${formatearCentavos(resumen.perdidaCentavos)} perdidos por merma`
@@ -743,109 +678,90 @@ export function InventarioScreen() {
           }
           accion={
             <Pressable
-              onPress={() => navigation.navigate("HistorialInventario")}
+              onPress={() => navigation.navigate('HistorialInventario')}
               style={styles.botonHistorial}
               hitSlop={8}
               accessibilityRole="button"
             >
-              <Ionicons
-                name="receipt-outline"
-                size={16}
-                color={colores.tinta}
-              />
+              <Ionicons name="receipt-outline" size={16} color={colores.tinta} />
               <Text style={styles.botonHistorialTexto}>Historial</Text>
             </Pressable>
           }
         />
-        <Hoja
-          style={{
-            paddingHorizontal: espaciado.lg,
-            paddingBottom: espaciado.xxl,
-            gap: espaciado.lg,
-          }}
-        >
-          {cargando && <EstadoCargando texto="Cargando inventario…" />}
-          {error && !cargando && (
-            <EstadoError mensaje={error} onReintentar={cargarTodo} />
-          )}
+        <Hoja style={{ paddingHorizontal: espaciado.lg, paddingBottom: espaciado.xxl, gap: espaciado.lg }}>
+        {cargando && <EstadoCargando texto="Cargando inventario…" />}
+        {error && !cargando && <EstadoError mensaje={error} onReintentar={cargarTodo} />}
 
-          {!cargando && !error && resumen && (
-            <>
-              <View style={{ flexDirection: "row", gap: espaciado.md }}>
-                <TarjetaMetrica
-                  etiqueta="Gastado hoy"
-                  valor={formatearCentavos(resumen.egresoCentavos)}
-                  detalle={`${resumen.cantidadAbastecimientos} mov.`}
-                  icono="arrow-down-circle-outline"
-                />
-                <TarjetaMetrica
-                  etiqueta="Pérdida hoy"
-                  valor={formatearCentavos(resumen.perdidaCentavos)}
-                  detalle={`${resumen.cantidadMermas} mov.`}
-                  icono="trash-outline"
-                  tono="danger"
-                />
-              </View>
-
-              {(resumen.egresoCentavos > 0 || resumen.perdidaCentavos > 0) && (
-                <Tarjeta>
-                  <Text style={styles.balanceTitulo}>Balance del día</Text>
-                  <View style={{ marginTop: espaciado.sm }}>
-                    <BarraProporcional
-                      etiquetaA="Abastecimiento"
-                      valorA={resumen.egresoCentavos}
-                      colorA={colores.tinta}
-                      etiquetaB="Merma"
-                      valorB={resumen.perdidaCentavos}
-                      colorB={colores.rojoPerdida}
-                    />
-                  </View>
-                </Tarjeta>
-              )}
-            </>
-          )}
-
-          {!cargando && !error && esAdmin && productos.length === 0 && (
-            <EstadoVacio
-              titulo="Todavía no hay productos"
-              descripcion="Agregá alguno en Productos antes de registrar movimientos."
-            />
-          )}
-
-          {/* Las alertas van antes que los formularios: es lo que más se
-            consulta, y quedaban al fondo de la pantalla. */}
-          {!cargando && !error && (
-            <View>
-              <Text style={styles.seccionTitulo}>Alertas</Text>
-              <SeccionAlertas
-                alertas={alertas}
-                onAbastecer={esAdmin ? abastecerDesdeAlerta : undefined}
-                onDarDeBaja={esAdmin ? darDeBaja : undefined}
+        {!cargando && !error && resumen && (
+          <>
+            <View style={{ flexDirection: 'row', gap: espaciado.md }}>
+              <TarjetaMetrica
+                etiqueta="Gastado hoy"
+                valor={formatearCentavos(resumen.egresoCentavos)}
+                detalle={`${resumen.cantidadAbastecimientos} mov.`}
+                icono="arrow-down-circle-outline"
+              />
+              <TarjetaMetrica
+                etiqueta="Pérdida hoy"
+                valor={formatearCentavos(resumen.perdidaCentavos)}
+                detalle={`${resumen.cantidadMermas} mov.`}
+                icono="trash-outline"
+                tono="danger"
               />
             </View>
-          )}
 
-          {!cargando && !error && esAdmin && productos.length > 0 && (
-            <>
-              <View
-                onLayout={(e) =>
-                  (formularioYRef.current = e.nativeEvent.layout.y)
-                }
-              >
-                <FormularioAbastecimiento
-                  key={sugerido?.vez ?? "inicial"}
-                  productos={productos}
-                  onRegistrado={cargarTodo}
-                  productoInicialId={sugerido?.id}
-                />
-              </View>
-              <FormularioMerma
+            {(resumen.egresoCentavos > 0 || resumen.perdidaCentavos > 0) && (
+              <Tarjeta>
+                <Text style={styles.balanceTitulo}>Balance del día</Text>
+                <View style={{ marginTop: espaciado.sm }}>
+                  <BarraProporcional
+                    etiquetaA="Abastecimiento"
+                    valorA={resumen.egresoCentavos}
+                    colorA={colores.tinta}
+                    etiquetaB="Merma"
+                    valorB={resumen.perdidaCentavos}
+                    colorB={colores.rojoPerdida}
+                  />
+                </View>
+              </Tarjeta>
+            )}
+          </>
+        )}
+
+        {!cargando && !error && esAdmin && productos.length === 0 && (
+          <EstadoVacio
+            titulo="Todavía no hay productos"
+            descripcion="Agregá alguno en Productos antes de registrar movimientos."
+          />
+        )}
+
+        {/* Las alertas van antes que los formularios: es lo que más se
+            consulta, y quedaban al fondo de la pantalla. */}
+        {!cargando && !error && (
+          <View>
+            <Text style={styles.seccionTitulo}>Alertas</Text>
+            <SeccionAlertas
+              alertas={alertas}
+              onAbastecer={esAdmin ? abastecerDesdeAlerta : undefined}
+              onDarDeBaja={esAdmin ? darDeBaja : undefined}
+            />
+          </View>
+        )}
+
+        {!cargando && !error && esAdmin && productos.length > 0 && (
+          <>
+            <View onLayout={(e) => (formularioYRef.current = e.nativeEvent.layout.y)}>
+              <FormularioAbastecimiento
+                key={sugerido?.vez ?? 'inicial'}
                 productos={productos}
                 onRegistrado={cargarTodo}
+                productoInicialId={sugerido?.id}
               />
-              <SeccionLotes productos={productos} onCambio={cargarTodo} />
-            </>
-          )}
+            </View>
+            <FormularioMerma productos={productos} onRegistrado={cargarTodo} />
+            <SeccionLotes productos={productos} onCambio={cargarTodo} />
+          </>
+        )}
         </Hoja>
       </ScrollView>
     </SafeAreaView>
@@ -854,33 +770,19 @@ export function InventarioScreen() {
 
 const styles = StyleSheet.create({
   botonHistorial: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: espaciado.xs,
     paddingHorizontal: espaciado.md,
     paddingVertical: espaciado.xs,
     borderRadius: radios.full,
     backgroundColor: colores.papel,
   },
-  botonHistorialTexto: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colores.tinta,
-  },
+  botonHistorialTexto: { fontSize: 13, fontWeight: '700', color: colores.tinta },
   contenedor: { flex: 1, backgroundColor: colores.papel },
-  header: {
-    paddingHorizontal: espaciado.lg,
-    paddingTop: espaciado.md,
-    paddingBottom: espaciado.sm,
-  },
-  eyebrow: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-    color: colores.ambar,
-    marginBottom: espaciado.xs,
-  },
-  titulo: { fontSize: 24, fontWeight: "800", color: colores.tinta },
+  header: { paddingHorizontal: espaciado.lg, paddingTop: espaciado.md, paddingBottom: espaciado.sm },
+  eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, color: colores.ambar, marginBottom: espaciado.xs },
+  titulo: { fontSize: 24, fontWeight: '800', color: colores.tinta },
   formulario: {
     padding: espaciado.lg,
     backgroundColor: colores.superficie,
@@ -888,83 +790,42 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colores.papelLinea,
   },
-  formularioTitulo: { fontSize: 16, fontWeight: "700", color: colores.tinta },
-  formularioSubtitulo: {
-    fontSize: 12,
-    color: colores.tintaSuave,
-    marginBottom: espaciado.md,
-  },
+  formularioTitulo: { fontSize: 16, fontWeight: '700', color: colores.tinta },
+  formularioSubtitulo: { fontSize: 12, color: colores.tintaSuave, marginBottom: espaciado.md },
   selectorContenedor: { gap: espaciado.xs, marginBottom: espaciado.md },
   selectorItem: { minHeight: 40, paddingVertical: espaciado.sm },
-  error: {
-    color: colores.rojoPerdida,
-    fontSize: 13,
-    marginBottom: espaciado.sm,
-  },
-  seccionTitulo: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: colores.tinta,
-    marginBottom: espaciado.sm,
-  },
-  balanceTitulo: { fontSize: 13, fontWeight: "700", color: colores.tinta },
+  error: { color: colores.rojoPerdida, fontSize: 13, marginBottom: espaciado.sm },
+  seccionTitulo: { fontSize: 16, fontWeight: '700', color: colores.tinta, marginBottom: espaciado.sm },
+  balanceTitulo: { fontSize: 13, fontWeight: '700', color: colores.tinta },
   alertaBloque: {
     backgroundColor: colores.superficie,
     borderRadius: radios.md,
     borderWidth: 1,
     borderColor: colores.papelLinea,
-    overflow: "hidden",
+    overflow: 'hidden',
   },
   alertaTitulo: {
     fontSize: 11,
-    fontWeight: "700",
-    textTransform: "uppercase",
+    fontWeight: '700',
+    textTransform: 'uppercase',
     letterSpacing: 0.5,
     padding: espaciado.md,
     paddingBottom: espaciado.xs,
   },
   alertaFila: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     paddingHorizontal: espaciado.md,
     paddingVertical: espaciado.sm,
     borderTopWidth: 1,
     borderTopColor: colores.papelLinea,
   },
-  alertaDerecha: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: espaciado.md,
-  },
-  alertaAccion: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: colores.tinta,
-    textDecorationLine: "underline",
-  },
-  alertaNombre: {
-    flex: 1,
-    fontSize: 13,
-    color: colores.tinta,
-    marginRight: espaciado.sm,
-  },
-  alertaValor: {
-    fontSize: 13,
-    fontWeight: "600",
-    fontVariant: ["tabular-nums"],
-  },
-  alertaDetalle: {
-    fontSize: 12,
-    color: colores.tintaSuave,
-    marginTop: 2,
-    fontVariant: ["tabular-nums"],
-  },
-  ayuda: {
-    fontSize: 12,
-    color: colores.tintaSuave,
-    lineHeight: 17,
-    marginBottom: espaciado.md,
-  },
+  alertaDerecha: { flexDirection: 'row', alignItems: 'center', gap: espaciado.md },
+  alertaAccion: { fontSize: 13, fontWeight: '600', color: colores.tinta, textDecorationLine: 'underline' },
+  alertaNombre: { flex: 1, fontSize: 13, color: colores.tinta, marginRight: espaciado.sm },
+  alertaValor: { fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  alertaDetalle: { fontSize: 12, color: colores.tintaSuave, marginTop: 2, fontVariant: ['tabular-nums'] },
+  ayuda: { fontSize: 12, color: colores.tintaSuave, lineHeight: 17, marginBottom: espaciado.md },
   loteTarjeta: {
     padding: espaciado.md,
     backgroundColor: colores.superficie,
@@ -972,41 +833,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colores.papelLinea,
   },
-  loteCabecera: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: espaciado.sm,
-  },
-  loteNombre: { fontSize: 14, fontWeight: "600", color: colores.tinta },
-  lotePildoras: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    marginTop: espaciado.sm,
-  },
+  loteCabecera: { flexDirection: 'row', alignItems: 'flex-start', gap: espaciado.sm },
+  loteNombre: { fontSize: 14, fontWeight: '600', color: colores.tinta },
+  lotePildoras: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: espaciado.sm },
   pildora: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: '600',
     color: colores.tintaSuave,
     backgroundColor: colores.papel,
     borderRadius: radios.full,
     paddingHorizontal: 10,
     paddingVertical: 3,
-    overflow: "hidden",
-    fontVariant: ["tabular-nums"],
+    overflow: 'hidden',
+    fontVariant: ['tabular-nums'],
   },
-  pildoraAmbar: { color: "#9a5b08", backgroundColor: "rgba(217,140,43,0.14)" },
-  pildoraRoja: {
-    color: colores.rojoPerdida,
-    backgroundColor: "rgba(182,70,47,0.1)",
-  },
+  pildoraAmbar: { color: '#9a5b08', backgroundColor: 'rgba(217,140,43,0.14)' },
+  pildoraRoja: { color: colores.rojoPerdida, backgroundColor: 'rgba(182,70,47,0.1)' },
   editor: { marginTop: espaciado.sm, gap: espaciado.sm },
-  editorFila: { flexDirection: "row", gap: espaciado.sm },
-  editorEtiqueta: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: colores.tintaSuave,
-    marginBottom: 2,
-  },
+  editorFila: { flexDirection: 'row', gap: espaciado.sm },
+  editorEtiqueta: { fontSize: 11, fontWeight: '700', color: colores.tintaSuave, marginBottom: 2 },
   editorInput: { marginBottom: 0 },
 });

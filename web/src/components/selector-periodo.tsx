@@ -47,13 +47,12 @@ export function SelectorPeriodo({
   const [eligiendo, setEligiendo] = useState(false);
   const [desde, setDesde] = useState(periodo.desde);
   const [hasta, setHasta] = useState(periodo.hasta);
-  const [error, setError] = useState<string | null>(null);
   const hoy = hoyISO();
+  // Se revisa mientras se eligen las fechas, no recién al tocar Ver.
+  const problema = desde && hasta ? problemaDelRango(desde, hasta) : null;
 
   function aplicar(e: FormEvent) {
     e.preventDefault();
-    const problema = problemaDelRango(desde, hasta);
-    setError(problema);
     if (problema) return;
     onCambiar(periodoElegido(desde, hasta));
     setEligiendo(false);
@@ -70,7 +69,6 @@ export function SelectorPeriodo({
             aria-pressed={periodo.clave === opcion.clave}
             onClick={() => {
               setEligiendo(false);
-              setError(null);
               onCambiar(periodoPredefinido(opcion.clave));
             }}
           >
@@ -85,7 +83,6 @@ export function SelectorPeriodo({
           onClick={() => {
             setDesde(periodo.desde);
             setHasta(periodo.hasta);
-            setError(null);
             setEligiendo((abierto) => !abierto);
           }}
         >
@@ -117,14 +114,14 @@ export function SelectorPeriodo({
               onChange={(e) => setHasta(e.target.value)}
             />
           </label>
-          <Button type="submit" variant="claro">
+          <Button type="submit" variant="claro" disabled={!!problema}>
             Ver
           </Button>
         </form>
       )}
-      {error && (
+      {eligiendo && problema && (
         <p className="periodo-error" role="alert">
-          {error}
+          {problema}
         </p>
       )}
     </div>

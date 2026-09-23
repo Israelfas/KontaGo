@@ -250,6 +250,38 @@ export function Etiqueta({ children }: { children: string }) {
   return <Text style={styles.etiquetaCampo}>{children}</Text>;
 }
 
+/**
+ * Lo que se dice bajo un campo mientras se escribe: `error` en rojo (así no
+ * se puede enviar), `advertencia` en ámbar (se puede, pero ojo) o `ayuda`
+ * neutra. Lo lee el lector de pantalla sin interrumpir.
+ */
+export function AvisoDeCampo({
+  error,
+  advertencia,
+  ayuda,
+}: {
+  error?: string | null;
+  advertencia?: string | null;
+  ayuda?: string | null;
+}) {
+  const texto = error || advertencia || ayuda;
+  if (!texto) return null;
+  return (
+    <Text
+      accessibilityLiveRegion="polite"
+      style={[
+        styles.aviso,
+        error ? { color: colores.rojoPerdida } : advertencia ? { color: COLOR_ADVERTENCIA } : null,
+      ]}
+    >
+      {texto}
+    </Text>
+  );
+}
+
+// El ámbar de la marca es muy claro para texto chico sobre el papel.
+const COLOR_ADVERTENCIA = '#93550a';
+
 export const estilosCampo = StyleSheet.create({
   input: {
     borderWidth: 1,
@@ -262,6 +294,7 @@ export const estilosCampo = StyleSheet.create({
     backgroundColor: colores.blanco,
     marginBottom: espaciado.md,
   },
+  inputInvalido: { borderColor: colores.rojoPerdida },
 });
 
 const sombraTarjeta = {
@@ -416,6 +449,14 @@ const styles = StyleSheet.create({
   barraProporcionalItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   barraProporcionalPunto: { width: 8, height: 8, borderRadius: radios.full },
   barraProporcionalTexto: { fontSize: 12, color: colores.tintaSuave },
+  // Pegado al campo de arriba (estilosCampo.input deja espaciado.md abajo).
+  aviso: {
+    marginTop: -espaciado.sm,
+    marginBottom: espaciado.sm,
+    fontSize: 12,
+    lineHeight: 16,
+    color: colores.tintaSuave,
+  },
   etiquetaCampo: {
     fontSize: 11,
     fontWeight: '600',
