@@ -113,3 +113,14 @@ export function fechaEnDias(dias: number): string {
   const dos = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
 }
+
+/** Abre la caja del usuario (sin caja abierta no se puede vender). */
+export async function abrirCaja(
+  app: NestExpressApplication,
+  token: string,
+  fondoInicialCentavos = 2000,
+): Promise<void> {
+  await cliente(app, token)
+    .post('/caja/abrir', { fondoInicialCentavos })
+    .expect(201);
+}

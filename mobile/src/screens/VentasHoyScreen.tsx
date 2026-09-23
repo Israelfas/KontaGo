@@ -11,7 +11,8 @@ import {
   obtenerResumen,
   ApiError,
 } from '../lib/api';
-import { formatearCentavos } from '../lib/formato';
+import { formatearCentavos, numeroDeTicket } from '../lib/formato';
+import { compartirTicket } from '../lib/ticket-texto';
 import {
   esHoy,
   fechaISO,
@@ -184,6 +185,7 @@ function TarjetaVenta({
   onAnulada: (v: VentaDelHistorial) => void;
   onCerrarAnulacion: () => void;
 }) {
+  const { token } = useAuth();
   const estado = ESTADO[venta.estado];
   const netoCentavos = venta.totalCentavos - venta.totalAnuladoCentavos;
 
@@ -192,7 +194,8 @@ function TarjetaVenta({
       <View style={styles.cabecera}>
         <View style={{ flex: 1 }}>
           <Text style={styles.hora}>
-            {hora(venta.createdAt)} · <Text style={styles.vendedor}>{venta.vendedor}</Text>
+            <Text style={{ fontWeight: '700' }}>{numeroDeTicket(venta.numero)}</Text> · {hora(venta.createdAt)} ·{' '}
+            <Text style={styles.vendedor}>{venta.vendedor}</Text>
           </Text>
           <View style={[styles.estadoPill, { backgroundColor: estado.fondo }]}>
             <Text style={[styles.estadoTexto, { color: estado.color }]}>{estado.texto}</Text>
@@ -228,8 +231,9 @@ function TarjetaVenta({
       </View>
 
       <Text style={styles.pago}>
-        Recibido {formatearCentavos(venta.montoRecibidoCentavos)} · Vuelto{' '}
-        {formatearCentavos(venta.vueltoCentavos)}
+        {venta.metodoPago === 'transferencia'
+          ? 'Pagado por transferencia'
+          : `Efectivo · recibido ${formatearCentavos(venta.montoRecibidoCentavos)} · vuelto ${formatearCentavos(venta.vueltoCentavos)}`}
       </Text>
 
       {venta.anulaciones.length > 0 && (
@@ -243,10 +247,21 @@ function TarjetaVenta({
         </View>
       )}
 
-      {puedeAnular && venta.estado !== 'anulada' && !anulando && (
-        <Pressable onPress={onAnular} hitSlop={8} style={styles.botonAnular}>
-          <Text style={styles.botonAnularTexto}>Anular…</Text>
-        </Pressable>
+      {!anulando && (
+        <View style={{ flexDirection: 'row', gap: espaciado.sm }}>
+          <Pressable
+            onPress={() => token && compartirTicket(token, venta.id)}
+            hitSlop={8}
+            style={styles.botonAnular}
+          >
+            <Text style={styles.botonAnularTexto}>Compartir ticket</Text>
+          </Pressable>
+          {puedeAnular && venta.estado !== 'anulada' && (
+            <Pressable onPress={onAnular} hitSlop={8} style={styles.botonAnular}>
+              <Text style={styles.botonAnularTexto}>Anular…</Text>
+            </Pressable>
+          )}
+        </View>
       )}
 
       {anulando && (

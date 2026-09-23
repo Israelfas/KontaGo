@@ -1,0 +1,36 @@
+import { MetodoPago } from '../../../common/enums/metodo-pago.enum';
+
+/**
+ * Lo que va impreso (o compartido) en el ticket de una venta. Muestra la
+ * venta como se cobró; si después se anuló algo, va aparte.
+ *
+ * No es un comprobante tributario: la factura electrónica del SRI es otra
+ * cosa (con RUC, clave de acceso, autorización).
+ */
+export interface TicketDto {
+  tienda: string;
+  numero: number;
+  fecha: Date;
+  cajero: string;
+  metodoPago: MetodoPago;
+  lineas: {
+    nombre: string;
+    cantidad: number;
+    precioUnitarioCentavos: number;
+    totalCentavos: number;
+    // Unidades de esta línea anuladas después.
+    cantidadAnulada: number;
+  }[];
+  // Desglose como en Ecuador: base de lo que lleva IVA, base de lo que no
+  // (tarifa 0%) y el IVA. Suman el total.
+  subtotalConIvaCentavos: number;
+  subtotalSinIvaCentavos: number;
+  ivaCentavos: number;
+  // Tarifa general vigente, en % (para imprimir "IVA 15%").
+  tarifaIva: number;
+  totalCentavos: number;
+  montoRecibidoCentavos: number;
+  vueltoCentavos: number;
+  // Lo devuelto por anulaciones (0 si no hubo).
+  anuladoCentavos: number;
+}

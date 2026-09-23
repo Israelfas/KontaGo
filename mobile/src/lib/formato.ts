@@ -59,3 +59,8 @@ export function esFechaValida(fecha: string): boolean {
   const d = new Date(anio, mes - 1, dia);
   return d.getFullYear() === anio && d.getMonth() === mes - 1 && d.getDate() === dia;
 }
+
+/** Número de ticket como se imprime y se dice: 245 → "#0245". */
+export function numeroDeTicket(numero: number): string {
+  return `#${String(numero).padStart(4, '0')}`;
+}

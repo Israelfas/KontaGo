@@ -1,3 +1,5 @@
+import { MetodoPago } from '../../../common/enums/metodo-pago.enum';
+
 /**
  * Una venta tal como se muestra en el historial del día. A propósito NO
  * incluye costos (costoUnitarioCentavos) ni ganancia: el historial lo ve
@@ -5,10 +7,13 @@
  */
 export interface VentaDelHistorialDto {
   id: string;
+  // Número de ticket (1, 2, 3… por tienda).
+  numero: number;
   createdAt: Date;
   vendedor: string;
   totalCentavos: number;
   totalAnuladoCentavos: number;
+  metodoPago: MetodoPago;
   montoRecibidoCentavos: number;
   vueltoCentavos: number;
   estado: 'completa' | 'parcialmente_anulada' | 'anulada';

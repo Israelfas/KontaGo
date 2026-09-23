@@ -39,3 +39,8 @@ export function formatearFechaCorta(fecha: string): string {
     ...(anio !== new Date().getFullYear() ? { year: 'numeric' } : {}),
   });
 }
+
+/** Número de ticket como se imprime y se dice: 245 → "#0245". */
+export function numeroDeTicket(numero: number): string {
+  return `#${String(numero).padStart(4, '0')}`;
+}

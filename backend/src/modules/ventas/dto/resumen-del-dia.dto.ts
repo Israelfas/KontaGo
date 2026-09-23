@@ -27,6 +27,9 @@ export class ResumenPeriodoDto extends ResumenDelDiaDto {
   desde: string; // AAAA-MM-DD, incluido
   hasta: string; // AAAA-MM-DD, incluido
   dias: number;
+  // Lo cobrado (neto de anulaciones) según cómo se pagó.
+  efectivoCentavos: number;
+  transferenciaCentavos: number;
   // Un día se grafica por hora; un rango, por día.
   agrupadoPor: 'hora' | 'dia';
   serie: PuntoSerie[];

@@ -8,8 +8,15 @@ import { Banda, Hoja } from '@/components/banda';
 import { ReceiptIcon, RefreshIcon } from '@/components/icons';
 import { SelectorPeriodo, usePeriodoDeLaURL } from '@/components/selector-periodo';
 import { useAuth } from '@/lib/auth-context';
-import { obtenerVentasDeHoy, anularVenta, listarVentas, obtenerResumen, ApiError } from '@/lib/api';
-import { formatearCentavos } from '@/lib/formato';
+import {
+  obtenerVentasDeHoy,
+  anularVenta,
+  buscarVentaPorNumero,
+  listarVentas,
+  obtenerResumen,
+  ApiError,
+} from '@/lib/api';
+import { formatearCentavos, numeroDeTicket } from '@/lib/formato';
 import {
   esHoy,
   fechaISO,
@@ -179,6 +186,7 @@ function TarjetaVenta({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="font-ticket text-sm text-tinta">
+            <span className="font-semibold">{numeroDeTicket(venta.numero)}</span> ·{' '}
             {hora(venta.createdAt)} · <span className="text-tinta-suave">{venta.vendedor}</span>
           </p>
           <span className={`status-pill ${estado.clase} mt-1 text-xs`}>{estado.texto}</span>
@@ -218,8 +226,14 @@ function TarjetaVenta({
       </ul>
 
       <p className="mt-2 font-ticket text-xs text-tinta-suave">
-        Recibido {formatearCentavos(venta.montoRecibidoCentavos)} · Vuelto{' '}
-        {formatearCentavos(venta.vueltoCentavos)}
+        {venta.metodoPago === 'transferencia' ? (
+          'Pagado por transferencia'
+        ) : (
+          <>
+            Efectivo · recibido {formatearCentavos(venta.montoRecibidoCentavos)} · vuelto{' '}
+            {formatearCentavos(venta.vueltoCentavos)}
+          </>
+        )}
       </p>
 
       {venta.anulaciones.length > 0 && (
@@ -234,14 +248,27 @@ function TarjetaVenta({
         </ul>
       )}
 
-      {puedeAnular && venta.estado !== 'anulada' && !anulando && (
-        <button
-          type="button"
-          onClick={onAnular}
-          className="mt-auto self-start rounded-lg border border-papel-linea px-3 py-1.5 pt-1.5 text-xs font-medium text-tinta-suave transition-colors hover:border-rojo-perdida/40 hover:text-rojo-perdida"
-        >
-          Anular…
-        </button>
+      {!anulando && (
+        <div className="mt-auto flex flex-wrap gap-2 pt-3">
+          {/* En otra pestaña: la lista queda donde estaba. */}
+          <a
+            href={`/ticket/${venta.id}?imprimir=1`}
+            target="_blank"
+            rel="noopener"
+            className="rounded-lg border border-papel-linea px-3 py-1.5 text-xs font-medium text-tinta-suave transition-colors hover:border-tinta hover:text-tinta"
+          >
+            Imprimir ticket
+          </a>
+          {puedeAnular && venta.estado !== 'anulada' && (
+            <button
+              type="button"
+              onClick={onAnular}
+              className="rounded-lg border border-papel-linea px-3 py-1.5 text-xs font-medium text-tinta-suave transition-colors hover:border-rojo-perdida/40 hover:text-rojo-perdida"
+            >
+              Anular…
+            </button>
+          )}
+        </div>
       )}
 
       {anulando && (
@@ -285,6 +312,30 @@ function ContenidoVentas() {
   const [error, setError] = useState<string | null>(null);
   const [anulandoId, setAnulandoId] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
+  // Buscar por número de ticket: null = mostrando la lista normal.
+  const [numeroBuscado, setNumeroBuscado] = useState('');
+  const [encontradas, setEncontradas] = useState<VentaDelHistorial[] | null>(null);
+  const [buscando, setBuscando] = useState(false);
+
+  async function buscarTicket(e: FormEvent) {
+    e.preventDefault();
+    const numero = parseInt(numeroBuscado.replace(/\D/g, ''), 10);
+    if (!token || !numero) return;
+    setBuscando(true);
+    setError(null);
+    try {
+      // El admin busca en todas las fechas; el cajero, entre las de hoy.
+      setEncontradas(
+        esAdmin
+          ? (await buscarVentaPorNumero(token, numero)).ventas
+          : ventas.filter((v) => v.numero === numero),
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo buscar el ticket');
+    } finally {
+      setBuscando(false);
+    }
+  }
 
   useEffect(() => {
     if (!token || !periodo) return;
@@ -339,6 +390,7 @@ function ContenidoVentas() {
 
   function alAnular(actualizada: VentaDelHistorial) {
     setVentas((prev) => prev.map((v) => (v.id === actualizada.id ? actualizada : v)));
+    setEncontradas((prev) => prev && prev.map((v) => (v.id === actualizada.id ? actualizada : v)));
     // Los totales de la franja salen del resumen: se vuelven a pedir.
     if (esAdmin && token && periodo)
       obtenerResumen(token, periodo)
@@ -407,70 +459,114 @@ function ContenidoVentas() {
 
       <Hoja>
         <div className="mt-4 space-y-4">
-          {cargando && <LoadingState label="Cargando ventas…" />}
-
-          {error && !cargando && (
-            <ErrorState
-              action={
-                <Button variant="secondary" onClick={() => setIntento((n) => n + 1)}>
-                  Reintentar
-                </Button>
-              }
-            >
-              {error}
-            </ErrorState>
-          )}
-
-          {!cargando && !error && ventas.length === 0 && (
-            <EmptyState
-              icon={<ReceiptIcon className="h-6 w-6" />}
-              title={hoy ? 'Todavía no hay ventas hoy' : 'No hubo ventas en este período'}
-              description={
-                hoy
-                  ? 'Las ventas que se registren en la caja van a aparecer acá.'
-                  : 'Probá con otras fechas.'
-              }
+          <form onSubmit={buscarTicket} className="flex max-w-sm gap-2" role="search">
+            <label htmlFor="buscar-ticket" className="sr-only">
+              Número de ticket
+            </label>
+            <input
+              id="buscar-ticket"
+              inputMode="numeric"
+              value={numeroBuscado}
+              onChange={(e) => setNumeroBuscado(e.target.value)}
+              className="field font-ticket !mb-0 flex-1"
+              placeholder={esAdmin ? 'Buscar ticket #, ej: 245' : 'Buscar un ticket de hoy #'}
             />
+            <Button type="submit" variant="secondary" disabled={buscando || !numeroBuscado.trim()}>
+              Buscar
+            </Button>
+          </form>
+
+          {encontradas && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-tinta">
+                  {encontradas.length === 0
+                    ? `No hay ningún ticket #${numeroBuscado.replace(/\D/g, '')}${esAdmin ? '' : ' hoy'}.`
+                    : `Ticket ${numeroDeTicket(encontradas[0].numero)}`}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEncontradas(null);
+                    setNumeroBuscado('');
+                  }}
+                  className="text-xs font-medium text-tinta underline"
+                >
+                  Volver a la lista
+                </button>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2">{encontradas.map(tarjeta)}</div>
+            </div>
           )}
 
-          {/* Dos columnas en pantallas anchas: cada venta tiene poco
+          {encontradas === null && (
+            <>
+              {cargando && <LoadingState label="Cargando ventas…" />}
+
+              {error && !cargando && (
+                <ErrorState
+                  action={
+                    <Button variant="secondary" onClick={() => setIntento((n) => n + 1)}>
+                      Reintentar
+                    </Button>
+                  }
+                >
+                  {error}
+                </ErrorState>
+              )}
+
+              {!cargando && !error && ventas.length === 0 && (
+                <EmptyState
+                  icon={<ReceiptIcon className="h-6 w-6" />}
+                  title={hoy ? 'Todavía no hay ventas hoy' : 'No hubo ventas en este período'}
+                  description={
+                    hoy
+                      ? 'Las ventas que se registren en la caja van a aparecer acá.'
+                      : 'Probá con otras fechas.'
+                  }
+                />
+              )}
+
+              {/* Dos columnas en pantallas anchas: cada venta tiene poco
               contenido y a todo el ancho quedaba una lista muy aireada.
               La que se está anulando ocupa el ancho completo, porque el
               panel de anulación necesita espacio. */}
-          {!cargando && !error && !grupos && (
-            <div className="grid gap-4 lg:grid-cols-2">{ventas.map(tarjeta)}</div>
-          )}
+              {!cargando && !error && !grupos && (
+                <div className="grid gap-4 lg:grid-cols-2">{ventas.map(tarjeta)}</div>
+              )}
 
-          {/* Varios días: cada uno con su título y lo cobrado ese día. */}
-          {!cargando &&
-            !error &&
-            grupos?.map((grupo) => (
-              <section key={grupo.dia} aria-label={fechaLarga(grupo.dia)} className="pt-2">
-                <h2 className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 border-b border-papel-linea pb-2">
-                  <span className="font-display text-base font-semibold capitalize text-tinta">
-                    {grupo.dia === deHoy ? 'Hoy' : fechaLarga(grupo.dia)}
-                  </span>
-                  {porDia.has(grupo.dia) && (
-                    <span className="font-ticket text-sm text-tinta-suave">
-                      {formatearCentavos(porDia.get(grupo.dia)!)} cobrado
-                    </span>
-                  )}
-                </h2>
-                <div className="grid gap-4 lg:grid-cols-2">{grupo.ventas.map(tarjeta)}</div>
-              </section>
-            ))}
+              {/* Varios días: cada uno con su título y lo cobrado ese día. */}
+              {!cargando &&
+                !error &&
+                grupos?.map((grupo) => (
+                  <section key={grupo.dia} aria-label={fechaLarga(grupo.dia)} className="pt-2">
+                    <h2 className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 border-b border-papel-linea pb-2">
+                      <span className="font-display text-base font-semibold capitalize text-tinta">
+                        {grupo.dia === deHoy ? 'Hoy' : fechaLarga(grupo.dia)}
+                      </span>
+                      {porDia.has(grupo.dia) && (
+                        <span className="font-ticket text-sm text-tinta-suave">
+                          {formatearCentavos(porDia.get(grupo.dia)!)} cobrado
+                        </span>
+                      )}
+                    </h2>
+                    <div className="grid gap-4 lg:grid-cols-2">{grupo.ventas.map(tarjeta)}</div>
+                  </section>
+                ))}
 
-          {!cargando && !error && ventas.length < total && (
-            <div className="flex flex-col items-center gap-2 pt-2">
-              <p className="text-xs text-tinta-suave">
-                Mostrando {ventas.length} de {total} ventas
-              </p>
-              <Button variant="secondary" onClick={cargarMas} disabled={cargandoMas}>
-                {cargandoMas
-                  ? 'Cargando…'
-                  : `Ver ${Math.min(POR_PAGINA, total - ventas.length)} más`}
-              </Button>
-            </div>
+              {!cargando && !error && ventas.length < total && (
+                <div className="flex flex-col items-center gap-2 pt-2">
+                  <p className="text-xs text-tinta-suave">
+                    Mostrando {ventas.length} de {total} ventas
+                  </p>
+                  <Button variant="secondary" onClick={cargarMas} disabled={cargandoMas}>
+                    {cargandoMas
+                      ? 'Cargando…'
+                      : `Ver ${Math.min(POR_PAGINA, total - ventas.length)} más`}
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </Hoja>

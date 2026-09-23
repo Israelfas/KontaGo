@@ -27,4 +27,11 @@ export class ListarVentasDto extends RangoFechasDto {
   @IsInt()
   @Min(0)
   desplazamiento?: number;
+
+  // Buscar un ticket por su número (ignora las fechas).
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  numero?: number;
 }

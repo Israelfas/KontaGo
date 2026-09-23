@@ -11,6 +11,7 @@ import { VentasModule } from './modules/ventas/ventas.module';
 import { InventarioModule } from './modules/inventario/inventario.module';
 import { NotificacionesModule } from './modules/notificaciones/notificaciones.module';
 import { UsuariosModule } from './modules/usuarios/usuarios.module';
+import { CajaModule } from './modules/caja/caja.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -50,6 +51,7 @@ import { AppService } from './app.service';
     InventarioModule,
     NotificacionesModule,
     UsuariosModule,
+    CajaModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,12 +1,16 @@
 import type {
   AlertasProductos,
+  MetodoPago,
   MotivoMerma,
   PaginaDeVentas,
   Producto,
   ResumenDelDia,
   ResumenMovimientosDelDia,
   ResumenPeriodo,
+  Ticket,
+  TipoMovimientoCaja,
   TokenPair,
+  TurnoCaja,
   UsuarioEquipo,
   Venta,
   VentaDelHistorial,
@@ -348,7 +352,9 @@ export async function buscarPorCodigoBarras(
 
 export interface CrearVentaInput {
   items: { productoId: string; cantidad: number }[];
-  montoRecibidoCentavos: number;
+  metodoPago: MetodoPago;
+  // Solo en efectivo (en transferencia se paga el total exacto).
+  montoRecibidoCentavos?: number;
 }
 
 export function crearVenta(token: string, dto: CrearVentaInput): Promise<Venta> {
@@ -410,6 +416,11 @@ export function listarVentas(
     desplazamiento: String(desplazamiento),
   });
   return apiFetch<PaginaDeVentas>(`/ventas?${q}`, { token });
+}
+
+// Un ticket por su número, de cualquier fecha. Solo admin.
+export function buscarVentaPorNumero(token: string, numero: number): Promise<PaginaDeVentas> {
+  return apiFetch<PaginaDeVentas>(`/ventas?numero=${numero}`, { token });
 }
 
 // --- Inventario ---
@@ -476,4 +487,68 @@ export function obtenerResumenInventarioDelDia(token: string): Promise<ResumenMo
 export function obtenerAlertas(token: string, diasVencimiento?: number): Promise<AlertasProductos> {
   const query = diasVencimiento ? `?diasVencimiento=${diasVencimiento}` : '';
   return apiFetch<AlertasProductos>(`/productos/alertas${query}`, { token });
+}
+
+// --- Caja ---
+
+// Mi caja abierta, o null si no tengo.
+export async function obtenerCajaActual(token: string): Promise<TurnoCaja | null> {
+  return (await apiFetch<{ turno: TurnoCaja | null }>('/caja/actual', { token })).turno;
+}
+
+export function abrirCaja(token: string, fondoInicialCentavos: number): Promise<TurnoCaja> {
+  return apiFetch<TurnoCaja>('/caja/abrir', {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ fondoInicialCentavos }),
+  });
+}
+
+export interface MovimientoCajaInput {
+  tipo: TipoMovimientoCaja;
+  montoCentavos: number;
+  motivo: string;
+}
+
+export function registrarMovimientoCaja(
+  token: string,
+  dto: MovimientoCajaInput,
+): Promise<TurnoCaja> {
+  return apiFetch<TurnoCaja>('/caja/movimientos', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(dto),
+  });
+}
+
+export interface CerrarCajaInput {
+  efectivoContadoCentavos: number;
+  nota?: string;
+}
+
+// Cierra mi caja (o, con turnoId, la de otro: solo admin).
+export function cerrarCaja(
+  token: string,
+  dto: CerrarCajaInput,
+  turnoId?: string,
+): Promise<TurnoCaja> {
+  return apiFetch<TurnoCaja>(turnoId ? `/caja/turnos/${turnoId}/cerrar` : '/caja/cerrar', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(dto),
+  });
+}
+
+// Turnos de todo el equipo abiertos en el período, más los que siguen
+// abiertos. Solo admin.
+export function listarTurnosCaja(token: string, rango: RangoDeFechas): Promise<TurnoCaja[]> {
+  return apiFetch<TurnoCaja[]>(
+    `/caja/turnos?desde=${encodeURIComponent(rango.desde)}&hasta=${encodeURIComponent(rango.hasta)}`,
+    { token },
+  );
+}
+
+// El ticket de una venta (el cajero, solo de ventas de hoy).
+export function obtenerTicket(token: string, ventaId: string): Promise<Ticket> {
+  return apiFetch<Ticket>(`/ventas/${ventaId}/ticket`, { token });
 }

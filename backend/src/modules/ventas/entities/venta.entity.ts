@@ -12,6 +12,8 @@ import { Tenant } from '../../tenants/entities/tenant.entity';
 import { Usuario } from '../../auth/entities/usuario.entity';
 import { VentaItem } from './venta-item.entity';
 import { AnulacionVenta } from './anulacion-venta.entity';
+import { TurnoCaja } from '../../caja/entities/turno-caja.entity';
+import { MetodoPago } from '../../../common/enums/metodo-pago.enum';
 
 /**
  * Cabecera de una venta (ticket).
@@ -21,6 +23,7 @@ import { AnulacionVenta } from './anulacion-venta.entity';
  */
 @Entity('ventas')
 @Index(['tenantId', 'createdAt'])
+@Index('IDX_ventas_tenant_numero', ['tenantId', 'numero'], { unique: true })
 export class Venta {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -39,9 +42,14 @@ export class Venta {
   @JoinColumn({ name: 'usuario_id' })
   usuario: Usuario;
 
+  // Número de ticket: 1, 2, 3… por tienda, sin saltos.
+  @Column({ type: 'integer' })
+  numero: number;
+
   @Column({ name: 'total_centavos', type: 'integer' })
   totalCentavos: number;
 
+  // Efectivo: lo que dio el cliente. Transferencia: igual al total.
   @Column({ name: 'monto_recibido_centavos', type: 'integer' })
   montoRecibidoCentavos: number;
 
@@ -52,6 +60,23 @@ export class Venta {
   // ingreso real de la venta es totalCentavos - totalAnuladoCentavos.
   @Column({ name: 'total_anulado_centavos', type: 'integer', default: 0 })
   totalAnuladoCentavos: number;
+
+  // Solo el efectivo entra al cajón y al arqueo.
+  @Column({
+    name: 'metodo_pago',
+    type: 'enum',
+    enum: MetodoPago,
+    default: MetodoPago.EFECTIVO,
+  })
+  metodoPago: MetodoPago;
+
+  // Turno de caja en el que se cobró (null en ventas de antes del arqueo).
+  @Column({ name: 'turno_id', type: 'uuid', nullable: true })
+  turnoId: string | null;
+
+  @ManyToOne(() => TurnoCaja, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'turno_id' })
+  turno: TurnoCaja | null;
 
   @OneToMany(() => VentaItem, (item) => item.venta, { cascade: true })
   items: VentaItem[];

@@ -178,7 +178,11 @@ function ContenidoDashboard() {
               <Pieza
                 etiqueta="Ticket promedio"
                 valor={formatearCentavos(ticketPromedioCentavos)}
-                detalle="Por cliente"
+                detalle={
+                  resumen.transferenciaCentavos > 0
+                    ? `Por cliente · ${formatearCentavos(resumen.transferenciaCentavos)} por transferencia`
+                    : 'Por cliente · todo en efectivo'
+                }
               />
               <Pieza
                 etiqueta="IVA incluido"

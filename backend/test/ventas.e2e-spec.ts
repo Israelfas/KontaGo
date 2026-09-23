@@ -1,6 +1,7 @@
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DataSource } from 'typeorm';
 import {
+  abrirCaja,
   cliente,
   crearApp,
   crearCajero,
@@ -32,6 +33,8 @@ describe('Ventas, anulaciones y lotes', () => {
     app = await crearApp();
     admin = (await crearTienda(app)).accessToken;
     cajero = (await crearCajero(app, admin)).accessToken;
+    await abrirCaja(app, admin);
+    await abrirCaja(app, cajero);
   });
   afterAll(() => app.close());
 
@@ -248,6 +251,122 @@ describe('Ventas, anulaciones y lotes', () => {
       await cliente(app, cajero)
         .put(`/inventario/productos/${p.id}/lotes`, { lotes: [] })
         .expect(403);
+    });
+  });
+
+  describe('número de ticket', () => {
+    it('numera 1, 2, 3… por tienda, sin repetir aunque las ventas sean simultáneas', async () => {
+      const otra = (await crearTienda(app)).accessToken;
+      await abrirCaja(app, otra);
+      const p = await crearProducto(app, otra, { stockInicial: 50 });
+      const ventas = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          cliente(app, otra).post('/ventas', {
+            items: [{ productoId: p.id, cantidad: 1 }],
+            montoRecibidoCentavos: 1000,
+          }),
+        ),
+      );
+      const numeros = ventas
+        .map((r) => (r.body as { numero: number }).numero)
+        .sort((x, y) => x - y);
+      expect(numeros).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    });
+
+    it('una venta que falla no gasta número', async () => {
+      const otra = (await crearTienda(app)).accessToken;
+      await abrirCaja(app, otra);
+      const p = await crearProducto(app, otra, { stockInicial: 1 });
+      const vender = (cantidad: number) =>
+        cliente(app, otra).post('/ventas', {
+          items: [{ productoId: p.id, cantidad }],
+          montoRecibidoCentavos: 1000,
+        });
+      await vender(5).expect(400); // sin stock
+      const ok = await vender(1).expect(201);
+      expect((ok.body as { numero: number }).numero).toBe(1);
+    });
+
+    it('se puede buscar un ticket por su número', async () => {
+      const p = await crearProducto(app, admin);
+      const venta = (await vender(cajero, [{ productoId: p.id, cantidad: 1 }]))
+        .body as { id: string; numero: number };
+      const res = await cliente(app, admin)
+        .get(`/ventas?numero=${venta.numero}`)
+        .expect(200);
+      const pagina = res.body as { ventas: { id: string }[]; total: number };
+      expect(pagina.total).toBe(1);
+      expect(pagina.ventas[0].id).toBe(venta.id);
+    });
+  });
+
+  describe('ticket', () => {
+    it('trae el desglose de IVA como en Ecuador (0% y 15%)', async () => {
+      const conIva = await crearProducto(app, admin, {
+        precioVentaCentavos: 115,
+      });
+      const exento = await crearProducto(app, admin, {
+        precioVentaCentavos: 100,
+        ivaExento: true,
+      });
+      const venta = (
+        await vender(
+          cajero,
+          [
+            { productoId: conIva.id, cantidad: 2 },
+            { productoId: exento.id, cantidad: 1 },
+          ],
+          500,
+        )
+      ).body as { id: string; numero: number };
+      const ticket = (
+        await cliente(app, cajero).get(`/ventas/${venta.id}/ticket`).expect(200)
+      ).body as {
+        numero: number;
+        tienda: string;
+        subtotalConIvaCentavos: number;
+        subtotalSinIvaCentavos: number;
+        ivaCentavos: number;
+        tarifaIva: number;
+        totalCentavos: number;
+        vueltoCentavos: number;
+        lineas: unknown[];
+      };
+      expect(ticket.numero).toBe(venta.numero);
+      expect(ticket.tienda).toBe('Tienda de prueba');
+      expect(ticket.lineas).toHaveLength(2);
+      expect(ticket.subtotalConIvaCentavos).toBe(200);
+      expect(ticket.subtotalSinIvaCentavos).toBe(100);
+      expect(ticket.ivaCentavos).toBe(30);
+      expect(ticket.tarifaIva).toBe(15);
+      expect(
+        ticket.subtotalConIvaCentavos +
+          ticket.subtotalSinIvaCentavos +
+          ticket.ivaCentavos,
+      ).toBe(ticket.totalCentavos);
+      expect(ticket.vueltoCentavos).toBe(170);
+    });
+
+    it('el cajero no ve tickets de otros días; el admin sí', async () => {
+      const p = await crearProducto(app, admin);
+      const venta = (await vender(cajero, [{ productoId: p.id, cantidad: 1 }]))
+        .body as { id: string };
+      await app
+        .get(DataSource)
+        .query(
+          `UPDATE ventas SET created_at = created_at - interval '3 days' WHERE id = $1`,
+          [venta.id],
+        );
+      await cliente(app, cajero).get(`/ventas/${venta.id}/ticket`).expect(404);
+      await cliente(app, admin).get(`/ventas/${venta.id}/ticket`).expect(200);
+    });
+
+    it('otra tienda no puede ver el ticket', async () => {
+      const p = await crearProducto(app, admin);
+      const venta = (await vender(cajero, [{ productoId: p.id, cantidad: 1 }]))
+        .body as { id: string };
+      const otra = (await crearTienda(app)).accessToken;
+      await cliente(app, otra).get(`/ventas/${venta.id}/ticket`).expect(404);
     });
   });
 

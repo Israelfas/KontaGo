@@ -14,6 +14,12 @@ export class StockInsuficienteError extends BadRequestException {
   }
 }
 
+export class FaltaMontoRecibidoError extends BadRequestException {
+  constructor() {
+    super('En efectivo hay que indicar cuánto pagó el cliente');
+  }
+}
+
 export class MontoRecibidoInsuficienteError extends BadRequestException {
   constructor(totalCentavos: number, montoRecibidoCentavos: number) {
     super(

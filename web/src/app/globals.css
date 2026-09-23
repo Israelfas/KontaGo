@@ -961,3 +961,41 @@ select:focus-visible {
   color: #f3b6a6;
   font-size: 0.8rem;
 }
+
+/* Ticket de venta (app/ticket/[id]): el papel de la impresora térmica.
+   El ancho útil es un poco menor que el del rollo por los márgenes que
+   no imprime la cabeza térmica. */
+.ticket {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ticket-80 {
+  width: 72mm;
+}
+
+.ticket-58 {
+  width: 48mm;
+  font-size: 10.5px;
+}
+
+@media print {
+  /* Solo el ticket, sin márgenes: la impresora corta al final. */
+  @page {
+    margin: 0;
+  }
+
+  .no-imprimir {
+    display: none !important;
+  }
+
+  body,
+  .ticket-pagina {
+    background: #fff !important;
+  }
+
+  .ticket {
+    margin: 0 !important;
+    padding: 2mm 0 !important;
+  }
+}

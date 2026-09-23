@@ -6,6 +6,15 @@ import { Venta } from './entities/venta.entity';
 import { VentaItem } from './entities/venta-item.entity';
 import { VentaItemLote } from './entities/venta-item-lote.entity';
 import { devolverALotes, sacarDeLotes } from '../inventario/lotes';
+import {
+  registrarMovimiento,
+  turnoAbiertoDe,
+  turnoCompartido,
+} from '../caja/turnos';
+import { TipoMovimientoCaja } from '../caja/entities/movimiento-caja.entity';
+import { CajaCerradaError, DevolucionSinCajaError } from '../caja/caja.errors';
+import type { TurnoCaja } from '../caja/entities/turno-caja.entity';
+import { MetodoPago } from '../../common/enums/metodo-pago.enum';
 import { CrearVentaDto } from './dto/crear-venta.dto';
 import {
   ProductoVendido,
@@ -15,6 +24,9 @@ import {
 import { rangoDeHoy, type RangoFechas } from './rango-fechas';
 import { AnularVentaDto } from './dto/anular-venta.dto';
 import { VentaDelHistorialDto } from './dto/venta-del-historial.dto';
+import { TicketDto } from './dto/ticket.dto';
+import { Tenant } from '../tenants/entities/tenant.entity';
+import { Rol } from '../../common/enums/rol.enum';
 import {
   AnulacionVenta,
   DetalleAnulacion,
@@ -22,6 +34,7 @@ import {
 import { fechaLocal } from '../../common/formato-fecha';
 import {
   CantidadAAnularInvalidaError,
+  FaltaMontoRecibidoError,
   LineaDeOtraVentaError,
   MontoRecibidoInsuficienteError,
   ProductoNoEncontradoError,
@@ -86,7 +99,26 @@ export class VentasService {
     usuarioId: string,
     dto: CrearVentaDto,
   ): Promise<VentaConDesglose> {
+    const metodoPago = dto.metodoPago ?? MetodoPago.EFECTIVO;
+    if (
+      metodoPago === MetodoPago.EFECTIVO &&
+      dto.montoRecibidoCentavos === undefined
+    ) {
+      throw new FaltaMontoRecibidoError();
+    }
+
     return this.dataSource.transaction(async (manager) => {
+      // Sin caja abierta no se cobra: toda venta tiene que caer en un
+      // turno, si no el arqueo no cuadra. Bloqueo compartido: el cierre
+      // de caja espera a que termine esta venta (ver caja/turnos.ts).
+      const turno = await turnoAbiertoDe(
+        manager,
+        tenantId,
+        usuarioId,
+        'compartido',
+      );
+      if (!turno) throw new CajaCerradaError();
+
       const productoRepo = manager.getRepository(Producto);
       let totalCentavos = 0;
       const items: VentaItem[] = [];
@@ -155,20 +187,42 @@ export class VentasService {
 
       await productoRepo.save([...productos.values()]);
 
-      if (dto.montoRecibidoCentavos < totalCentavos) {
+      // Transferencia: se paga el total exacto, sin vuelto.
+      const montoRecibidoCentavos =
+        metodoPago === MetodoPago.TRANSFERENCIA
+          ? totalCentavos
+          : dto.montoRecibidoCentavos!;
+      if (montoRecibidoCentavos < totalCentavos) {
         throw new MontoRecibidoInsuficienteError(
           totalCentavos,
-          dto.montoRecibidoCentavos,
+          montoRecibidoCentavos,
         );
       }
 
       const venta = new Venta();
       venta.tenantId = tenantId;
       venta.usuarioId = usuarioId;
+      venta.turnoId = turno.id;
+      venta.metodoPago = metodoPago;
       venta.totalCentavos = totalCentavos;
-      venta.montoRecibidoCentavos = dto.montoRecibidoCentavos;
-      venta.vueltoCentavos = dto.montoRecibidoCentavos - totalCentavos;
+      venta.montoRecibidoCentavos = montoRecibidoCentavos;
+      venta.vueltoCentavos = montoRecibidoCentavos - totalCentavos;
       venta.items = items;
+
+      // El número de ticket va al final, justo antes de guardar: el contador
+      // de la tienda queda bloqueado hasta el commit, así que cuanto menos
+      // dure, menos esperan las otras cajas. Si algo falla después, el
+      // rollback deshace también el incremento (no quedan saltos).
+      // Con Postgres, TypeORM devuelve un UPDATE … RETURNING como
+      // [filas, cantidad de filas afectadas].
+      const [filas] = await manager.query<
+        [{ ultimo_numero_venta: number }[], number]
+      >(
+        `UPDATE tenants SET ultimo_numero_venta = ultimo_numero_venta + 1
+          WHERE id = $1 RETURNING ultimo_numero_venta`,
+        [tenantId],
+      );
+      venta.numero = filas[0].ultimo_numero_venta;
 
       const ventaRepo = manager.getRepository(Venta);
       const ventaGuardada = await ventaRepo.save(venta);
@@ -285,6 +339,13 @@ export class VentasService {
         (acc, venta) => acc + venta.totalAnuladoCentavos,
         0,
       ),
+      // Lo cobrado, separado por cómo se pagó.
+      efectivoCentavos: ventas
+        .filter((venta) => venta.metodoPago === MetodoPago.EFECTIVO)
+        .reduce((acc, venta) => acc + neto(venta), 0),
+      transferenciaCentavos: ventas
+        .filter((venta) => venta.metodoPago === MetodoPago.TRANSFERENCIA)
+        .reduce((acc, venta) => acc + neto(venta), 0),
       agrupadoPor,
       serie:
         agrupadoPor === 'hora'
@@ -309,8 +370,9 @@ export class VentasService {
     rango: RangoFechas,
     limite = 50,
     desplazamiento = 0,
+    numero?: number,
   ): Promise<{ ventas: VentaDelHistorialDto[]; total: number }> {
-    const [ventas, total] = await this.dataSource
+    const consulta = this.dataSource
       .getRepository(Venta)
       .createQueryBuilder('venta')
       .leftJoinAndSelect('venta.usuario', 'vendedor')
@@ -318,9 +380,16 @@ export class VentasService {
       .leftJoinAndSelect('item.producto', 'producto')
       .leftJoinAndSelect('venta.anulaciones', 'anulacion')
       .leftJoinAndSelect('anulacion.usuario', 'anuladoPor')
-      .where('venta.tenantId = :tenantId', { tenantId })
-      .andWhere('venta.createdAt >= :inicio', { inicio: rango.inicio })
-      .andWhere('venta.createdAt < :fin', { fin: rango.finExclusivo })
+      .where('venta.tenantId = :tenantId', { tenantId });
+    // Buscar un ticket por su número: de cualquier fecha.
+    if (numero !== undefined) {
+      consulta.andWhere('venta.numero = :numero', { numero });
+    } else {
+      consulta
+        .andWhere('venta.createdAt >= :inicio', { inicio: rango.inicio })
+        .andWhere('venta.createdAt < :fin', { fin: rango.finExclusivo });
+    }
+    const [ventas, total] = await consulta
       .orderBy('venta.createdAt', 'DESC')
       .addOrderBy('anulacion.createdAt', 'ASC')
       .skip(desplazamiento)
@@ -335,6 +404,64 @@ export class VentasService {
    * anulaciones. Lo ve cualquier rol (el cajero necesita encontrar la
    * venta para avisarle al admin cuál anular), así que no expone costos.
    */
+  /**
+   * El ticket de una venta, para imprimir o compartir. El admin, de
+   * cualquier día; el cajero, de las de hoy (las mismas que ve en su
+   * historial).
+   */
+  async obtenerTicket(
+    tenantId: string,
+    rol: Rol,
+    ventaId: string,
+  ): Promise<TicketDto> {
+    const venta = await this.dataSource.getRepository(Venta).findOne({
+      where: { id: ventaId, tenantId },
+      relations: { usuario: true, items: { producto: true } },
+    });
+    if (!venta) throw new VentaNoEncontradaError(ventaId);
+    if (rol !== Rol.ADMIN && venta.createdAt < inicioDelDia()) {
+      throw new VentaNoEncontradaError(ventaId);
+    }
+    const tenant = await this.dataSource
+      .getRepository(Tenant)
+      .findOneByOrFail({ id: tenantId });
+
+    // Sin IVA = línea exenta (tarifa 0%): su IVA congelado es 0.
+    const conIva = venta.items.filter((item) => item.ivaCentavos > 0);
+    const sinIva = venta.items.filter((item) => item.ivaCentavos === 0);
+    const bruto = (item: VentaItem) => item.precioVentaCentavos * item.cantidad;
+    const ivaCentavos = conIva.reduce((acc, item) => acc + item.ivaCentavos, 0);
+
+    return {
+      tienda: tenant.nombre,
+      numero: venta.numero,
+      fecha: venta.createdAt,
+      cajero: venta.usuario.nombre,
+      metodoPago: venta.metodoPago,
+      lineas: venta.items.map((item) => ({
+        nombre: item.producto.nombre,
+        cantidad: item.cantidad,
+        precioUnitarioCentavos: item.precioVentaCentavos,
+        totalCentavos: bruto(item),
+        cantidadAnulada: item.cantidadAnulada,
+      })),
+      subtotalConIvaCentavos:
+        conIva.reduce((acc, item) => acc + bruto(item), 0) - ivaCentavos,
+      subtotalSinIvaCentavos: sinIva.reduce(
+        (acc, item) => acc + bruto(item),
+        0,
+      ),
+      ivaCentavos,
+      tarifaIva: Math.round(
+        this.config.get<number>('impuestos.tarifaIvaGeneral')! * 100,
+      ),
+      totalCentavos: venta.totalCentavos,
+      montoRecibidoCentavos: venta.montoRecibidoCentavos,
+      vueltoCentavos: venta.vueltoCentavos,
+      anuladoCentavos: venta.totalAnuladoCentavos,
+    };
+  }
+
   async obtenerHistorialDelDia(
     tenantId: string,
   ): Promise<VentaDelHistorialDto[]> {
@@ -390,6 +517,24 @@ export class VentasService {
       }
       if (venta.createdAt < inicioDelDia()) {
         throw new VentaDeOtroDiaError();
+      }
+
+      // El efectivo que se devuelve sale de un cajón. Si el turno de la
+      // venta sigue abierto, basta con descontarla (su arqueo la ve con
+      // menos). Si ya se cerró (su efectivo ya se contó), la devolución
+      // sale de la caja abierta de quien anula, como un retiro.
+      let cajaDeLaDevolucion: TurnoCaja | null = null;
+      if (venta.metodoPago === MetodoPago.EFECTIVO && venta.turnoId) {
+        const turnoDeLaVenta = await turnoCompartido(manager, venta.turnoId);
+        if (turnoDeLaVenta?.cerradoEn) {
+          cajaDeLaDevolucion = await turnoAbiertoDe(
+            manager,
+            tenantId,
+            usuarioId,
+            'compartido',
+          );
+          if (!cajaDeLaDevolucion) throw new DevolucionSinCajaError();
+        }
       }
 
       const items = await itemRepo.find({
@@ -488,6 +633,20 @@ export class VentasService {
       await itemRepo.save([...aAnular.keys()].map((id) => itemsPorId.get(id)!));
 
       venta.totalAnuladoCentavos += montoDevueltoCentavos;
+      if (cajaDeLaDevolucion) {
+        const hora = venta.createdAt.toLocaleTimeString('es-EC', {
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+        await registrarMovimiento(
+          manager,
+          cajaDeLaDevolucion,
+          usuarioId,
+          TipoMovimientoCaja.RETIRO,
+          montoDevueltoCentavos,
+          `Devolución del ticket ${numeroDeTicket(venta.numero)} de las ${hora} (turno ya cerrado)`,
+        );
+      }
       await ventaRepo.save(venta);
 
       const anulacionRepo = manager.getRepository(AnulacionVenta);
@@ -582,6 +741,11 @@ function inicioDelDia(): Date {
   return inicio;
 }
 
+/** "#0245": el número como se imprime y se dice ("anulá la 245"). */
+export function numeroDeTicket(numero: number): string {
+  return `#${String(numero).padStart(4, '0')}`;
+}
+
 function aVentaDelHistorial(venta: Venta): VentaDelHistorialDto {
   const estado =
     venta.totalAnuladoCentavos === 0
@@ -596,6 +760,8 @@ function aVentaDelHistorial(venta: Venta): VentaDelHistorialDto {
     vendedor: venta.usuario.nombre,
     totalCentavos: venta.totalCentavos,
     totalAnuladoCentavos: venta.totalAnuladoCentavos,
+    numero: venta.numero,
+    metodoPago: venta.metodoPago,
     montoRecibidoCentavos: venta.montoRecibidoCentavos,
     vueltoCentavos: venta.vueltoCentavos,
     estado,

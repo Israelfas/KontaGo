@@ -95,6 +95,16 @@ export function PerfilScreen() {
               </View>
             </Tarjeta>
 
+            {/* La caja es de cada uno: cajero y admin. */}
+            <Text style={styles.seccionTitulo}>Tu caja</Text>
+            <Tarjeta style={styles.grupoOpciones}>
+              <FilaOpcion
+                icono="cash-outline"
+                titulo="Caja (abrir, retiros, cierre)"
+                onPress={() => navigation.navigate('Caja')}
+              />
+            </Tarjeta>
+
             {/* Equipo y suscripción son de la tienda: solo el admin. */}
             {perfil.rol === 'admin' && (
               <>

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -12,16 +12,24 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useAuth } from '../lib/auth-context';
-import { buscarPorCodigoBarras, crearProducto, crearVenta, ApiError } from '../lib/api';
-import { formatearCentavos } from '../lib/formato';
+import {
+  buscarPorCodigoBarras,
+  crearProducto,
+  crearVenta,
+  obtenerCajaActual,
+  ApiError,
+} from '../lib/api';
+import { formatearCentavos, numeroDeTicket } from '../lib/formato';
+import { compartirTicket } from '../lib/ticket-texto';
 import { centavosATexto, montosRapidos } from '../lib/montos-rapidos';
-import { Boton, EstadoVacio, Etiqueta, estilosCampo } from '../components/ui';
+import { Boton, EstadoCargando, EstadoError, EstadoVacio, Etiqueta, estilosCampo } from '../components/ui';
+import { FormularioAbrirCaja } from '../components/caja';
 import { colores, espaciado, radios } from '../theme/colores';
-import type { Producto, Venta } from '../lib/tipos';
+import type { MetodoPago, Producto, TurnoCaja, Venta } from '../lib/tipos';
 import { EscanerCamara } from '../components/escaner-camara';
 import { Banda, LabioHoja } from '../components/banda';
 
@@ -140,6 +148,10 @@ export function VentaScreen() {
   const [confirmacionEscaneo, setConfirmacionEscaneo] = useState<string | null>(null);
   const confirmacionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Sin caja abierta no se vende (undefined = todavía no se sabe).
+  const [caja, setCaja] = useState<TurnoCaja | null | undefined>(undefined);
+  const [errorCaja, setErrorCaja] = useState<string | null>(null);
+  const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
   const [montoRecibido, setMontoRecibido] = useState('');
   const [errorVenta, setErrorVenta] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
@@ -151,6 +163,21 @@ export function VentaScreen() {
   );
   const montoRecibidoCentavos = montoRecibido ? Math.round(parseFloat(montoRecibido) * 100) : null;
   const vueltoCentavos = montoRecibidoCentavos !== null ? montoRecibidoCentavos - totalCentavos : null;
+  const efectivo = metodoPago === 'efectivo';
+  const puedeCobrar =
+    carrito.length > 0 &&
+    (!efectivo || (montoRecibidoCentavos !== null && vueltoCentavos !== null && vueltoCentavos >= 0));
+
+  // Cada vez que se vuelve a esta pestaña: la caja pudo cerrarse desde la
+  // pantalla Caja (o el admin).
+  const revisarCaja = useCallback(() => {
+    if (!token) return;
+    setErrorCaja(null);
+    obtenerCajaActual(token)
+      .then(setCaja)
+      .catch((err) => setErrorCaja(err instanceof ApiError ? err.message : 'No se pudo revisar la caja'));
+  }, [token]);
+  useFocusEffect(revisarCaja);
 
   function agregarAlCarrito(producto: Producto) {
     setCarrito((prev) => {
@@ -221,18 +248,25 @@ export function VentaScreen() {
   }
 
   async function confirmarVenta() {
-    if (!token || carrito.length === 0 || montoRecibidoCentavos === null) return;
+    if (!token || !puedeCobrar) return;
     setErrorVenta(null);
     setProcesando(true);
     try {
       const venta = await crearVenta(token, {
         items: carrito.map((i) => ({ productoId: i.producto.id, cantidad: i.cantidad })),
-        montoRecibidoCentavos,
+        metodoPago,
+        ...(efectivo ? { montoRecibidoCentavos: montoRecibidoCentavos! } : {}),
       });
       setVentaConfirmada(venta);
       setCarrito([]);
       setMontoRecibido('');
+      setMetodoPago('efectivo');
     } catch (err) {
+      // La caja se cerró mientras tanto: volver a pedir que se abra.
+      if (err instanceof ApiError && err.statusCode === 409) {
+        setCaja(null);
+        return;
+      }
       setErrorVenta(err instanceof ApiError ? err.message : 'No se pudo registrar la venta');
     } finally {
       setProcesando(false);
@@ -246,7 +280,9 @@ export function VentaScreen() {
           <View style={styles.confirmacionIconoFondo}>
             <Ionicons name="checkmark" size={32} color={colores.verdeGanancia} />
           </View>
-          <Text style={styles.confirmacionEtiqueta}>VENTA REGISTRADA</Text>
+          <Text style={styles.confirmacionEtiqueta}>
+            VENTA REGISTRADA · TICKET {numeroDeTicket(ventaConfirmada.numero)}
+          </Text>
           <Text style={styles.confirmacionTotal}>
             {formatearCentavos(ventaConfirmada.totalCentavos)}
           </Text>
@@ -265,25 +301,60 @@ export function VentaScreen() {
               </Text>
             </View>
             <View style={styles.confirmacionDivisor} />
-            <View style={styles.confirmacionFila}>
-              <Text style={styles.confirmacionLabel}>Recibido</Text>
-              <Text style={styles.confirmacionValor}>
-                {formatearCentavos(ventaConfirmada.montoRecibidoCentavos)}
-              </Text>
-            </View>
-            <View style={styles.confirmacionFila}>
+            {ventaConfirmada.metodoPago === 'transferencia' ? (
               <Text style={[styles.confirmacionLabel, { fontWeight: '700', color: colores.tinta }]}>
-                Vuelto
+                Pagado por transferencia
               </Text>
-              <Text style={[styles.confirmacionValor, { color: colores.ambar, fontSize: 19, fontWeight: '800' }]}>
-                {formatearCentavos(ventaConfirmada.vueltoCentavos)}
-              </Text>
-            </View>
+            ) : (
+              <>
+                <View style={styles.confirmacionFila}>
+                  <Text style={styles.confirmacionLabel}>Recibido</Text>
+                  <Text style={styles.confirmacionValor}>
+                    {formatearCentavos(ventaConfirmada.montoRecibidoCentavos)}
+                  </Text>
+                </View>
+                <View style={styles.confirmacionFila}>
+                  <Text style={[styles.confirmacionLabel, { fontWeight: '700', color: colores.tinta }]}>
+                    Vuelto
+                  </Text>
+                  <Text
+                    style={[styles.confirmacionValor, { color: colores.ambar, fontSize: 19, fontWeight: '800' }]}
+                  >
+                    {formatearCentavos(ventaConfirmada.vueltoCentavos)}
+                  </Text>
+                </View>
+              </>
+            )}
           </View>
 
           <Boton onPress={() => setVentaConfirmada(null)} style={{ marginTop: espaciado.lg, width: '100%' }}>
             Nueva venta
           </Boton>
+          <Boton
+            variante="secondary"
+            onPress={() => token && compartirTicket(token, ventaConfirmada.id)}
+            style={{ marginTop: espaciado.sm, width: '100%' }}
+          >
+            Compartir ticket
+          </Boton>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!caja) {
+    return (
+      <SafeAreaView style={styles.contenedor} edges={[]}>
+        <Banda
+          eyebrow="Caja"
+          titulo="Vender"
+          detalle={caja === null ? 'Tu caja está cerrada. Abrila para empezar a cobrar.' : undefined}
+        />
+        <LabioHoja />
+        <View style={{ paddingHorizontal: espaciado.lg }}>
+          {errorCaja && <EstadoError mensaje={errorCaja} onReintentar={revisarCaja} />}
+          {caja === undefined && !errorCaja && <EstadoCargando texto="Revisando la caja…" />}
+          {caja === null && <FormularioAbrirCaja onAbierta={setCaja} />}
         </View>
       </SafeAreaView>
     );
@@ -303,14 +374,25 @@ export function VentaScreen() {
               }`
         }
         accion={
-          <Pressable
-            onPress={() => navigation.navigate('VentasHoy')}
-            style={styles.botonVentasHoy}
-            hitSlop={8}
-          >
-            <Ionicons name="receipt-outline" size={18} color={colores.papel} />
-            <Text style={styles.botonVentasHoyTexto}>Hoy</Text>
-          </Pressable>
+          <View style={{ flexDirection: 'row', gap: espaciado.xs }}>
+            <Pressable
+              onPress={() => navigation.navigate('Caja')}
+              style={styles.botonVentasHoy}
+              hitSlop={8}
+              accessibilityLabel="Mi caja"
+            >
+              <Ionicons name="cash-outline" size={18} color={colores.papel} />
+              <Text style={styles.botonVentasHoyTexto}>Caja</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => navigation.navigate('VentasHoy')}
+              style={styles.botonVentasHoy}
+              hitSlop={8}
+            >
+              <Ionicons name="receipt-outline" size={18} color={colores.papel} />
+              <Text style={styles.botonVentasHoyTexto}>Hoy</Text>
+            </Pressable>
+          </View>
         }
       />
       <LabioHoja />
@@ -370,6 +452,38 @@ export function VentaScreen() {
   const piePagina =
     carrito.length === 0 ? null : (
       <View style={styles.footer}>
+        <Etiqueta>Cómo paga</Etiqueta>
+        <View style={styles.metodos} accessibilityRole="radiogroup">
+          {(
+            [
+              ['efectivo', 'Efectivo'],
+              ['transferencia', 'Transferencia'],
+            ] as const
+          ).map(([valor, texto]) => (
+            <Pressable
+              key={valor}
+              onPress={() => {
+                setMetodoPago(valor);
+                setErrorVenta(null);
+              }}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: metodoPago === valor }}
+              style={[styles.metodo, metodoPago === valor && styles.metodoActivo]}
+            >
+              <Text style={[styles.metodoTexto, metodoPago === valor && styles.metodoTextoActivo]}>{texto}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {!efectivo && (
+          <Text style={styles.avisoTransferencia}>
+            Confirmá en el celular que llegó la transferencia de {formatearCentavos(totalCentavos)} antes de
+            entregar. No entra al cajón.
+          </Text>
+        )}
+
+        {efectivo && (
+        <>
         <Etiqueta>Monto recibido</Etiqueta>
         <TextInput
           value={montoRecibido}
@@ -418,6 +532,8 @@ export function VentaScreen() {
             </Text>
           </View>
         )}
+        </>
+        )}
 
         {errorVenta && <Text style={styles.error}>{errorVenta}</Text>}
 
@@ -425,10 +541,10 @@ export function VentaScreen() {
           variante="success"
           onPress={confirmarVenta}
           cargando={procesando}
-          disabled={montoRecibidoCentavos === null || vueltoCentavos === null || vueltoCentavos < 0}
+          disabled={!puedeCobrar}
           style={{ marginTop: espaciado.sm }}
         >
-          Confirmar venta
+          {efectivo ? 'Confirmar venta' : 'Cobrar por transferencia'}
         </Boton>
 
         <Pressable
@@ -526,6 +642,29 @@ export function VentaScreen() {
 }
 
 const styles = StyleSheet.create({
+  metodos: { flexDirection: 'row', gap: espaciado.sm, marginBottom: espaciado.md },
+  metodo: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radios.md,
+    borderWidth: 1,
+    borderColor: colores.papelLinea,
+    backgroundColor: colores.superficie,
+  },
+  metodoActivo: { backgroundColor: colores.tinta, borderColor: colores.tinta },
+  metodoTexto: { fontSize: 14, fontWeight: '700', color: colores.tinta },
+  metodoTextoActivo: { color: colores.papel },
+  avisoTransferencia: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: colores.tinta,
+    backgroundColor: colores.papel,
+    borderRadius: radios.md,
+    padding: espaciado.md,
+    marginBottom: espaciado.sm,
+  },
   montosRapidos: { flexDirection: 'row', flexWrap: 'wrap', gap: espaciado.xs, marginBottom: espaciado.sm },
   montoRapido: {
     paddingHorizontal: espaciado.md,

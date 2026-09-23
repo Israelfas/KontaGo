@@ -36,6 +36,11 @@ export class Tenant {
   @Column({ default: true })
   activo: boolean;
 
+  // Último número de ticket entregado (ver ventas.numero). Lo incrementa
+  // la venta, dentro de su transacción.
+  @Column({ name: 'ultimo_numero_venta', type: 'integer', default: 0 })
+  ultimoNumeroVenta: number;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

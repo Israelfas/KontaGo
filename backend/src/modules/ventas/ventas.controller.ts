@@ -66,6 +66,7 @@ export class VentasController {
       armarRango(consulta.desde, consulta.hasta),
       consulta.limite,
       consulta.desplazamiento,
+      consulta.numero,
     );
   }
 
@@ -74,6 +75,16 @@ export class VentasController {
   @Get('hoy')
   historialDelDia(@CurrentUser() user: AuthenticatedUser) {
     return this.ventasService.obtenerHistorialDelDia(user.tenantId);
+  }
+
+  // El ticket para imprimir o compartir. Cualquier rol (el cajero, solo
+  // de ventas de hoy: ver el servicio).
+  @Get(':id/ticket')
+  ticket(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.ventasService.obtenerTicket(user.tenantId, user.rol, id);
   }
 
   // Solo admin: si un cajero pudiera anular, podría cobrar, anular y

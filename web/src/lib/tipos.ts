@@ -50,9 +50,14 @@ export interface VentaItem {
   ivaCentavos: number;
 }
 
+// Solo el efectivo entra al cajón (y al arqueo de caja).
+export type MetodoPago = 'efectivo' | 'transferencia';
+
 export interface Venta {
   id: string;
+  numero: number; // de ticket: 1, 2, 3… por tienda
   totalCentavos: number;
+  metodoPago: MetodoPago;
   montoRecibidoCentavos: number;
   vueltoCentavos: number;
   items: VentaItem[];
@@ -89,6 +94,9 @@ export interface ResumenPeriodo extends ResumenDelDia {
   desde: string;
   hasta: string;
   dias: number;
+  // Lo cobrado (neto de anulaciones) según cómo se pagó.
+  efectivoCentavos: number;
+  transferenciaCentavos: number;
   // Un día se grafica por hora; un rango, por día.
   agrupadoPor: 'hora' | 'dia';
   serie: PuntoSerie[];
@@ -104,10 +112,12 @@ export interface PaginaDeVentas {
 // el cajero).
 export interface VentaDelHistorial {
   id: string;
+  numero: number; // de ticket: 1, 2, 3… por tienda
   createdAt: string;
   vendedor: string;
   totalCentavos: number;
   totalAnuladoCentavos: number;
+  metodoPago: MetodoPago;
   montoRecibidoCentavos: number;
   vueltoCentavos: number;
   estado: 'completa' | 'parcialmente_anulada' | 'anulada';
@@ -166,4 +176,69 @@ export interface AlertasProductos {
   stockBajo: Producto[];
   porVencer: Producto[]; // con algún lote que vence en los próximos días
   vencidos: Producto[]; // con algún lote ya vencido (hay que darlo de baja)
+}
+
+// --- Caja (turnos y arqueo) ---
+
+export type TipoMovimientoCaja = 'retiro' | 'ingreso';
+
+export interface MovimientoCaja {
+  id: string;
+  tipo: TipoMovimientoCaja;
+  montoCentavos: number;
+  motivo: string;
+  usuario: string;
+  createdAt: string;
+}
+
+// Un turno de caja: lo abre un cajero con el fondo inicial y lo cierra
+// contando el efectivo.
+export interface TurnoCaja {
+  id: string;
+  estado: 'abierto' | 'cerrado';
+  cajero: string;
+  usuarioId: string;
+  abiertoEn: string;
+  cerradoEn: string | null;
+  cerradoPor: string | null;
+  fondoInicialCentavos: number;
+  cantidadVentas: number;
+  ventasTransferenciaCentavos: number;
+  ingresosCentavos: number;
+  retirosCentavos: number;
+  // Conteo a ciegas: el cajero no los recibe mientras su caja está abierta.
+  ventasEfectivoCentavos?: number;
+  efectivoEsperadoCentavos?: number;
+  // Solo cerrado. diferencia = contado − esperado (negativa = falta).
+  efectivoContadoCentavos?: number;
+  diferenciaCentavos?: number;
+  nota: string | null;
+  movimientos: MovimientoCaja[];
+}
+
+// --- Ticket (GET /ventas/:id/ticket) ---
+
+// La venta como se imprime o se comparte. No es la factura del SRI.
+export interface Ticket {
+  tienda: string;
+  numero: number;
+  fecha: string;
+  cajero: string;
+  metodoPago: MetodoPago;
+  lineas: {
+    nombre: string;
+    cantidad: number;
+    precioUnitarioCentavos: number;
+    totalCentavos: number;
+    cantidadAnulada: number;
+  }[];
+  // Desglose como en Ecuador: suman el total.
+  subtotalConIvaCentavos: number;
+  subtotalSinIvaCentavos: number;
+  ivaCentavos: number;
+  tarifaIva: number; // %, ej. 15
+  totalCentavos: number;
+  montoRecibidoCentavos: number;
+  vueltoCentavos: number;
+  anuladoCentavos: number;
 }

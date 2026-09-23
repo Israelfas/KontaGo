@@ -85,6 +85,11 @@ const MOVIMIENTO_SEMANAL = [0.7, 0.85, 0.85, 0.9, 1, 1.15, 1.3];
 const REPOSICIONES = [28, 21, 14, 7];
 // Rosa (hoy desactivada) atendió hasta hace dos semanas.
 const ROSA_HASTA_HACE = 15;
+// Cambio con el que arranca cada caja ($20).
+const FONDO_INICIAL = 2000;
+// Uno de cada cuatro paga por transferencia (Deuna, banco).
+const PROPORCION_TRANSFERENCIA = 0.25;
+
 const MOTIVOS_ANULACION = [
   'Se cobró dos veces',
   'El cliente cambió de marca',
@@ -212,6 +217,8 @@ try {
     await db.query('DELETE FROM anulaciones_venta WHERE tenant_id = $1', [tenantId]);
     await db.query('DELETE FROM venta_items WHERE venta_id IN (SELECT id FROM ventas WHERE tenant_id = $1)', [tenantId]);
     await db.query('DELETE FROM ventas WHERE tenant_id = $1', [tenantId]);
+    await db.query('DELETE FROM movimientos_caja WHERE tenant_id = $1', [tenantId]);
+    await db.query('DELETE FROM turnos_caja WHERE tenant_id = $1', [tenantId]);
     await db.query('DELETE FROM movimientos_inventario WHERE tenant_id = $1', [tenantId]);
     await db.query('DELETE FROM productos WHERE tenant_id = $1', [tenantId]);
     await db.query('DELETE FROM usuarios WHERE tenant_id = $1', [tenantId]);
@@ -244,6 +251,15 @@ try {
   const { rows: [{ tenant_id: tenantId }] } = await db.query('SELECT tenant_id FROM usuarios WHERE email = $1', [
     ADMIN.email,
   ]);
+  // Sin caja abierta no se vende: cada uno abre la suya. Las ventas de
+  // días pasados se reparten después en un turno por persona y por día
+  // (paso 6b).
+  const turnoInicial = {};
+  for (const [quien, token] of Object.entries(tokens)) {
+    turnoInicial[quien] = (
+      await api('/caja/abrir', { method: 'POST', token, body: { fondoInicialCentavos: FONDO_INICIAL } })
+    ).id;
+  }
   console.log('· Tienda y equipo creados');
 
   // 3. Planear las ventas: un mes de días completos y hoy.
@@ -282,7 +298,8 @@ try {
       anular = items.size > 1 || cantPrimera > 1 ? { clave: primera, cantidad: 1 } : 'total';
       if (azar() < 0.6) anular = 'total';
     }
-    return { cuando, items, vendedor: vendedorDe(hace), anular };
+    const transferencia = azar() < PROPORCION_TRANSFERENCIA;
+    return { cuando, items, vendedor: vendedorDe(hace), anular, transferencia };
   }
 
   const planes = [];
@@ -396,7 +413,9 @@ try {
       const venta = await api('/ventas', {
         method: 'POST',
         token: tokens[plan.vendedor],
-        body: { items, montoRecibidoCentavos: recibido },
+        body: plan.transferencia
+          ? { items, metodoPago: 'transferencia' }
+          : { items, montoRecibidoCentavos: recibido },
       });
       if (plan.anular) {
         const linea = plan.anular === 'total' ? null : venta.items.find((i) => i.productoId === ids.get(plan.anular.clave));
@@ -418,6 +437,97 @@ try {
       [anuladasAntes],
     );
   }
+
+  // Las ventas se crearon de a varias y después se llevaron a su fecha: los
+  // números de ticket quedaron desordenados. Se renumeran por fecha (en dos
+  // pasos, para no chocar con el índice único mientras se intercambian).
+  await db.query('UPDATE ventas SET numero = -numero WHERE tenant_id = $1', [tenantId]);
+  await db.query(
+    `UPDATE ventas v SET numero = n.numero
+       FROM (SELECT id, row_number() OVER (ORDER BY created_at, id) AS numero FROM ventas WHERE tenant_id = $1) n
+      WHERE v.id = n.id`,
+    [tenantId],
+  );
+  await db.query(
+    'UPDATE tenants SET ultimo_numero_venta = (SELECT max(numero) FROM ventas WHERE tenant_id = $1) WHERE id = $1',
+    [tenantId],
+  );
+
+  // 6b. Cajas de los días pasados: un turno por persona y por día, abierto
+  // a primera hora y cerrado a la noche con lo que se contó. La mayoría
+  // cuadra; algunos días faltan o sobran unos centavos (un vuelto mal dado).
+  const inicioDeHoy = diaA(0, 0);
+  const { rows: diasConVentas } = await db.query(
+    `SELECT DISTINCT usuario_id, (created_at AT TIME ZONE $3)::date::text AS dia
+       FROM ventas WHERE tenant_id = $1 AND created_at < $2 ORDER BY dia`,
+    [tenantId, inicioDeHoy, Intl.DateTimeFormat().resolvedOptions().timeZone],
+  );
+  let turnosPasados = 0;
+  let conDiferencia = 0;
+  for (const { usuario_id: usuarioId, dia } of diasConVentas) {
+    const [anio, mes, d] = dia.split('-').map(Number);
+    const abre = new Date(anio, mes - 1, d, 7, 45);
+    const cierra = new Date(anio, mes - 1, d, 20, 40);
+    const finDelDia = new Date(anio, mes - 1, d + 1);
+    const inicioDelDia = new Date(anio, mes - 1, d);
+    const {
+      rows: [{ id: turnoId }],
+    } = await db.query(
+      `INSERT INTO turnos_caja (tenant_id, usuario_id, fondo_inicial_centavos, abierto_en, cerrado_en, cerrado_por_id)
+       VALUES ($1, $2, $3, $4, $5, $2) RETURNING id`,
+      [tenantId, usuarioId, FONDO_INICIAL, abre, cierra],
+    );
+    await db.query(
+      `UPDATE ventas SET turno_id = $1
+        WHERE tenant_id = $2 AND usuario_id = $3 AND created_at >= $4 AND created_at < $5`,
+      [turnoId, tenantId, usuarioId, inicioDelDia, finDelDia],
+    );
+    // Esperado = fondo + ventas en efectivo (menos lo anulado), igual que la API.
+    const {
+      rows: [{ neto }],
+    } = await db.query(
+      `SELECT coalesce(sum(total_centavos - total_anulado_centavos), 0)::int AS neto
+         FROM ventas WHERE turno_id = $1 AND metodo_pago = 'efectivo'`,
+      [turnoId],
+    );
+    const esperado = FONDO_INICIAL + neto;
+    const r = azar();
+    const diferencia = r < 0.82 ? 0 : r < 0.94 ? -(5 + Math.floor(azar() * 20) * 5) : 10 + Math.floor(azar() * 5) * 10;
+    if (diferencia !== 0) conDiferencia++;
+    await db.query(
+      `UPDATE turnos_caja SET efectivo_esperado_centavos = $2, efectivo_contado_centavos = $3, nota = $4 WHERE id = $1`,
+      [
+        turnoId,
+        esperado,
+        esperado + diferencia,
+        diferencia < 0 ? 'Creo que di mal un vuelto' : diferencia > 0 ? 'Un cliente no esperó su vuelto' : null,
+      ],
+    );
+    turnosPasados++;
+  }
+  // Las cajas abiertas al principio quedan solo con lo de hoy. La de Rosa
+  // (ya no trabaja) quedó vacía: se borra.
+  await db.query('DELETE FROM turnos_caja WHERE id = $1', [turnoInicial.rosa]);
+  const abreHoy = new Date(Math.min(horarios[0].getTime() - 30 * 60_000, Date.now()));
+  await db.query('UPDATE turnos_caja SET abierto_en = $2 WHERE id = ANY($1)', [
+    [turnoInicial.admin, turnoInicial.cajero],
+    abreHoy,
+  ]);
+
+  // Hoy, el cajero le pagó en efectivo al del pan y la dueña trajo cambio.
+  const pagoPan = new Date(Math.min(new Date(abreHoy).setHours(10, 5), Date.now()));
+  for (const [token, tipo, montoCentavos, motivo] of [
+    [cajero, 'retiro', 1000, 'Pago al proveedor del pan (Supan)'],
+    [admin, 'ingreso', 1000, 'Monedas para cambio'],
+  ]) {
+    await api('/caja/movimientos', { method: 'POST', token, body: { tipo, montoCentavos, motivo } });
+  }
+  await db.query(
+    `UPDATE movimientos_caja SET created_at = $2 WHERE tenant_id = $1`,
+    [tenantId, pagoPan],
+  );
+  console.log(`· ${turnosPasados} turnos de caja cerrados (${conDiferencia} con diferencia); hoy la caja del admin y la del cajero siguen abiertas`);
+
   await api(`/usuarios/${rosa.id}/desactivar`, { method: 'PATCH', token: admin });
   console.log(
     `· ${planes.length - planesDeHoy.length} ventas en los ${DIAS_DE_HISTORIA} días anteriores (${anuladasAntes.length} anuladas)`,

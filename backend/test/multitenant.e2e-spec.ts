@@ -1,5 +1,6 @@
 import { NestExpressApplication } from '@nestjs/platform-express';
 import {
+  abrirCaja,
   cliente,
   crearApp,
   crearCajero,
@@ -24,6 +25,8 @@ describe('Aislamiento entre tiendas', () => {
     app = await crearApp();
     tokenA = (await crearTienda(app, 'Tienda A')).accessToken;
     tokenB = (await crearTienda(app, 'Tienda B')).accessToken;
+    await abrirCaja(app, tokenA);
+    await abrirCaja(app, tokenB);
     productoA = await crearProducto(app, tokenA, {
       stockInicial: 10,
       fechaVencimiento: '2099-01-01',
