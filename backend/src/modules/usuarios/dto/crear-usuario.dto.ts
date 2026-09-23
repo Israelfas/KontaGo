@@ -7,6 +7,7 @@ import {
 } from 'class-validator';
 import { NormalizarEmail } from '../../../common/transforms/normalizar-email';
 import { Rol } from '../../../common/enums/rol.enum';
+import { PasswordSegura } from '../../../common/seguridad/politica-password';
 
 export class CrearUsuarioDto {
   @IsString()
@@ -18,7 +19,7 @@ export class CrearUsuarioDto {
   email!: string;
 
   @IsString()
-  @MinLength(6)
+  @PasswordSegura()
   password!: string;
 
   // Por defecto cajero. Se permite admin para sumar un socio/encargado

@@ -26,7 +26,12 @@ import { AppService } from './app.service';
     // controllers que usan ThrottlerGuard (hoy, auth), para no frenar el
     // escaneo en caja. En memoria alcanza mientras haya una sola
     // instancia del backend.
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 10 }]),
+    ThrottlerModule.forRoot({
+      throttlers: [{ ttl: 60_000, limit: 10 }],
+      // En español: este texto le llega a la persona en el login.
+      errorMessage:
+        'Demasiados intentos seguidos desde esta conexión. Esperá un minuto y probá de nuevo.',
+    }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

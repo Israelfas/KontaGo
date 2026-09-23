@@ -1,7 +1,8 @@
-import { IsString, MinLength } from 'class-validator';
+import { IsString } from 'class-validator';
+import { PasswordSegura } from '../../../common/seguridad/politica-password';
 
 export class CambiarPasswordDto {
   @IsString()
-  @MinLength(6)
+  @PasswordSegura()
   password!: string;
 }

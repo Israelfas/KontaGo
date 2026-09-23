@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
-import { StoreIcon } from './icons';
+import { AlertIcon, StoreIcon } from './icons';
 
 type ButtonVariant = 'primary' | 'secondary' | 'success' | 'danger' | 'ghost' | 'claro';
 
@@ -104,6 +104,23 @@ export function LoadingState({ label = 'Cargando información…' }: { label?: s
         <div className="esqueleto h-2.5 w-11/12" />
         <div className="esqueleto h-2.5 w-3/4" />
       </div>
+    </div>
+  );
+}
+
+/**
+ * Un error de un formulario (contraseña equivocada, enlace vencido…). No
+ * es ErrorState: ese dice "No pudimos cargar esta sección", que acá
+ * confundía (el login decía eso ante una contraseña mal escrita).
+ */
+export function AlertaDeFormulario({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className="entra flex items-start gap-2.5 rounded-xl border border-rojo-perdida/25 bg-rojo-perdida/[0.06] px-3.5 py-3 text-sm text-rojo-perdida"
+      role="alert"
+    >
+      <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
+      <p>{children}</p>
     </div>
   );
 }

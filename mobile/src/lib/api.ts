@@ -51,6 +51,17 @@ function resolverApiUrl(): string {
 
 const API_URL = resolverApiUrl();
 
+/**
+ * La web (términos, privacidad, y adonde lleva el enlace de recuperar la
+ * contraseña). EXPO_PUBLIC_WEB_URL en producción; en desarrollo, la misma
+ * PC que sirve el backend, en el puerto de la web.
+ */
+export const WEB_URL = (() => {
+  const configurada = process.env.EXPO_PUBLIC_WEB_URL?.trim();
+  if (configurada) return configurada.replace(/\/+$/, '');
+  return API_URL.replace(/:3000$/, ':3001');
+})();
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -121,7 +132,7 @@ async function apiFetch<T>(
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     const mensaje = Array.isArray(body?.message)
-      ? body.message.join(', ')
+      ? body.message.join(' ')
       : (body?.message ?? `Error ${response.status}`);
     throw new ApiError(mensaje, response.status);
   }
@@ -195,7 +206,16 @@ export interface RegistroInput {
   nombreAdmin: string;
   email: string;
   password: string;
+  aceptaTerminos: boolean;
   moneda?: string;
+}
+
+/** "Olvidé mi contraseña": manda el enlace por email (responde igual exista o no). */
+export function pedirRecuperacion(email: string): Promise<void> {
+  return apiFetch<void>('/auth/olvide-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
 }
 
 export function registrar(dto: RegistroInput): Promise<TokenPair> {

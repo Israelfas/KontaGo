@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Usuario } from '../auth/entities/usuario.entity';
 import { AuthService } from '../auth/auth.service';
+import { SeguridadService } from '../auth/seguridad.service';
 import { Rol } from '../../common/enums/rol.enum';
 import { bloquearEmail } from '../../common/db/bloquear-email';
 import { CrearUsuarioDto } from './dto/crear-usuario.dto';
@@ -45,6 +46,7 @@ export class UsuariosService {
     private readonly usuarioRepo: Repository<Usuario>,
     private readonly authService: AuthService,
     private readonly dataSource: DataSource,
+    private readonly seguridad: SeguridadService,
   ) {}
 
   async listar(tenantId: string): Promise<UsuarioPublico[]> {
@@ -98,18 +100,24 @@ export class UsuariosService {
     // JwtStrategy ya lo rechaza por inactivo; además se cierran sus
     // sesiones, así reactivarlo no revive los tokens viejos.
     await this.authService.revocarSesionesDe(id, 'usuario_desactivado');
+    await this.seguridad.registrar('usuario_desactivado', {
+      usuario: guardado,
+    });
     return aPublico(guardado);
   }
 
   async reactivar(tenantId: string, id: string): Promise<UsuarioPublico> {
     const usuario = await this.buscar(tenantId, id);
     usuario.activo = true;
-    return aPublico(await this.usuarioRepo.save(usuario));
+    const guardado = await this.usuarioRepo.save(usuario);
+    await this.seguridad.registrar('usuario_reactivado', { usuario: guardado });
+    return aPublico(guardado);
   }
 
   /**
-   * No hay recuperación de contraseña por email todavía: si un cajero
-   * se la olvida, el admin le pone una nueva desde acá.
+   * El admin le pone una contraseña nueva a alguien de su equipo (por
+   * ejemplo, un cajero sin email propio que se la olvidó). La cuenta se
+   * desbloquea si estaba bloqueada por intentos fallidos.
    */
   async cambiarPassword(
     tenantId: string,
@@ -118,10 +126,15 @@ export class UsuariosService {
   ): Promise<UsuarioPublico> {
     const usuario = await this.buscar(tenantId, id);
     usuario.passwordHash = await this.authService.hashPassword(password);
+    usuario.intentosFallidos = 0;
+    usuario.bloqueadoHasta = null;
     const guardado = await this.usuarioRepo.save(usuario);
     // Contraseña nueva = hay que volver a entrar en todos lados (si la
     // cambiaron porque alguien la sabía, esa persona queda afuera).
     await this.authService.revocarSesionesDe(id, 'password_cambiada');
+    await this.seguridad.registrar('password_cambiada_por_admin', {
+      usuario: guardado,
+    });
     return aPublico(guardado);
   }
 

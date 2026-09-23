@@ -1,13 +1,17 @@
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../lib/auth-context';
-import { ApiError } from '../lib/api';
+import { ApiError, WEB_URL } from '../lib/api';
+import { CampoContrasena, MedidorDeFuerza } from '../components/campo-contrasena';
 import { AuthFrame } from '../components/auth-frame';
 import { AvisoDeCampo, Boton, Etiqueta, estilosCampo } from '../components/ui';
 import { useCamposTocados } from '../lib/use-campos-tocados';
 import {
-  ayudaDeLaContrasena,
+  faltanALaContrasena,
+  fuerzaDeLaContrasena,
   problemaDeLaContrasena,
   problemaDelEmail,
   problemaDelNombre,
@@ -23,6 +27,8 @@ export function RegistroScreen({ navigation }: Props) {
   const [nombreAdmin, setNombreAdmin] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [aceptaTerminos, setAceptaTerminos] = useState(false);
+  const [faltaAceptar, setFaltaAceptar] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
   const { salir, tocarTodos, error: errorDe } = useCamposTocados<
@@ -32,8 +38,9 @@ export function RegistroScreen({ navigation }: Props) {
     tienda: problemaDelNombre(nombreTienda),
     admin: problemaDelNombre(nombreAdmin),
     email: problemaDelEmail(email),
-    password: problemaDeLaContrasena(password),
+    password: problemaDeLaContrasena(password, email),
   };
+  const faltan = faltanALaContrasena(password);
   const errores = {
     tienda: errorDe('tienda', nombreTienda, problemas.tienda),
     admin: errorDe('admin', nombreAdmin, problemas.admin),
@@ -43,8 +50,9 @@ export function RegistroScreen({ navigation }: Props) {
 
   async function manejarSubmit() {
     const falta = [nombreTienda, nombreAdmin, email, password].some((v) => !v.trim());
-    if (falta || Object.values(problemas).some(Boolean)) {
+    if (falta || Object.values(problemas).some(Boolean) || !aceptaTerminos) {
       tocarTodos(['tienda', 'admin', 'email', 'password']);
+      setFaltaAceptar(!aceptaTerminos);
       return;
     }
     setError(null);
@@ -55,6 +63,7 @@ export function RegistroScreen({ navigation }: Props) {
         nombreAdmin: nombreAdmin.trim(),
         email: email.trim(),
         password,
+        aceptaTerminos,
       });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo crear la cuenta');
@@ -118,19 +127,48 @@ export function RegistroScreen({ navigation }: Props) {
         <AvisoDeCampo error={errores.email} />
 
         <Etiqueta>Contraseña</Etiqueta>
-        <TextInput
+        <CampoContrasena
           value={password}
           onChangeText={setPassword}
           onBlur={salir('password')}
-          secureTextEntry
-          style={[estilosCampo.input, errores.password && estilosCampo.inputInvalido]}
-          placeholder="Mínimo 6 caracteres"
-          placeholderTextColor={colores.tintaSuave}
-          autoComplete="new-password"
-          returnKeyType="go"
-          onSubmitEditing={manejarSubmit}
+          nueva
+          invalido={!!errores.password}
+          placeholder="Una frase de al menos 8 caracteres"
         />
-        <AvisoDeCampo error={errores.password} ayuda={ayudaDeLaContrasena(password)} />
+        <AvisoDeCampo
+          error={errores.password}
+          ayuda={password && faltan > 0 ? `Faltan ${faltan} caracter${faltan === 1 ? '' : 'es'}.` : null}
+        />
+        {faltan === 0 && !errores.password && <MedidorDeFuerza {...fuerzaDeLaContrasena(password)} />}
+
+        {/* LOPDP: consentimiento expreso, no una casilla ya marcada. */}
+        <View style={styles.terminos}>
+          <Pressable
+            onPress={() => {
+              setAceptaTerminos((v) => !v);
+              setFaltaAceptar(false);
+            }}
+            hitSlop={8}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: aceptaTerminos }}
+            accessibilityLabel="Acepto los términos y condiciones y la política de privacidad"
+            style={[styles.casilla, aceptaTerminos && styles.casillaMarcada, faltaAceptar && styles.casillaError]}
+          >
+            {aceptaTerminos && <Ionicons name="checkmark" size={16} color={colores.papel} />}
+          </Pressable>
+          <Text style={styles.terminosTexto}>
+            Acepto los{' '}
+            <Text style={styles.enlace} onPress={() => WebBrowser.openBrowserAsync(`${WEB_URL}/terminos`)}>
+              términos y condiciones
+            </Text>{' '}
+            y la{' '}
+            <Text style={styles.enlace} onPress={() => WebBrowser.openBrowserAsync(`${WEB_URL}/privacidad`)}>
+              política de privacidad
+            </Text>
+            .
+          </Text>
+        </View>
+        <AvisoDeCampo error={faltaAceptar ? 'Para crear tu cuenta tenés que aceptarlos.' : null} />
 
         {error && (
           <View style={styles.error}>
@@ -148,6 +186,21 @@ export function RegistroScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   campos: { gap: espaciado.xs },
+  terminos: { flexDirection: 'row', alignItems: 'flex-start', gap: espaciado.sm, marginBottom: espaciado.sm },
+  casilla: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: colores.tintaSuave,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  casillaMarcada: { backgroundColor: colores.tinta, borderColor: colores.tinta },
+  casillaError: { borderColor: colores.rojoPerdida },
+  terminosTexto: { flex: 1, fontSize: 13, lineHeight: 19, color: colores.tinta },
+  enlace: { fontWeight: '700', textDecorationLine: 'underline' },
   error: {
     backgroundColor: 'rgba(182,70,47,0.08)',
     borderColor: 'rgba(182,70,47,0.2)',

@@ -50,7 +50,7 @@ function FormularioNuevaPersona({ onCreado }: { onCreado: (u: UsuarioEquipo) => 
   const problemas = {
     nombre: problemaDelNombre(nombre),
     email: problemaDelEmail(email),
-    password: problemaDeLaContrasena(password),
+    password: problemaDeLaContrasena(password, email),
   };
 
   async function manejarSubmit(e: FormEvent) {
@@ -121,7 +121,7 @@ function FormularioNuevaPersona({ onCreado }: { onCreado: (u: UsuarioEquipo) => 
           <input
             id="persona-password"
             required
-            minLength={6}
+            minLength={8}
             type="text"
             autoComplete="off"
             value={password}
@@ -130,7 +130,7 @@ function FormularioNuevaPersona({ onCreado }: { onCreado: (u: UsuarioEquipo) => 
             aria-invalid={tocado('password') && !!problemas.password}
             aria-describedby="persona-password-aviso"
             className="field font-ticket"
-            placeholder="Mínimo 6 caracteres"
+            placeholder="Al menos 8 caracteres"
           />
           <AvisoDeCampo
             id="persona-password-aviso"
@@ -218,7 +218,7 @@ function FormularioCambiarPassword({
       <input
         id={`password-${persona.id}`}
         required
-        minLength={6}
+        minLength={8}
         type="text"
         autoComplete="off"
         autoFocus
@@ -228,7 +228,7 @@ function FormularioCambiarPassword({
         aria-invalid={salio && !!problema}
         aria-describedby={`password-${persona.id}-aviso`}
         className="field font-ticket"
-        placeholder="Mínimo 6 caracteres"
+        placeholder="Al menos 8 caracteres"
       />
       <AvisoDeCampo
         id={`password-${persona.id}-aviso`}

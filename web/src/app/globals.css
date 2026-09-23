@@ -1589,3 +1589,33 @@ html:has(dialog.ventana[open]) {
 .fila-tocable:active {
   background: rgba(228, 221, 201, 0.6);
 }
+
+/* Documentos legales (términos, privacidad): texto largo y cómodo de leer. */
+.documento-legal {
+  color: var(--tinta);
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+
+.documento-legal h2 {
+  margin-top: 1.75rem;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.documento-legal p,
+.documento-legal ul {
+  margin-top: 0.6rem;
+  color: #35475a;
+}
+
+.documento-legal ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+
+.documento-legal li + li {
+  margin-top: 0.35rem;
+}

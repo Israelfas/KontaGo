@@ -63,6 +63,7 @@ export async function crearTienda(
       nombreAdmin: 'Admin',
       email,
       password: CLAVE,
+      aceptaTerminos: true,
     })
     .expect(201);
   return { ...(res.body as Sesion), email };

@@ -244,7 +244,7 @@ try {
   // 2. Tienda y equipo
   const { accessToken: admin } = await api('/auth/registro', {
     method: 'POST',
-    body: { nombreTienda: ADMIN.tienda, nombreAdmin: ADMIN.nombre, email: ADMIN.email, password: CLAVE },
+    body: { nombreTienda: ADMIN.tienda, nombreAdmin: ADMIN.nombre, email: ADMIN.email, password: CLAVE, aceptaTerminos: true },
   });
   // Datos del ticket. El RUC es inventado (formato válido, no es de nadie
   // conocido): es una demo.

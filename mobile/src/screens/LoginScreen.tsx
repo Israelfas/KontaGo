@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
@@ -8,6 +8,7 @@ import { useAuth } from '../lib/auth-context';
 import { ApiError } from '../lib/api';
 import { AuthFrame } from '../components/auth-frame';
 import { AvisoDeCampo, Boton, Etiqueta, estilosCampo } from '../components/ui';
+import { CampoContrasena } from '../components/campo-contrasena';
 import { problemaDelEmail } from '../lib/validacion';
 import { colores, espaciado } from '../theme/colores';
 import type { AuthStackParamList } from '../navigation/AuthNavigator';
@@ -104,16 +105,22 @@ export function LoginScreen({ navigation }: Props) {
         />
         <AvisoDeCampo error={problemaEmail} />
 
-        <Etiqueta>Contraseña</Etiqueta>
-        <TextInput
+        <View style={styles.filaEtiqueta}>
+          <Etiqueta>Contraseña</Etiqueta>
+          <Pressable
+            onPress={() =>
+              navigation.navigate('Recuperar', { email: problemaDelEmail(email) ? undefined : email.trim() })
+            }
+            hitSlop={8}
+            accessibilityRole="link"
+          >
+            <Text style={styles.olvide}>¿Olvidaste tu contraseña?</Text>
+          </Pressable>
+        </View>
+        <CampoContrasena
           value={password}
           onChangeText={setPassword}
-          secureTextEntry
-          style={estilosCampo.input}
           placeholder="••••••••"
-          placeholderTextColor={colores.tintaSuave}
-          autoComplete="password"
-          returnKeyType="go"
           onSubmitEditing={manejarSubmit}
         />
 
@@ -137,6 +144,14 @@ export function LoginScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   campos: { gap: espaciado.xs },
+  filaEtiqueta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  olvide: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colores.tinta,
+    textDecorationLine: 'underline',
+    textDecorationColor: colores.ambar,
+  },
   error: {
     backgroundColor: 'rgba(182,70,47,0.08)',
     borderColor: 'rgba(182,70,47,0.2)',

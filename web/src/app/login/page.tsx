@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useSignIn } from '@clerk/nextjs/legacy';
 import { AuthShell } from '@/components/auth-shell';
-import { AvisoDeCampo, Button, ErrorState } from '@/components/ui';
+import { AlertaDeFormulario, AvisoDeCampo, Button } from '@/components/ui';
+import { CampoContrasena } from '@/components/campo-contrasena';
 import { useAuth } from '@/lib/auth-context';
 import { ApiError } from '@/lib/api';
 import { problemaDelEmail } from '@/lib/validacion';
@@ -18,7 +19,14 @@ export default function LoginPage() {
   const [enviando, setEnviando] = useState(false);
   const [conGoogle, setConGoogle] = useState(false);
   const [salioDelEmail, setSalioDelEmail] = useState(false);
+  // Viene de elegir una contraseña nueva con el enlace del email.
+  const [recienCambiada, setRecienCambiada] = useState(false);
   const problemaEmail = problemaDelEmail(email);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRecienCambiada(new URLSearchParams(window.location.search).has('restablecida'));
+  }, []);
 
   async function manejarSubmit(evento: FormEvent) {
     evento.preventDefault();
@@ -74,6 +82,14 @@ export default function LoginPage() {
       }
     >
       <form onSubmit={manejarSubmit} className="app-card p-5 sm:p-6">
+        {recienCambiada && !error && (
+          <p
+            className="entra mb-4 rounded-xl border border-verde-ganancia/25 bg-verde-ganancia/[0.07] px-3.5 py-3 text-sm text-verde-ganancia"
+            role="status"
+          >
+            Listo: tu contraseña cambió. Entrá con la nueva.
+          </p>
+        )}
         <div className="space-y-4">
           <div>
             <label className="field-label" htmlFor="email">
@@ -95,17 +111,26 @@ export default function LoginPage() {
             <AvisoDeCampo id="email-aviso" error={salioDelEmail ? problemaEmail : null} />
           </div>
           <div>
-            <label className="field-label" htmlFor="password">
-              Contraseña
-            </label>
-            <input
+            <div className="flex items-baseline justify-between gap-3">
+              <label className="field-label" htmlFor="password">
+                Contraseña
+              </label>
+              <Link
+                href={
+                  email && !problemaEmail
+                    ? `/recuperar?email=${encodeURIComponent(email)}`
+                    : '/recuperar'
+                }
+                className="text-xs font-semibold text-tinta underline decoration-ambar decoration-2 underline-offset-4 hover:text-ambar"
+              >
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
+            <CampoContrasena
               id="password"
-              type="password"
-              autoComplete="current-password"
-              required
               value={password}
-              onChange={(evento) => setPassword(evento.target.value)}
-              className="field"
+              onChange={setPassword}
+              autoComplete="current-password"
               placeholder="••••••••"
             />
           </div>
@@ -113,7 +138,7 @@ export default function LoginPage() {
 
         {error && (
           <div className="mt-4">
-            <ErrorState>{error}</ErrorState>
+            <AlertaDeFormulario>{error}</AlertaDeFormulario>
           </div>
         )}
 
@@ -136,6 +161,17 @@ export default function LoginPage() {
         >
           {conGoogle ? 'Redirigiendo…' : 'Continuar con Google'}
         </Button>
+        <p className="mt-3 text-center text-xs leading-5 text-tinta-suave">
+          Si es tu primera vez, continuar con Google crea tu tienda y acepta los{' '}
+          <Link href="/terminos" className="underline hover:text-tinta">
+            términos
+          </Link>{' '}
+          y la{' '}
+          <Link href="/privacidad" className="underline hover:text-tinta">
+            política de privacidad
+          </Link>
+          .
+        </p>
       </form>
     </AuthShell>
   );

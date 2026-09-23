@@ -11,7 +11,7 @@ import { hoyISO } from './periodo';
  * `required`), no un cartel rojo antes de empezar a escribir.
  */
 
-export const LARGO_MINIMO_CONTRASENA = 6;
+export const LARGO_MINIMO_CONTRASENA = 8;
 
 // No es IsEmail entero (eso lo sigue revisando el backend): son los
 // errores de tipeo que de verdad pasan.
@@ -34,10 +34,74 @@ export function faltanALaContrasena(contrasena: string): number {
   return Math.max(0, LARGO_MINIMO_CONTRASENA - contrasena.length);
 }
 
-export function problemaDeLaContrasena(contrasena: string): string | null {
+// Las mismas que rechaza el backend (common/seguridad/politica-password.ts).
+const MAS_USADAS = new Set([
+  '12345678',
+  '123456789',
+  '1234567890',
+  '87654321',
+  '11111111',
+  '00000000',
+  '12341234',
+  '11223344',
+  'password',
+  'password1',
+  'password123',
+  'contraseña',
+  'contrasena',
+  'contrasena1',
+  'qwerty123',
+  'qwertyui',
+  'asdfghjk',
+  'iloveyou',
+  'abcd1234',
+  'abc12345',
+  'admin123',
+  'administrador',
+  'kontago',
+  'kontago1',
+  'kontago123',
+  'ecuador1',
+  'ecuador123',
+  'tienda123',
+  'minimarket',
+  'bienvenido',
+]);
+
+/**
+ * Qué tiene de malo una contraseña NUEVA (misma política que el backend:
+ * al menos 8, no de las más usadas, no el propio email).
+ */
+export function problemaDeLaContrasena(contrasena: string, email?: string): string | null {
+  if (!contrasena) return null;
   const faltan = faltanALaContrasena(contrasena);
-  if (!contrasena || faltan === 0) return null;
-  return `Faltan ${faltan} caracter${faltan === 1 ? '' : 'es'}: son ${LARGO_MINIMO_CONTRASENA} como mínimo.`;
+  if (faltan > 0)
+    return `Faltan ${faltan} caracter${faltan === 1 ? '' : 'es'}: son ${LARGO_MINIMO_CONTRASENA} como mínimo.`;
+  const normalizada = contrasena.trim().toLowerCase();
+  if (MAS_USADAS.has(normalizada) || /^(.)\1+$/.test(normalizada))
+    return 'Esa contraseña es de las más usadas: elegí otra.';
+  const e = email?.trim().toLowerCase();
+  if (e && (normalizada === e || normalizada === e.split('@')[0]))
+    return 'La contraseña no puede ser tu email.';
+  return null;
+}
+
+/**
+ * Qué tan buena es, para la barrita de la contraseña nueva: el largo es
+ * lo que más pesa (una frase le gana a "K0nt4go!").
+ */
+export function fuerzaDeLaContrasena(contrasena: string): {
+  nivel: 0 | 1 | 2 | 3;
+  texto: string;
+} {
+  if (!contrasena) return { nivel: 0, texto: '' };
+  if (problemaDeLaContrasena(contrasena)) return { nivel: 1, texto: 'Débil' };
+  const variedad = [/[a-z]/, /[A-Z]/, /\d/, /[^\w\s]/, /\s/].filter((r) =>
+    r.test(contrasena),
+  ).length;
+  if (contrasena.length >= 14 || (contrasena.length >= 11 && variedad >= 3))
+    return { nivel: 3, texto: 'Fuerte' };
+  return { nivel: 2, texto: 'Aceptable · más larga es mejor' };
 }
 
 /**

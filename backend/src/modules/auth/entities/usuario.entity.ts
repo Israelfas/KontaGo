@@ -39,6 +39,22 @@ export class Usuario {
   @Column({ default: true })
   activo: boolean;
 
+  // Intentos de ingreso con contraseña equivocada seguidos. Al llegar al
+  // límite la cuenta se bloquea unos minutos (ver AuthService.login).
+  @Column({ name: 'intentos_fallidos', type: 'int', default: 0 })
+  intentosFallidos: number;
+
+  @Column({ name: 'bloqueado_hasta', type: 'timestamptz', nullable: true })
+  bloqueadoHasta: Date | null;
+
+  // Cuándo aceptó los términos y la política de privacidad (LOPDP).
+  @Column({
+    name: 'terminos_aceptados_en',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  terminosAceptadosEn: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

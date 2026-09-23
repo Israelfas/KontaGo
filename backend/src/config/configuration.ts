@@ -76,11 +76,26 @@ function parseCorsOrigins(valor: string | undefined): string[] | true {
   return true;
 }
 
+/**
+ * APP_WEB_URL: dirección de la web, para los enlaces que van por email
+ * (recuperar la contraseña). Si no está, la primera de CORS_ORIGINS (en
+ * producción es obligatoria y es justamente la web); en local, la web de
+ * desarrollo.
+ */
+function parseAppWebUrl(corsOrigins: string[] | true): string {
+  const valor =
+    process.env.APP_WEB_URL?.trim() ||
+    (Array.isArray(corsOrigins) ? corsOrigins[0] : '') ||
+    'http://localhost:3001';
+  return valor.replace(/\/+$/, '');
+}
+
 export default () => ({
   nodeEnv: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3000', 10),
   trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
   corsOrigins: parseCorsOrigins(process.env.CORS_ORIGINS),
+  appWebUrl: parseAppWebUrl(parseCorsOrigins(process.env.CORS_ORIGINS)),
 
   database: {
     host: process.env.DB_HOST || 'localhost',

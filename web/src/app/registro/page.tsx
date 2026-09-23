@@ -3,12 +3,14 @@
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { AuthShell } from '@/components/auth-shell';
-import { AvisoDeCampo, Button, ErrorState } from '@/components/ui';
+import { AlertaDeFormulario, AvisoDeCampo, Button } from '@/components/ui';
+import { CampoContrasena, MedidorDeFuerza } from '@/components/campo-contrasena';
 import { useAuth } from '@/lib/auth-context';
 import { ApiError } from '@/lib/api';
 import { useCamposTocados } from '@/lib/use-campos-tocados';
 import {
-  ayudaDeLaContrasena,
+  faltanALaContrasena,
+  fuerzaDeLaContrasena,
   problemaDeLaContrasena,
   problemaDelEmail,
   problemaDelNombre,
@@ -20,6 +22,8 @@ export default function RegistroPage() {
   const [nombreAdmin, setNombreAdmin] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [aceptaTerminos, setAceptaTerminos] = useState(false);
+  const [faltaAceptar, setFaltaAceptar] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const { tocado, salir, tocarTodos } = useCamposTocados<
@@ -30,19 +34,21 @@ export default function RegistroPage() {
     tienda: problemaDelNombre(nombreTienda),
     admin: problemaDelNombre(nombreAdmin),
     email: problemaDelEmail(email),
-    password: problemaDeLaContrasena(password),
+    password: problemaDeLaContrasena(password, email),
   };
+  const faltan = faltanALaContrasena(password);
 
   async function manejarSubmit(evento: FormEvent) {
     evento.preventDefault();
-    if (Object.values(problemas).some(Boolean)) {
+    if (Object.values(problemas).some(Boolean) || !aceptaTerminos) {
       tocarTodos(['tienda', 'admin', 'email', 'password']);
+      setFaltaAceptar(!aceptaTerminos);
       return;
     }
     setError(null);
     setEnviando(true);
     try {
-      await registrarse({ nombreTienda, nombreAdmin, email, password });
+      await registrarse({ nombreTienda, nombreAdmin, email, password, aceptaTerminos });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo completar el registro');
     } finally {
@@ -136,33 +142,67 @@ export default function RegistroPage() {
             <label className="field-label" htmlFor="registro-password">
               Contraseña
             </label>
-            <input
+            <CampoContrasena
               id="registro-password"
-              type="password"
-              autoComplete="new-password"
-              required
-              minLength={6}
               value={password}
-              onChange={(evento) => setPassword(evento.target.value)}
+              onChange={setPassword}
               onBlur={salir('password')}
-              aria-invalid={tocado('password') && !!problemas.password}
-              aria-describedby="registro-password-aviso"
-              className="field"
-              placeholder="Mínimo 6 caracteres"
+              autoComplete="new-password"
+              invalido={tocado('password') && !!problemas.password}
+              describedBy="registro-password-aviso"
+              placeholder="Una frase de al menos 8 caracteres"
             />
             {/* La cuenta regresiva va desde la primera tecla: no es un error,
                 es cuánto falta. En rojo recién si se sale sin completarla. */}
             <AvisoDeCampo
               id="registro-password-aviso"
               error={tocado('password') ? problemas.password : null}
-              ayuda={ayudaDeLaContrasena(password)}
+              ayuda={
+                password && faltan > 0
+                  ? `Faltan ${faltan} caracter${faltan === 1 ? '' : 'es'}.`
+                  : null
+              }
+            />
+            {faltan === 0 && <MedidorDeFuerza {...fuerzaDeLaContrasena(password)} />}
+          </div>
+
+          {/* Ley Orgánica de Protección de Datos Personales: consentimiento
+              expreso, no una casilla ya marcada. */}
+          <div>
+            <label className="flex items-start gap-2.5 text-sm leading-5 text-tinta">
+              <input
+                type="checkbox"
+                checked={aceptaTerminos}
+                onChange={(e) => {
+                  setAceptaTerminos(e.target.checked);
+                  if (e.target.checked) setFaltaAceptar(false);
+                }}
+                aria-invalid={faltaAceptar || undefined}
+                aria-describedby="registro-terminos-aviso"
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-papel-linea accent-[#1c2b3a]"
+              />
+              <span>
+                Acepto los{' '}
+                <Link href="/terminos" target="_blank" className="font-semibold underline">
+                  términos y condiciones
+                </Link>{' '}
+                y la{' '}
+                <Link href="/privacidad" target="_blank" className="font-semibold underline">
+                  política de privacidad
+                </Link>
+                .
+              </span>
+            </label>
+            <AvisoDeCampo
+              id="registro-terminos-aviso"
+              error={faltaAceptar ? 'Para crear tu cuenta tenés que aceptarlos.' : null}
             />
           </div>
         </div>
 
         {error && (
           <div className="mt-4">
-            <ErrorState>{error}</ErrorState>
+            <AlertaDeFormulario>{error}</AlertaDeFormulario>
           </div>
         )}
 

@@ -29,7 +29,6 @@ import { Banda, LabioHoja } from '../components/banda';
 import { useCamposTocados } from '../lib/use-campos-tocados';
 import {
   ayudaDeLaContrasena,
-  faltanALaContrasena,
   problemaDeLaContrasena,
   problemaDelEmail,
   problemaDelNombre,
@@ -56,12 +55,13 @@ function FormularioNuevaPersona({ onCreado }: { onCreado: (u: UsuarioEquipo) => 
     !!email.trim() &&
     !problemaDelNombre(nombre) &&
     !problemaDelEmail(email) &&
-    faltanALaContrasena(password) === 0;
+    !!password &&
+    !problemaDeLaContrasena(password, email);
   const { salir, error: errorDe } = useCamposTocados<'nombre' | 'email' | 'password'>();
   const errores = {
     nombre: errorDe('nombre', nombre, problemaDelNombre(nombre)),
     email: errorDe('email', email, problemaDelEmail(email)),
-    password: errorDe('password', password, problemaDeLaContrasena(password)),
+    password: errorDe('password', password, problemaDeLaContrasena(password, email)),
   };
 
   async function manejarSubmit() {
@@ -225,7 +225,7 @@ function FormularioCambiarPassword({
   const [error, setError] = useState<string | null>(null);
 
   async function guardarPassword() {
-    if (!token || password.length < 6) return;
+    if (!token || !!problemaDeLaContrasena(password) || !password) return;
     setError(null);
     setGuardando(true);
     try {
@@ -258,7 +258,7 @@ function FormularioCambiarPassword({
         <Boton
           onPress={guardarPassword}
           cargando={guardando}
-          disabled={password.length < 6}
+          disabled={!!problemaDeLaContrasena(password) || !password}
           style={{ flex: 1 }}
         >
           Guardar

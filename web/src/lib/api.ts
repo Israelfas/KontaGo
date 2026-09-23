@@ -105,7 +105,7 @@ async function apiFetch<T>(
     // El backend siempre devuelve { message, error, statusCode } en errores.
     const body = await response.json().catch(() => null);
     const mensaje = Array.isArray(body?.message)
-      ? body.message.join(', ') // errores de validación vienen como array
+      ? body.message.join(' ') // errores de validación: oraciones en español
       : (body?.message ?? `Error ${response.status}`);
     throw new ApiError(mensaje, response.status);
   }
@@ -204,6 +204,7 @@ export interface RegistroInput {
   nombreAdmin: string;
   email: string;
   password: string;
+  aceptaTerminos: boolean;
   moneda?: string;
 }
 
@@ -211,6 +212,31 @@ export function registrar(dto: RegistroInput): Promise<TokenPair> {
   return apiFetch<TokenPair>('/auth/registro', {
     method: 'POST',
     body: JSON.stringify(dto),
+  });
+}
+
+// --- Recuperar la contraseña ---
+
+/** Manda el enlace por email. Responde igual exista o no la cuenta. */
+export function pedirRecuperacion(email: string): Promise<void> {
+  return apiFetch<void>('/auth/olvide-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+/** Falla (400) si el enlace venció o ya se usó. */
+export function verificarRecuperacion(token: string): Promise<void> {
+  return apiFetch<void>('/auth/restablecer-password/verificar', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+}
+
+export function restablecerPassword(token: string, password: string): Promise<void> {
+  return apiFetch<void>('/auth/restablecer-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, password }),
   });
 }
 

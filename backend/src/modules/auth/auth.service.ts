@@ -1,5 +1,8 @@
 import {
+  BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -8,10 +11,20 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { verifyToken } from '@clerk/backend';
-import { randomUUID } from 'crypto';
-import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
+import { createHash, randomBytes, randomUUID } from 'crypto';
+import {
+  DataSource,
+  EntityManager,
+  IsNull,
+  MoreThan,
+  Repository,
+} from 'typeorm';
 import { Usuario } from './entities/usuario.entity';
 import { Sesion } from './entities/sesion.entity';
+import { RecuperacionPassword } from './entities/recuperacion-password.entity';
+import { SeguridadService, type ContextoPedido } from './seguridad.service';
+import { MailService } from '../mail/mail.service';
+import { correoPasswordCambiada, correoRecuperacion } from './correos';
 import { Tenant } from '../tenants/entities/tenant.entity';
 import { Rol } from '../../common/enums/rol.enum';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
@@ -32,6 +45,39 @@ const VENTANA_REUSO_MS = 60_000;
 
 const SESION_VENCIDA = 'Sesión vencida, iniciá sesión de nuevo';
 
+// --- Autenticación segura (ISO/IEC 27002:2022, 5.17 y 8.5) ---
+
+// El mismo mensaje exista o no el email: si no, sirve para averiguar
+// qué emails tienen cuenta.
+const CREDENCIALES_INVALIDAS = 'Email o contraseña incorrectos.';
+
+// Tras 5 contraseñas equivocadas seguidas, la cuenta espera 15 minutos.
+// Frena a quien prueba contraseñas desde muchas IP (el límite por IP solo
+// frena a una). Recuperar la contraseña la desbloquea.
+const INTENTOS_ANTES_DE_BLOQUEAR = 5;
+const MINUTOS_DE_BLOQUEO = 15;
+
+// Enlace de "olvidé mi contraseña": una sola vez, 30 minutos, y como
+// mucho 3 pedidos por hora por cuenta (que no sirva para llenarle el
+// correo a nadie).
+const MINUTOS_ENLACE_RECUPERACION = 30;
+const PEDIDOS_DE_RECUPERACION_POR_HORA = 3;
+const ENLACE_INVALIDO =
+  'El enlace para cambiar la contraseña venció o ya se usó. Pedí uno nuevo.';
+
+// bcrypt con costo 12 (unos 250 ms por intento): caro para quien prueba
+// millones, imperceptible para quien entra una vez.
+const COSTO_BCRYPT = 12;
+
+// Hash de una clave al azar que nadie conoce. Cuando el email no existe
+// se compara igual contra esto: la respuesta tarda lo mismo que con una
+// contraseña equivocada, y el tiempo no delata qué emails tienen cuenta.
+const HASH_FICTICIO =
+  '$2b$12$t0N6i4B1h6Wa5F9OEgCijuTRg7GWvi9NVbdTL2u/Nb2QC/rHA8opu';
+
+const hashDeToken = (token: string) =>
+  createHash('sha256').update(token).digest('hex');
+
 export type MotivoRevocacion =
   'cierre' | 'reuso' | 'usuario_desactivado' | 'password_cambiada';
 
@@ -42,9 +88,13 @@ export class AuthService {
     private readonly usuarioRepo: Repository<Usuario>,
     @InjectRepository(Tenant)
     private readonly tenantRepo: Repository<Tenant>,
+    @InjectRepository(RecuperacionPassword)
+    private readonly recuperacionRepo: Repository<RecuperacionPassword>,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly dataSource: DataSource,
+    private readonly seguridad: SeguridadService,
+    private readonly mail: MailService,
   ) {}
 
   /**
@@ -60,7 +110,10 @@ export class AuthService {
    * tenant pertenece), así que en la práctica el email debe ser único en
    * toda la plataforma. Por eso acá se valida global, no por tenant.
    */
-  async registrar(dto: RegistroDto): Promise<TokenPair> {
+  async registrar(
+    dto: RegistroDto,
+    contexto: ContextoPedido = {},
+  ): Promise<TokenPair> {
     const emailExistente = await this.usuarioRepo.findOne({
       where: { email: dto.email },
     });
@@ -94,28 +147,229 @@ export class AuthService {
         email: dto.email,
         passwordHash,
         rol: Rol.ADMIN,
+        // El formulario no deja registrarse sin aceptarlos (RegistroDto).
+        terminosAceptadosEn: new Date(),
       });
       return usuarioRepo.save(nuevoUsuario);
     });
 
+    await this.seguridad.registrar('cuenta_creada', { usuario, contexto });
     return this.emitirTokens(usuario);
   }
 
-  async login(email: string, password: string): Promise<TokenPair> {
+  async login(
+    email: string,
+    password: string,
+    contexto: ContextoPedido = {},
+  ): Promise<TokenPair> {
     const usuario = await this.usuarioRepo.findOne({
       where: { email, activo: true },
     });
 
     if (!usuario) {
-      throw new UnauthorizedException('Credenciales inválidas');
+      // Mismo trabajo y mismo mensaje que con una contraseña equivocada.
+      await bcrypt.compare(password, HASH_FICTICIO);
+      await this.seguridad.registrar('ingreso_fallido', { email, contexto });
+      throw new UnauthorizedException(CREDENCIALES_INVALIDAS);
+    }
+
+    if (usuario.bloqueadoHasta && usuario.bloqueadoHasta > new Date()) {
+      await this.seguridad.registrar('ingreso_bloqueado', {
+        usuario,
+        contexto,
+      });
+      throw new HttpException(
+        this.mensajeDeBloqueo(usuario.bloqueadoHasta),
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
 
     const passwordValida = await bcrypt.compare(password, usuario.passwordHash);
     if (!passwordValida) {
-      throw new UnauthorizedException('Credenciales inválidas');
+      await this.anotarIntentoFallido(usuario, contexto);
+      throw new UnauthorizedException(CREDENCIALES_INVALIDAS);
     }
 
+    // Entró: se olvidan los intentos fallidos. Y si su contraseña se cifró
+    // con un costo viejo (más barato de atacar), se vuelve a cifrar ahora
+    // que la tenemos: nadie tiene que cambiarla.
+    const cambios: Partial<Usuario> = {};
+    if (usuario.intentosFallidos > 0 || usuario.bloqueadoHasta) {
+      cambios.intentosFallidos = 0;
+      cambios.bloqueadoHasta = null;
+    }
+    if (bcrypt.getRounds(usuario.passwordHash) < COSTO_BCRYPT) {
+      cambios.passwordHash = await this.hashPassword(password);
+    }
+    if (Object.keys(cambios).length > 0) {
+      await this.usuarioRepo.update(usuario.id, cambios);
+    }
+
+    await this.seguridad.registrar('ingreso', { usuario, contexto });
     return this.emitirTokens(usuario);
+  }
+
+  private async anotarIntentoFallido(
+    usuario: Usuario,
+    contexto: ContextoPedido,
+  ) {
+    // Suma en la base (no en memoria): dos intentos simultáneos cuentan dos.
+    const [filas] = await this.dataSource.query<
+      [{ intentos_fallidos: number }[], number]
+    >(
+      `UPDATE usuarios SET intentos_fallidos = intentos_fallidos + 1
+       WHERE id = $1 RETURNING intentos_fallidos`,
+      [usuario.id],
+    );
+    const intentos = filas[0]?.intentos_fallidos ?? 0;
+    await this.seguridad.registrar('ingreso_fallido', { usuario, contexto });
+    if (intentos >= INTENTOS_ANTES_DE_BLOQUEAR) {
+      await this.usuarioRepo.update(usuario.id, {
+        intentosFallidos: 0,
+        bloqueadoHasta: new Date(Date.now() + MINUTOS_DE_BLOQUEO * 60_000),
+      });
+      await this.seguridad.registrar('cuenta_bloqueada', { usuario, contexto });
+    }
+  }
+
+  private mensajeDeBloqueo(hasta: Date): string {
+    const minutos = Math.max(
+      1,
+      Math.ceil((hasta.getTime() - Date.now()) / 60_000),
+    );
+    return `Por seguridad bloqueamos el ingreso por ${minutos} minuto${
+      minutos === 1 ? '' : 's'
+    } después de varios intentos fallidos. Probá de nuevo después o cambiá tu contraseña con "¿Olvidaste tu contraseña?".`;
+  }
+
+  // --- Recuperar la contraseña ---
+
+  /**
+   * "Olvidé mi contraseña": si el email es de una cuenta activa, le manda
+   * un enlace para elegir otra. Responde siempre igual (exista o no la
+   * cuenta), para no revelar qué emails están registrados.
+   */
+  async pedirRecuperacion(
+    email: string,
+    contexto: ContextoPedido = {},
+  ): Promise<void> {
+    const usuario = await this.usuarioRepo.findOne({
+      where: { email, activo: true },
+    });
+    await this.seguridad.registrar('recuperacion_pedida', {
+      usuario,
+      email,
+      contexto,
+    });
+    if (!usuario) return;
+
+    const recientes = await this.recuperacionRepo.count({
+      where: {
+        usuarioId: usuario.id,
+        createdAt: MoreThan(new Date(Date.now() - 60 * 60_000)),
+      },
+    });
+    if (recientes >= PEDIDOS_DE_RECUPERACION_POR_HORA) return;
+
+    // Un enlace nuevo anula los anteriores que no se usaron.
+    await this.recuperacionRepo.update(
+      { usuarioId: usuario.id, usadaEn: IsNull() },
+      { usadaEn: new Date() },
+    );
+
+    const token = randomBytes(32).toString('base64url');
+    await this.recuperacionRepo.insert({
+      usuarioId: usuario.id,
+      tokenHash: hashDeToken(token),
+      expiraEn: new Date(Date.now() + MINUTOS_ENLACE_RECUPERACION * 60_000),
+      ip: contexto.ip?.slice(0, 64) ?? null,
+    });
+
+    const enlace = `${this.configService.get<string>('appWebUrl')}/restablecer?token=${token}`;
+    const { asunto, html } = correoRecuperacion(
+      usuario.nombre,
+      enlace,
+      MINUTOS_ENLACE_RECUPERACION,
+    );
+    await this.mail.enviar({ destinatarios: [usuario.email], asunto, html });
+
+    // En desarrollo, sin SMTP configurado, el enlace queda en el log para
+    // poder probar. Nunca en producción.
+    if (
+      this.configService.get<string>('nodeEnv') !== 'production' &&
+      !this.configService.get<string>('smtp.host')
+    ) {
+      console.log(
+        `[desarrollo] Enlace para cambiar la contraseña de ${usuario.email}: ${enlace}`,
+      );
+    }
+  }
+
+  /** Si el enlace todavía sirve (para mostrar el formulario o avisar que venció). */
+  async verificarRecuperacion(token: string): Promise<void> {
+    const recuperacion = await this.recuperacionRepo.findOne({
+      where: { tokenHash: hashDeToken(token) },
+    });
+    if (
+      !recuperacion ||
+      recuperacion.usadaEn ||
+      recuperacion.expiraEn <= new Date()
+    ) {
+      throw new BadRequestException(ENLACE_INVALIDO);
+    }
+  }
+
+  /**
+   * Cambia la contraseña con el enlace del email: el enlace deja de
+   * servir, la cuenta se desbloquea y se cierran todas sus sesiones (si
+   * alguien más había entrado, queda afuera). Avisa por email.
+   */
+  async restablecerPassword(
+    token: string,
+    password: string,
+    contexto: ContextoPedido = {},
+  ): Promise<void> {
+    const passwordHash = await this.hashPassword(password);
+
+    const usuario = await this.dataSource.transaction(async (manager) => {
+      const recuperacion = await manager
+        .getRepository(RecuperacionPassword)
+        .findOne({
+          where: { tokenHash: hashDeToken(token) },
+          // Dos pedidos con el mismo enlace a la vez: el segundo espera y lo
+          // encuentra ya usado.
+          lock: { mode: 'pessimistic_write' },
+        });
+      if (
+        !recuperacion ||
+        recuperacion.usadaEn ||
+        recuperacion.expiraEn <= new Date()
+      ) {
+        throw new BadRequestException(ENLACE_INVALIDO);
+      }
+      const cuenta = await manager.getRepository(Usuario).findOne({
+        where: { id: recuperacion.usuarioId, activo: true },
+      });
+      if (!cuenta) throw new BadRequestException(ENLACE_INVALIDO);
+
+      await manager.getRepository(Usuario).update(cuenta.id, {
+        passwordHash,
+        intentosFallidos: 0,
+        bloqueadoHasta: null,
+      });
+      await manager
+        .getRepository(RecuperacionPassword)
+        .update(recuperacion.id, { usadaEn: new Date() });
+      await this.revocarSesionesDe(cuenta.id, 'password_cambiada', manager);
+      return cuenta;
+    });
+
+    await this.seguridad.registrar('password_restablecida', {
+      usuario,
+      contexto,
+    });
+    const { asunto, html } = correoPasswordCambiada(usuario.nombre, new Date());
+    await this.mail.enviar({ destinatarios: [usuario.email], asunto, html });
   }
 
   /**
@@ -158,7 +412,10 @@ export class AuthService {
    * registrado a mano — el nombre de la tienda queda con un valor por
    * defecto que puede cambiar después (no hay pantalla para eso todavía).
    */
-  async loginConClerk(clerkToken: string): Promise<TokenPair> {
+  async loginConClerk(
+    clerkToken: string,
+    contexto: ContextoPedido = {},
+  ): Promise<TokenPair> {
     const secretKey = this.configService.get<string>('clerk.secretKey');
     if (!secretKey) {
       throw new UnauthorizedException(
@@ -239,11 +496,15 @@ export class AuthService {
           // la base solo por este caso.
           passwordHash: await this.hashPassword(randomUUID()),
           rol: Rol.ADMIN,
+          // Al lado de "Continuar con Google" se avisa que continuar es
+          // aceptar los términos y la política de privacidad.
+          terminosAceptadosEn: new Date(),
         });
         return usuarioRepo.save(nuevoUsuario);
       });
     }
 
+    await this.seguridad.registrar('ingreso_google', { usuario, contexto });
     return this.emitirTokens(usuario);
   }
 
@@ -291,6 +552,13 @@ export class AuthService {
         sesion.motivoRevocacion = 'reuso';
         await sesionRepo.save(sesion);
         revocadaPorReuso = true;
+        await this.seguridad.registrar('sesion_revocada_por_reuso', {
+          usuario: {
+            id: sesion.usuarioId,
+            tenantId: sesion.tenantId,
+            email: '',
+          },
+        });
         return null;
       }
 
@@ -330,9 +598,16 @@ export class AuthService {
    * el token ya no sirve, la sesión ya estaba cerrada. Se acepta un token
    * vencido: cerrar sesión tiene que funcionar igual.
    */
-  async cerrarSesion(refreshToken: string): Promise<void> {
+  async cerrarSesion(
+    refreshToken: string,
+    contexto: ContextoPedido = {},
+  ): Promise<void> {
     const payload = await this.verificarRefresh(refreshToken, true);
     if (!payload?.sid) return;
+    await this.seguridad.registrar('cierre_sesion', {
+      usuario: { id: payload.sub, tenantId: payload.tenantId, email: '' },
+      contexto,
+    });
     await this.dataSource
       .getRepository(Sesion)
       .update(
@@ -416,7 +691,6 @@ export class AuthService {
   }
 
   async hashPassword(password: string): Promise<string> {
-    const SALT_ROUNDS = 10;
-    return bcrypt.hash(password, SALT_ROUNDS);
+    return bcrypt.hash(password, COSTO_BCRYPT);
   }
 }

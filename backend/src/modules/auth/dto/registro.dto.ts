@@ -1,4 +1,11 @@
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  Equals,
+  IsEmail,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
+import { PasswordSegura } from '../../../common/seguridad/politica-password';
 import { NormalizarEmail } from '../../../common/transforms/normalizar-email';
 
 export class RegistroDto {
@@ -20,6 +27,14 @@ export class RegistroDto {
   email!: string;
 
   @IsString()
-  @MinLength(6)
+  @PasswordSegura()
   password!: string;
+
+  // Ley Orgánica de Protección de Datos Personales (Ecuador): sin aceptar
+  // los términos y la política de privacidad no se crea la cuenta.
+  @Equals(true, {
+    message:
+      'Para crear tu cuenta tenés que aceptar los términos y la política de privacidad.',
+  })
+  aceptaTerminos!: boolean;
 }
