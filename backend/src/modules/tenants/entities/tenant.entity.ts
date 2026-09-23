@@ -36,6 +36,33 @@ export class Tenant {
   @Column({ default: true })
   activo: boolean;
 
+  // Datos para el ticket (y la futura factura electrónica). Opcionales:
+  // una tienda recién creada solo tiene el nombre.
+  @Column({
+    name: 'razon_social',
+    type: 'varchar',
+    length: 200,
+    nullable: true,
+  })
+  razonSocial: string | null;
+
+  @Column({ type: 'varchar', length: 13, nullable: true })
+  ruc: string | null;
+
+  @Column({ type: 'varchar', length: 250, nullable: true })
+  direccion: string | null;
+
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  telefono: string | null;
+
+  @Column({
+    name: 'mensaje_ticket',
+    type: 'varchar',
+    length: 200,
+    nullable: true,
+  })
+  mensajeTicket: string | null;
+
   // Último número de ticket entregado (ver ventas.numero). Lo incrementa
   // la venta, dentro de su transacción.
   @Column({ name: 'ultimo_numero_venta', type: 'integer', default: 0 })

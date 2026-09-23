@@ -111,6 +111,12 @@ export function PerfilScreen() {
                 <Text style={styles.seccionTitulo}>Tu tienda</Text>
                 <Tarjeta style={styles.grupoOpciones}>
                   <FilaOpcion
+                    icono="storefront-outline"
+                    titulo="Datos de la tienda (ticket)"
+                    onPress={() => navigation.navigate('Tienda')}
+                  />
+                  <View style={styles.separador} />
+                  <FilaOpcion
                     icono="people-outline"
                     titulo="Equipo"
                     onPress={() => navigation.navigate('Equipo')}

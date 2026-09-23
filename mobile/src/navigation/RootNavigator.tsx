@@ -12,6 +12,7 @@ import { SuscripcionScreen } from '../screens/SuscripcionScreen';
 import { EquipoScreen } from '../screens/EquipoScreen';
 import { VentasHoyScreen } from '../screens/VentasHoyScreen';
 import { CajaScreen } from '../screens/CajaScreen';
+import { TiendaScreen } from '../screens/TiendaScreen';
 import { colores } from '../theme/colores';
 import type { Perfil } from '../lib/api';
 
@@ -26,6 +27,7 @@ export type RootStackParamList = {
   // Sin parámetros: hoy. El admin puede abrirla en un período (desde el resumen).
   VentasHoy: { desde: string; hasta: string } | undefined;
   Caja: undefined;
+  Tienda: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -61,6 +63,7 @@ export function RootNavigator() {
           <Stack.Screen name="Equipo" component={EquipoScreen} options={{ title: 'Equipo' }} />
           <Stack.Screen name="VentasHoy" component={VentasHoyScreen} options={{ title: 'Ventas' }} />
           <Stack.Screen name="Caja" component={CajaScreen} options={{ title: 'Caja' }} />
+          <Stack.Screen name="Tienda" component={TiendaScreen} options={{ title: 'Datos de la tienda' }} />
         </Stack.Navigator>
       ) : (
         <AuthNavigator />

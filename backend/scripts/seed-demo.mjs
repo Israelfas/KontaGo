@@ -232,6 +232,19 @@ try {
     method: 'POST',
     body: { nombreTienda: ADMIN.tienda, nombreAdmin: ADMIN.nombre, email: ADMIN.email, password: CLAVE },
   });
+  // Datos del ticket. El RUC es inventado (formato válido, no es de nadie
+  // conocido): es una demo.
+  await api('/tienda', {
+    method: 'PATCH',
+    token: admin,
+    body: {
+      razonSocial: 'Salazar Vega María Fernanda',
+      ruc: '1719876543001',
+      direccion: 'Av. 10 de Agosto N25-18 y Colón, Quito',
+      telefono: '099 123 4567',
+      mensajeTicket: 'Abierto todos los días de 7h a 21h',
+    },
+  });
   await api('/usuarios', { method: 'POST', token: admin, body: { nombre: CAJERO.nombre, email: CAJERO.email, password: CLAVE } });
   const rosa = await api('/usuarios', {
     method: 'POST',

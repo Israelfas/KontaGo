@@ -140,14 +140,25 @@ export function Nav() {
             </nav>
 
             <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
-              {tienda && (
-                <span
-                  className="max-w-[7.5rem] truncate text-sm font-semibold text-tinta sm:max-w-[14rem]"
-                  title={tienda}
-                >
-                  {tienda}
-                </span>
-              )}
+              {/* Para el admin, el nombre lleva a los datos de la tienda (los
+                  del ticket): es donde uno lo busca. */}
+              {tienda &&
+                (esAdmin ? (
+                  <Link
+                    href="/tienda"
+                    className="max-w-[7.5rem] truncate text-sm font-semibold text-tinta underline decoration-papel-linea decoration-2 underline-offset-4 hover:decoration-tinta sm:max-w-[14rem]"
+                    title={`${tienda} · datos de la tienda`}
+                  >
+                    {tienda}
+                  </Link>
+                ) : (
+                  <span
+                    className="max-w-[7.5rem] truncate text-sm font-semibold text-tinta sm:max-w-[14rem]"
+                    title={tienda}
+                  >
+                    {tienda}
+                  </span>
+                ))}
               {usuario && (
                 <span className="inline-flex rounded-full bg-ambar/15 px-2.5 py-1 font-ticket text-[0.65rem] font-semibold uppercase tracking-wider text-[#9a5b08]">
                   {usuario.rol}

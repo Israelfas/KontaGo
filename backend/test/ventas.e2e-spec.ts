@@ -323,7 +323,7 @@ describe('Ventas, anulaciones y lotes', () => {
         await cliente(app, cajero).get(`/ventas/${venta.id}/ticket`).expect(200)
       ).body as {
         numero: number;
-        tienda: string;
+        tienda: { nombre: string };
         subtotalConIvaCentavos: number;
         subtotalSinIvaCentavos: number;
         ivaCentavos: number;
@@ -333,7 +333,7 @@ describe('Ventas, anulaciones y lotes', () => {
         lineas: unknown[];
       };
       expect(ticket.numero).toBe(venta.numero);
-      expect(ticket.tienda).toBe('Tienda de prueba');
+      expect(ticket.tienda.nombre).toBe('Tienda de prueba');
       expect(ticket.lineas).toHaveLength(2);
       expect(ticket.subtotalConIvaCentavos).toBe(200);
       expect(ticket.subtotalSinIvaCentavos).toBe(100);

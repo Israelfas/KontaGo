@@ -26,6 +26,7 @@ import { AnularVentaDto } from './dto/anular-venta.dto';
 import { VentaDelHistorialDto } from './dto/venta-del-historial.dto';
 import { TicketDto } from './dto/ticket.dto';
 import { Tenant } from '../tenants/entities/tenant.entity';
+import { aTiendaDto } from '../tenants/tienda.controller';
 import { Rol } from '../../common/enums/rol.enum';
 import {
   AnulacionVenta,
@@ -433,7 +434,7 @@ export class VentasService {
     const ivaCentavos = conIva.reduce((acc, item) => acc + item.ivaCentavos, 0);
 
     return {
-      tienda: tenant.nombre,
+      tienda: aTiendaDto(tenant),
       numero: venta.numero,
       fecha: venta.createdAt,
       cajero: venta.usuario.nombre,

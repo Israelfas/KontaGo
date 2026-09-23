@@ -219,9 +219,19 @@ export interface TurnoCaja {
 
 // --- Ticket (GET /ventas/:id/ticket) ---
 
+// Datos de la tienda que salen en el ticket (los edita el admin).
+export interface Tienda {
+  nombre: string;
+  razonSocial: string | null;
+  ruc: string | null;
+  direccion: string | null;
+  telefono: string | null;
+  mensajeTicket: string | null; // pie del ticket
+}
+
 // La venta como se imprime o se comparte. No es la factura del SRI.
 export interface Ticket {
-  tienda: string;
+  tienda: Tienda;
   numero: number;
   fecha: string;
   cajero: string;

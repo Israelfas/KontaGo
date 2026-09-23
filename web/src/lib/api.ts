@@ -8,6 +8,7 @@ import type {
   ResumenMovimientosDelDia,
   ResumenPeriodo,
   Ticket,
+  Tienda,
   TipoMovimientoCaja,
   TokenPair,
   TurnoCaja,
@@ -551,4 +552,19 @@ export function listarTurnosCaja(token: string, rango: RangoDeFechas): Promise<T
 // El ticket de una venta (el cajero, solo de ventas de hoy).
 export function obtenerTicket(token: string, ventaId: string): Promise<Ticket> {
   return apiFetch<Ticket>(`/ventas/${ventaId}/ticket`, { token });
+}
+
+// --- Datos de la tienda (solo admin) ---
+
+export function obtenerTienda(token: string): Promise<Tienda> {
+  return apiFetch<Tienda>('/tienda', { token });
+}
+
+// Solo cambia lo que se manda; un texto vacío borra ese dato.
+export function actualizarTienda(token: string, datos: Partial<Tienda>): Promise<Tienda> {
+  return apiFetch<Tienda>('/tienda', {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(datos),
+  });
 }

@@ -1,4 +1,5 @@
 import { MetodoPago } from '../../../common/enums/metodo-pago.enum';
+import type { TiendaDto } from '../../tenants/dto/tienda.dto';
 
 /**
  * Lo que va impreso (o compartido) en el ticket de una venta. Muestra la
@@ -8,7 +9,8 @@ import { MetodoPago } from '../../../common/enums/metodo-pago.enum';
  * cosa (con RUC, clave de acceso, autorización).
  */
 export interface TicketDto {
-  tienda: string;
+  // Nombre (el del letrero) y, si se cargaron, RUC, dirección, etc.
+  tienda: TiendaDto;
   numero: number;
   fecha: Date;
   cajero: string;

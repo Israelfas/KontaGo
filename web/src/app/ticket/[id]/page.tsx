@@ -136,7 +136,15 @@ function ContenidoTicket() {
         aria-label={`Ticket ${numeroDeTicket(ticket.numero)}`}
       >
         <header className="text-center">
-          <p className="text-[1.15em] font-bold uppercase">{ticket.tienda}</p>
+          <p className="text-[1.15em] font-bold uppercase">{ticket.tienda.nombre}</p>
+          {/* La razón social solo si es distinta del nombre del letrero. */}
+          {ticket.tienda.razonSocial && ticket.tienda.razonSocial !== ticket.tienda.nombre && (
+            <p>{ticket.tienda.razonSocial}</p>
+          )}
+          {ticket.tienda.ruc && <p>RUC {ticket.tienda.ruc}</p>}
+          {ticket.tienda.direccion && <p>{ticket.tienda.direccion}</p>}
+          {ticket.tienda.telefono && <p>Tel. {ticket.tienda.telefono}</p>}
+          <div className="my-2 border-t border-dashed border-black" aria-hidden="true" />
           <p>Ticket {numeroDeTicket(ticket.numero)}</p>
           <p>{cuando}</p>
           <p>Atendió: {ticket.cajero}</p>
@@ -198,6 +206,7 @@ function ContenidoTicket() {
 
         <footer className="text-center">
           <p>¡Gracias por su compra!</p>
+          {ticket.tienda.mensajeTicket && <p className="mt-1">{ticket.tienda.mensajeTicket}</p>}
           <p className="mt-1 text-[0.85em]">Este ticket no reemplaza a la factura.</p>
         </footer>
       </article>

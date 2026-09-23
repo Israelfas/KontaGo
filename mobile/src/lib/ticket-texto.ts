@@ -17,12 +17,19 @@ export function textoDelTicket(ticket: Ticket): string {
     year: 'numeric',
   })} ${fecha.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}`;
 
-  const lineas: string[] = [
-    `*${ticket.tienda}*`,
+  const { tienda } = ticket;
+  const lineas: string[] = [`*${tienda.nombre}*`];
+  // La razón social solo si es distinta del nombre del letrero.
+  if (tienda.razonSocial && tienda.razonSocial !== tienda.nombre) lineas.push(tienda.razonSocial);
+  if (tienda.ruc) lineas.push(`RUC ${tienda.ruc}`);
+  if (tienda.direccion) lineas.push(tienda.direccion);
+  if (tienda.telefono) lineas.push(`Tel. ${tienda.telefono}`);
+  lineas.push(
+    '',
     `Ticket ${numeroDeTicket(ticket.numero)} · ${cuando}`,
     `Atendió: ${ticket.cajero}`,
     '',
-  ];
+  );
   for (const linea of ticket.lineas) {
     lineas.push(
       `${linea.cantidad} x ${linea.nombre} — ${formatearCentavos(linea.totalCentavos)}` +
@@ -46,7 +53,9 @@ export function textoDelTicket(ticket: Ticket): string {
   if (ticket.anuladoCentavos > 0) {
     lineas.push(`Devuelto (anulación): -${formatearCentavos(ticket.anuladoCentavos)}`);
   }
-  lineas.push('', '¡Gracias por su compra!', '_Este ticket no reemplaza a la factura._');
+  lineas.push('', '¡Gracias por su compra!');
+  if (tienda.mensajeTicket) lineas.push(tienda.mensajeTicket);
+  lineas.push('_Este ticket no reemplaza a la factura._');
   return lineas.join('\n');
 }
 
