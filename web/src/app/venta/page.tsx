@@ -6,17 +6,10 @@ import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
 import { ScannerCamara } from '@/components/scanner-camara';
 import { Button, EmptyState, ErrorState, LoadingState } from '@/components/ui';
+import { CifraAnimada } from '@/components/cifra';
 import { FormularioAbrirCaja } from '@/components/caja';
 import { Banda, Hoja } from '@/components/banda';
-import {
-  CameraIcon,
-  CartIcon,
-  CashIcon,
-  CheckIcon,
-  MinusIcon,
-  PlusIcon,
-  TrashIcon,
-} from '@/components/icons';
+import { CameraIcon, CartIcon, CashIcon, MinusIcon, PlusIcon, TrashIcon } from '@/components/icons';
 import { useAuth } from '@/lib/auth-context';
 import {
   buscarPorCodigoBarras,
@@ -304,6 +297,8 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
         ...(efectivo ? { montoRecibidoCentavos: montoRecibidoCentavos! } : {}),
       });
       setVentaConfirmada(venta);
+      // En el celular, un toque corto confirma sin mirar la pantalla.
+      navigator.vibrate?.(12);
       setCarrito([]);
       setMontoRecibido('');
       setMetodoPago('efectivo');
@@ -330,15 +325,37 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
     return (
       <div className="app-page">
         <div className="mx-auto max-w-md px-4 py-10 sm:px-6">
-          <div className="app-card border-verde-ganancia/30 bg-verde-ganancia/5 p-6 text-center">
-            <span className="metric-icon !relative !z-auto !mx-auto !mt-0 !bg-verde-ganancia/15 !text-verde-ganancia">
-              <CheckIcon className="h-5 w-5" />
-            </span>
+          <div className="confirmacion app-card border-verde-ganancia/30 bg-verde-ganancia/5 p-6 text-center">
+            {/* El círculo se dibuja y después el check, como una firma. */}
+            <svg
+              viewBox="0 0 52 52"
+              className="mx-auto h-14 w-14 text-verde-ganancia"
+              aria-hidden="true"
+            >
+              <circle
+                className="check-circulo"
+                cx="26"
+                cy="26"
+                r="24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              />
+              <path
+                className="check-trazo"
+                d="M15 27l7.5 7.5L37 19.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
             <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-verde-ganancia">
               Venta registrada · ticket {numeroDeTicket(ventaConfirmada.numero)}
             </p>
             <p className="mt-2 font-ticket text-3xl font-semibold text-tinta">
-              {formatearCentavos(ventaConfirmada.totalCentavos)}
+              <CifraAnimada texto={formatearCentavos(ventaConfirmada.totalCentavos)} />
             </p>
             <div className="borde-perforado my-4" />
             {ventaConfirmada.metodoPago === 'transferencia' ? (
@@ -354,7 +371,7 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
                 <div className="mt-1 flex items-center justify-between text-sm">
                   <span className="font-medium text-tinta">Vuelto</span>
                   <span className="font-ticket text-lg font-semibold text-ambar">
-                    {formatearCentavos(ventaConfirmada.vueltoCentavos)}
+                    <CifraAnimada texto={formatearCentavos(ventaConfirmada.vueltoCentavos)} />
                   </span>
                 </div>
               </>
@@ -606,7 +623,7 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
             ) : pantallaChica ? (
               <ul className="mt-5 space-y-2">
                 {carrito.map((item) => (
-                  <li key={item.producto.id} className="app-card p-3">
+                  <li key={item.producto.id} className="entra app-card p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-tinta">{item.producto.nombre}</p>
@@ -627,7 +644,11 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
                         >
                           <MinusIcon className="h-3.5 w-3.5" />
                         </button>
-                        <span className="w-6 text-center font-ticket font-semibold text-tinta">
+                        {/* La key hace que el número lata cada vez que cambia. */}
+                        <span
+                          key={item.cantidad}
+                          className="latido w-6 text-center font-ticket font-semibold text-tinta"
+                        >
                           {item.cantidad}
                         </span>
                         <button
@@ -662,7 +683,7 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
                   </thead>
                   <tbody>
                     {carrito.map((item) => (
-                      <tr key={item.producto.id} className="border-t border-papel-linea">
+                      <tr key={item.producto.id} className="entra border-t border-papel-linea">
                         <td className="px-4 py-3">
                           <p className="text-tinta">{item.producto.nombre}</p>
                           <p className="font-ticket text-xs text-tinta-suave">
@@ -678,7 +699,10 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
                             >
                               <MinusIcon className="h-3 w-3" />
                             </button>
-                            <span className="w-7 text-center font-ticket text-tinta">
+                            <span
+                              key={item.cantidad}
+                              className="latido w-7 text-center font-ticket text-tinta"
+                            >
                               {item.cantidad}
                             </span>
                             <button

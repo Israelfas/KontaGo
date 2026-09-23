@@ -1,6 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type RefObject,
+} from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { rutaInicial, useAuth } from '@/lib/auth-context';
@@ -44,25 +51,128 @@ const ENLACES = [
   { href: '/equipo', etiqueta: 'Equipo', icono: UsersIcon, soloAdmin: true },
 ];
 
+type Pastilla = { x: number; ancho: number };
+
+// Cada pantalla monta su propio Nav. Lo que se recuerda de una a otra:
+// - dónde iba la pastilla, para que siga viaje en vez de volver a empezar;
+// - lo que llega del servidor (nombre de la tienda y contador de
+//   Inventario): sin eso cada pantalla armaba el menú sin ellos, al llegar
+//   cambiaba de ancho y todo el menú saltaba de costado.
+const recuerdo = {
+  usuario: null as string | null,
+  tienda: null as string | null,
+  porVencer: 0,
+  pastilla: null as Pastilla | null,
+  indiceInferior: null as number | null,
+};
+
+/** Posición real en pantalla de la pastilla, aunque esté a mitad de viaje. */
+function dondeEsta(el: HTMLElement): Pastilla {
+  return {
+    x: new DOMMatrixReadOnly(getComputedStyle(el).transform).m41,
+    ancho: el.getBoundingClientRect().width,
+  };
+}
+
+/**
+ * La pastilla oscura del menú. Sale hacia la sección apenas se hace clic
+ * (no espera a que cargue la pantalla nueva) y, si la pantalla llega a
+ * mitad de camino, sigue desde donde iba.
+ */
+function usePastilla(navRef: RefObject<HTMLElement | null>, clave: string) {
+  const indicadorRef = useRef<HTMLSpanElement>(null);
+  const [pastilla, setPastilla] = useState<(Pastilla & { animar: boolean }) | null>(() =>
+    recuerdo.pastilla ? { ...recuerdo.pastilla, animar: false } : null,
+  );
+
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    // Registra la posición de partida: así el cambio se anima en vez de saltar.
+    void nav.offsetWidth;
+    const medir = (animar: boolean) => {
+      const activo = nav.querySelector<HTMLElement>('[aria-current="page"]');
+      recuerdo.pastilla = activo ? { x: activo.offsetLeft, ancho: activo.offsetWidth } : null;
+      setPastilla(recuerdo.pastilla ? { ...recuerdo.pastilla, animar } : null);
+    };
+    const cuadro = requestAnimationFrame(() => medir(true));
+    const alRedimensionar = () => medir(false);
+    window.addEventListener('resize', alRedimensionar);
+    return () => {
+      cancelAnimationFrame(cuadro);
+      window.removeEventListener('resize', alRedimensionar);
+    };
+  }, [navRef, clave]);
+
+  // Al desmontarse (cambio de pantalla), deja anotado dónde va de verdad.
+  useLayoutEffect(
+    () => () => {
+      if (indicadorRef.current) recuerdo.pastilla = dondeEsta(indicadorRef.current);
+    },
+    [],
+  );
+
+  const irA = (enlace: HTMLElement) => {
+    recuerdo.pastilla = { x: enlace.offsetLeft, ancho: enlace.offsetWidth };
+    setPastilla({ ...recuerdo.pastilla, animar: true });
+  };
+
+  return { pastilla, indicadorRef, irA };
+}
+
+/** La rayita de la barra inferior: mismo criterio, con columnas iguales. */
+function useIndiceInferior(actual: number) {
+  const [estado, setEstado] = useState(() => ({
+    indice: recuerdo.indiceInferior ?? actual,
+    animar: false,
+  }));
+
+  useEffect(() => {
+    const cuadro = requestAnimationFrame(() => {
+      setEstado((previo) => ({ indice: actual, animar: previo.indice !== actual }));
+      recuerdo.indiceInferior = actual;
+    });
+    return () => cancelAnimationFrame(cuadro);
+  }, [actual]);
+
+  const irA = (indice: number) => {
+    recuerdo.indiceInferior = indice;
+    setEstado({ indice, animar: true });
+  };
+
+  return { ...estado, irA };
+}
+
+// Un clic con Ctrl/Cmd/Shift o con la rueda abre otra pestaña: acá no cambia nada.
+const abreOtraPestana = (e: MouseEvent) =>
+  e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey;
+
 function EnlaceNavegacion({
   href,
   etiqueta,
   activo,
+  conFondo,
   icono: Icono,
   badge,
+  onElegir,
 }: {
   href: string;
   etiqueta: string;
   activo: boolean;
+  /** Fondo propio solo mientras la pastilla todavía no se ubicó. */
+  conFondo: boolean;
   icono: typeof CartIcon;
   badge?: number;
+  onElegir: (e: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   return (
     <Link
       href={href}
-      className={`relative inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150 ${
+      onClick={onElegir}
+      aria-current={activo ? 'page' : undefined}
+      className={`nav-enlace relative z-[1] inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-[color,background-color,transform] duration-[280ms] [transition-timing-function:var(--ease-deslizar)] ${
         activo
-          ? 'bg-tinta text-papel shadow-[0_4px_12px_rgba(28,43,58,0.16)]'
+          ? `text-papel ${conFondo ? 'bg-tinta shadow-[0_4px_12px_rgba(28,43,58,0.16)]' : ''}`
           : 'text-tinta-suave hover:bg-white/75 hover:text-tinta'
       }`}
     >
@@ -85,19 +195,29 @@ function EnlaceNavegacion({
 export function Nav() {
   const pathname = usePathname();
   const { usuario, token, cerrarSesion } = useAuth();
-  const [porVencer, setPorVencer] = useState(0);
+  // Lo recordado vale solo para la misma cuenta.
+  const mismaCuenta = !!usuario && recuerdo.usuario === usuario.sub;
+  const [porVencer, setPorVencer] = useState(() => (mismaCuenta ? recuerdo.porVencer : 0));
   // Sin esto, todas las tiendas se veían iguales: con dos cuentas no
   // había forma de saber en cuál estabas (y una tienda sin ventas parecía
   // un error).
-  const [tienda, setTienda] = useState<string | null>(null);
+  const [tienda, setTienda] = useState<string | null>(() => (mismaCuenta ? recuerdo.tienda : null));
+  // Adónde se hizo clic, mientras la pantalla nueva todavía no llegó.
+  const [elegido, setElegido] = useState<string | null>(null);
   const esAdmin = usuario?.rol === 'admin';
+  const activa = elegido ?? pathname;
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || !usuario) return;
+    const cuenta = usuario.sub;
     obtenerPerfil(token)
-      .then((perfil) => setTienda(perfil.tienda))
+      .then((perfil) => {
+        recuerdo.usuario = cuenta;
+        recuerdo.tienda = perfil.tienda;
+        setTienda(perfil.tienda);
+      })
       .catch(() => setTienda(null));
-  }, [token]);
+  }, [token, usuario]);
 
   useEffect(() => {
     // El badge vive en Inventario, que el cajero no ve.
@@ -109,11 +229,20 @@ export function Nav() {
     obtenerAlertas(token)
       // Productos con algo por vencer o ya vencido (sin contar dos veces
       // uno que tenga las dos cosas).
-      .then((alertas) =>
-        setPorVencer(new Set([...alertas.porVencer, ...alertas.vencidos].map((p) => p.id)).size),
-      )
+      .then((alertas) => {
+        recuerdo.porVencer = new Set(
+          [...alertas.porVencer, ...alertas.vencidos].map((p) => p.id),
+        ).size;
+        setPorVencer(recuerdo.porVencer);
+      })
       .catch(() => setPorVencer(0));
   }, [token, esAdmin]);
+
+  const navRef = useRef<HTMLElement>(null);
+  const { pastilla, indicadorRef, irA } = usePastilla(
+    navRef,
+    `${pathname}|${porVencer}|${esAdmin}|${tienda}`,
+  );
 
   const enlaces = ENLACES.filter((enlace) => esAdmin || !enlace.soloAdmin).map(
     ({ href, etiqueta, icono }) => ({
@@ -124,6 +253,18 @@ export function Nav() {
     }),
   );
 
+  const inferior = useIndiceInferior(enlaces.findIndex((e) => e.href === pathname));
+
+  // La respuesta va en el clic: la pastilla y la rayita salen ya hacia la
+  // sección elegida, sin esperar a que cargue la pantalla.
+  const elegir = (e: MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (abreOtraPestana(e) || href === pathname) return;
+    setElegido(href);
+    irA(e.currentTarget);
+    const indice = enlaces.findIndex((x) => x.href === href);
+    if (indice >= 0) inferior.irA(indice);
+  };
+
   return (
     <>
       <header className="vidrio sticky top-0 z-40 border-b border-papel-linea/80 bg-papel/90 backdrop-blur-xl">
@@ -133,9 +274,26 @@ export function Nav() {
               <AppLogo />
             </Link>
 
-            <nav className="hidden items-center gap-1 rounded-xl border border-papel-linea/80 bg-white/45 p-1 md:flex">
+            <nav
+              ref={navRef}
+              className="relative hidden items-center gap-1 rounded-xl border border-papel-linea/80 bg-white/45 p-1 md:flex"
+            >
+              {pastilla && (
+                <span
+                  ref={indicadorRef}
+                  aria-hidden="true"
+                  className={`nav-indicador ${pastilla.animar ? 'nav-indicador-animado' : ''}`}
+                  style={{ width: pastilla.ancho, transform: `translateX(${pastilla.x}px)` }}
+                />
+              )}
               {enlaces.map((enlace) => (
-                <EnlaceNavegacion key={enlace.href} {...enlace} activo={pathname === enlace.href} />
+                <EnlaceNavegacion
+                  key={enlace.href}
+                  {...enlace}
+                  activo={activa === enlace.href}
+                  conFondo={!pastilla}
+                  onElegir={(e) => elegir(e, enlace.href)}
+                />
               ))}
             </nav>
 
@@ -187,28 +345,34 @@ export function Nav() {
         className="vidrio fixed inset-x-0 bottom-0 z-40 border-t border-papel-linea bg-papel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden"
       >
         <div
-          className="grid"
+          className="relative grid"
           style={{
             gridTemplateColumns: `repeat(${enlaces.length}, minmax(0, 1fr))`,
           }}
         >
+          {inferior.indice >= 0 && (
+            <span
+              aria-hidden="true"
+              className="barra-inferior-indicador"
+              style={{
+                width: `${100 / enlaces.length}%`,
+                transform: `translateX(${inferior.indice * 100}%) scaleX(0.55)`,
+                transition: inferior.animar ? 'transform 280ms var(--ease-deslizar)' : undefined,
+              }}
+            />
+          )}
           {enlaces.map(({ href, etiqueta, icono: Icono, badge }) => {
-            const activo = pathname === href;
+            const activo = activa === href;
             return (
               <Link
                 key={href}
                 href={href}
+                onClick={(e) => elegir(e, href)}
                 aria-current={activo ? 'page' : undefined}
                 className={`relative flex flex-col items-center gap-1 px-1 pb-2 pt-2.5 text-[0.65rem] font-semibold ${
                   activo ? 'text-tinta' : 'text-tinta-suave'
                 }`}
               >
-                {activo && (
-                  <span
-                    className="absolute inset-x-3 top-0 h-0.5 rounded-full bg-ambar"
-                    aria-hidden="true"
-                  />
-                )}
                 <Icono className="h-5 w-5" />
                 <span className="w-full truncate text-center">{etiqueta}</span>
                 {!!badge && (

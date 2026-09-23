@@ -89,11 +89,21 @@ export function MetricCard({
   );
 }
 
+/**
+ * Mientras carga, la forma de lo que viene (un esqueleto con brillo) en
+ * vez de un círculo girando: el contenido llega a un lugar que ya existía.
+ */
 export function LoadingState({ label = 'Cargando información…' }: { label?: string }) {
   return (
-    <div className="state-card" role="status">
-      <span className="loading-mark" />
-      <p className="font-ticket text-sm text-tinta-suave">{label}</p>
+    <div className="app-card p-5" role="status">
+      <span className="sr-only">{label}</span>
+      <div className="esqueleto h-2.5 w-1/4" />
+      <div className="esqueleto mt-4 h-7 w-2/5" />
+      <div className="mt-5 space-y-2.5">
+        <div className="esqueleto h-2.5 w-full" />
+        <div className="esqueleto h-2.5 w-11/12" />
+        <div className="esqueleto h-2.5 w-3/4" />
+      </div>
     </div>
   );
 }

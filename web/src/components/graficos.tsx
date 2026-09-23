@@ -1,6 +1,9 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useId, useState, type CSSProperties } from 'react';
+
+// Posición de cada barra, para que crezcan una detrás de otra (ver .barra-columna).
+const orden = (i: number) => ({ '--i': i }) as CSSProperties;
 import { formatearCentavos } from '@/lib/formato';
 import { aFecha, fechaLarga } from '@/lib/periodo';
 import { usePantallaChica } from '@/lib/use-pantalla-chica';
@@ -187,6 +190,8 @@ export function GraficoIngreso({
               {altoBarra > 0 && (
                 <path
                   d={caminoColumna(x, y, grosor, altoBarra)}
+                  className="barra-columna"
+                  style={orden(i)}
                   fill={SERIE}
                   opacity={activo === null || activo === i ? 1 : 0.55}
                   pointerEvents="none"
@@ -301,6 +306,8 @@ export function GraficoTopProductos({
             >
               <path
                 d={caminoBarra(0, 0, Math.max(2, (d.unidades / maximo) * 300), 18)}
+                className="barra-fila"
+                style={orden(i)}
                 fill={SERIE}
                 opacity={activo === null || activo === i ? 1 : 0.55}
               />

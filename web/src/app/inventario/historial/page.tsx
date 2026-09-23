@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
@@ -55,7 +55,7 @@ function ListaConBarras({
         <p className="mt-3 text-sm text-tinta-suave">{vacio}</p>
       ) : (
         <ul className="mt-3 space-y-2.5">
-          {filas.map((f) => (
+          {filas.map((f, i) => (
             <li key={f.clave}>
               <div className="flex items-baseline justify-between gap-3 text-sm">
                 <span className="truncate text-tinta" title={f.texto}>
@@ -68,11 +68,14 @@ function ListaConBarras({
               </div>
               <div className="mt-1 h-1.5 rounded-full bg-papel-linea/60" aria-hidden="true">
                 <div
-                  className="h-1.5 rounded-full"
-                  style={{
-                    width: `${Math.max(2, (f.centavos / maximo) * 100)}%`,
-                    background: SERIE,
-                  }}
+                  className="barra-fila h-1.5 rounded-full"
+                  style={
+                    {
+                      width: `${Math.max(2, (f.centavos / maximo) * 100)}%`,
+                      background: SERIE,
+                      '--i': i,
+                    } as CSSProperties
+                  }
                 />
               </div>
             </li>

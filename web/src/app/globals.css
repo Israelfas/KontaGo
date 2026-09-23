@@ -199,8 +199,10 @@ select:focus-visible {
   transform: translateY(-1px);
 }
 
+/* Se hunde al apoyar el dedo (no al soltar), y rápido. */
 .button:active:not(:disabled) {
-  transform: translateY(0);
+  transform: scale(0.97);
+  transition-duration: 80ms;
 }
 
 .button:disabled {
@@ -704,6 +706,16 @@ select:focus-visible {
     backdrop-filter: none;
   }
 
+  .ventana::backdrop,
+  .ventana-pie {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .ventana::backdrop {
+    background: rgba(16, 26, 36, 0.62);
+  }
+
   .vidrio-oscuro {
     background: #14222f;
     -webkit-backdrop-filter: none;
@@ -724,6 +736,7 @@ select:focus-visible {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
   }
 }
@@ -1039,4 +1052,540 @@ select:focus-visible {
     margin: 0 !important;
     padding: 2mm 0 !important;
   }
+}
+
+/* ===================================================================
+   Movimiento
+   Sobrio: todo llega rápido, frena al llegar y no rebota. Solo se anima
+   transform y opacity, que no recalculan el diseño de la página. Con
+   "reducir movimiento" (regla de arriba) cada cosa queda directamente en
+   su lugar final.
+   =================================================================== */
+:root {
+  /* Frena al llegar, como algo que se desliza y se detiene. */
+  --ease-salida: cubic-bezier(0.22, 1, 0.36, 1);
+  /* El de las hojas y selectores de iOS: sale decidido y se asienta. */
+  --ease-deslizar: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes entrar {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@keyframes subir-hoja {
+  from {
+    transform: translateY(28px);
+  }
+}
+
+@keyframes crecer-vertical {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes crecer-horizontal {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes latido {
+  40% {
+    transform: scale(1.3);
+  }
+}
+
+@keyframes aparecer-escala {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+@keyframes dibujar {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes brillo {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+/* La franja: lo que dice, el número y el detalle llegan escalonados. */
+.banda-eyebrow,
+.banda-titulo,
+.banda-valor,
+.banda-detalle {
+  animation: entrar 560ms var(--ease-salida) both;
+}
+
+.banda-titulo {
+  animation-delay: 40ms;
+}
+
+.banda-valor {
+  animation-delay: 80ms;
+}
+
+.banda-detalle {
+  animation-delay: 120ms;
+}
+
+/* La hoja sube por encima de la franja y su contenido entra en cascada. */
+.hoja {
+  animation: subir-hoja 700ms var(--ease-salida) both;
+}
+
+.hoja > .app-container > * {
+  animation: entrar 480ms var(--ease-salida) 60ms both;
+}
+
+.hoja > .app-container > :nth-child(2) {
+  animation-delay: 100ms;
+}
+
+.hoja > .app-container > :nth-child(3) {
+  animation-delay: 140ms;
+}
+
+.hoja > .app-container > :nth-child(n + 4) {
+  animation-delay: 180ms;
+}
+
+/* Dentro de la hoja, las tarjetas del mosaico se suman una tras otra. */
+.mosaico > * {
+  animation: entrar 480ms var(--ease-salida) both;
+}
+
+.mosaico > :nth-child(1) { animation-delay: 80ms; }
+.mosaico > :nth-child(2) { animation-delay: 120ms; }
+.mosaico > :nth-child(3) { animation-delay: 160ms; }
+.mosaico > :nth-child(4) { animation-delay: 200ms; }
+.mosaico > :nth-child(5) { animation-delay: 240ms; }
+.mosaico > :nth-child(6) { animation-delay: 280ms; }
+.mosaico > :nth-child(n + 7) { animation-delay: 320ms; }
+
+/* Las barras de los gráficos crecen desde su base, una detrás de otra. */
+.barra-columna {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: crecer-vertical 700ms var(--ease-salida) both;
+  animation-delay: calc(200ms + var(--i, 0) * 30ms);
+  transition: opacity 150ms ease;
+}
+
+.barra-fila {
+  transform-box: fill-box;
+  transform-origin: 0 50%;
+  animation: crecer-horizontal 700ms var(--ease-salida) both;
+  animation-delay: calc(200ms + var(--i, 0) * 50ms);
+  transition: opacity 150ms ease;
+}
+
+/* Algo que se agrega (una fila del carrito) entra; un número que cambia
+   late una vez para que se note. */
+.entra {
+  animation: entrar 380ms var(--ease-salida) both;
+}
+
+.latido {
+  display: inline-block;
+  animation: latido 260ms var(--ease-salida);
+}
+
+.chip-periodo:active {
+  transform: scale(0.96);
+}
+
+/* Menú: la pastilla oscura se desliza hasta la sección elegida. */
+.nav-indicador {
+  position: absolute;
+  top: 0.25rem;
+  bottom: 0.25rem;
+  left: 0;
+  border-radius: 0.5rem;
+  background: var(--tinta);
+  box-shadow: 0 4px 12px rgba(28, 43, 58, 0.16);
+  pointer-events: none;
+}
+
+.nav-indicador-animado {
+  transition:
+    transform 280ms var(--ease-deslizar),
+    width 280ms var(--ease-deslizar);
+}
+
+.nav-enlace:active {
+  transform: scale(0.96);
+}
+
+/* Barra inferior del celular: la rayita ámbar viaja a la sección nueva. */
+.barra-inferior-indicador {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--ambar);
+  pointer-events: none;
+}
+
+/* Esqueleto: la forma de lo que viene, con un brillo que pasa. */
+.esqueleto {
+  border-radius: 0.5rem;
+  background: linear-gradient(
+    90deg,
+    rgba(228, 221, 201, 0.55) 25%,
+    rgba(250, 247, 239, 0.95) 50%,
+    rgba(228, 221, 201, 0.55) 75%
+  );
+  background-size: 200% 100%;
+  animation: brillo 1.4s linear infinite;
+}
+
+/* Venta confirmada: la tarjeta aparece y el check se dibuja. */
+.confirmacion {
+  animation: aparecer-escala 480ms var(--ease-salida) both;
+}
+
+.check-circulo {
+  stroke-dasharray: 152;
+  stroke-dashoffset: 152;
+  animation: dibujar 600ms var(--ease-salida) 120ms forwards;
+}
+
+.check-trazo {
+  stroke-dasharray: 40;
+  stroke-dashoffset: 40;
+  animation: dibujar 380ms var(--ease-salida) 560ms forwards;
+}
+
+/* ===================================================================
+   Ventanas (editar un producto, registrar una compra…)
+   El <dialog> ocupa toda la pantalla y el panel se ubica adentro:
+   centrado en escritorio, como hoja que sube desde abajo en el celular.
+   =================================================================== */
+/* Mientras hay una abierta, la página de fondo no se desplaza. La
+   canaleta fija evita que todo salte de costado al ocultarse la barra. */
+html {
+  scrollbar-gutter: stable;
+}
+
+html:has(dialog.ventana[open]) {
+  overflow: hidden;
+}
+
+.ventana {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tinta);
+  overflow: hidden;
+  /* Puede vivir dentro de una celda de tabla: que no herede su alineación. */
+  text-align: start;
+  font-weight: normal;
+}
+
+.ventana::backdrop {
+  background: rgba(16, 26, 36, 0.42);
+  backdrop-filter: blur(4px);
+  animation: fundir 260ms var(--ease-salida) both;
+}
+
+.ventana[data-saliendo]::backdrop {
+  animation: fundir-salida 200ms ease-in forwards;
+}
+
+.ventana-fondo {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.ventana-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 34rem;
+  max-height: min(88vh, 48rem);
+  overflow: hidden;
+  border: 1px solid var(--papel-linea);
+  border-radius: 1.4rem;
+  background: var(--superficie);
+  box-shadow:
+    0 30px 80px rgba(16, 26, 36, 0.28),
+    0 1px 0 rgba(255, 255, 255, 0.7) inset;
+  animation: ventana-entrar 320ms var(--ease-salida) both;
+}
+
+/* Se va por el mismo camino, más rápido y acelerando (como algo que se aparta). */
+.ventana[data-saliendo] .ventana-panel {
+  animation: ventana-salir 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes ventana-entrar {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+}
+
+@keyframes ventana-salir {
+  to {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+}
+
+@keyframes fundir {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes fundir-salida {
+  to {
+    opacity: 0;
+  }
+}
+
+.ventana-agarre {
+  display: none;
+}
+
+.ventana-cabecera {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  border-bottom: 1px solid var(--papel-linea);
+  padding: 1.25rem 1.25rem 1rem;
+}
+
+.ventana-icono {
+  display: flex;
+  height: 2.5rem;
+  width: 2.5rem;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.8rem;
+  background: rgba(28, 43, 58, 0.07);
+  color: var(--tinta);
+}
+
+.ventana-icono-verde {
+  background: rgba(47, 111, 79, 0.12);
+  color: var(--verde-ganancia);
+}
+
+.ventana-icono-rojo {
+  background: rgba(182, 70, 47, 0.1);
+  color: var(--rojo-perdida);
+}
+
+.ventana-titulo {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.ventana-descripcion {
+  margin-top: 0.2rem;
+  color: var(--tinta-suave);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.ventana-cerrar {
+  display: flex;
+  height: 2rem;
+  width: 2rem;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(28, 43, 58, 0.05);
+  color: var(--tinta-suave);
+  transition:
+    background-color 150ms ease,
+    transform 80ms ease;
+}
+
+.ventana-cerrar:hover {
+  background: rgba(28, 43, 58, 0.1);
+  color: var(--tinta);
+}
+
+.ventana-cerrar:active {
+  transform: scale(0.92);
+}
+
+.ventana-cuerpo {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.1rem 1.25rem 0;
+}
+
+/* Los botones quedan pegados abajo aunque el formulario sea largo. */
+.ventana-pie {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1.25rem -1.25rem 0;
+  border-top: 1px solid var(--papel-linea);
+  background: color-mix(in srgb, var(--superficie) 94%, transparent);
+  padding: 0.9rem 1.25rem calc(0.9rem + env(safe-area-inset-bottom));
+  backdrop-filter: blur(8px);
+}
+
+/* Ficha del producto arriba de un formulario: qué se está tocando. */
+.ficha {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  border-radius: 1rem;
+  background: var(--papel);
+  padding: 0.75rem;
+}
+
+.ficha-dato {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.ficha-dato span {
+  color: var(--tinta-suave);
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ficha-dato strong {
+  font-family: var(--font-ticket);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+@media (max-width: 639px) {
+  .ventana-fondo {
+    align-items: flex-end;
+    padding: 2.5rem 0 0;
+  }
+
+  .ventana-panel {
+    max-width: none;
+    max-height: 92dvh;
+    border-bottom: 0;
+    border-radius: 1.4rem 1.4rem 0 0;
+    animation: hoja-subir 380ms var(--ease-deslizar) both;
+  }
+
+  .ventana[data-saliendo] .ventana-panel {
+    animation: hoja-bajar 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  }
+
+  .ventana-agarre {
+    display: block;
+    height: 0.3rem;
+    width: 2.4rem;
+    margin: 0.5rem auto 0;
+    border-radius: 999px;
+    background: var(--papel-linea);
+  }
+
+  .ventana-cabecera {
+    padding-top: 0.75rem;
+  }
+
+  /* Los tres botones en una fila: el pie no crece hacia arriba. */
+  .ventana-pie {
+    flex-wrap: nowrap;
+  }
+
+  .ventana-pie .button {
+    padding-inline: 0.8rem;
+  }
+}
+
+@keyframes hoja-subir {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes hoja-bajar {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+/* Botones de acción grandes (Inventario: registrar compra o merma). */
+.accion-grande {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.9rem;
+  border: 1px solid var(--papel-linea);
+  border-radius: 1.15rem;
+  background: var(--superficie);
+  padding: 1rem 1.1rem;
+  text-align: left;
+  box-shadow: 0 10px 26px rgba(28, 43, 58, 0.06);
+  transition:
+    transform 160ms var(--ease-salida),
+    box-shadow 160ms ease,
+    border-color 160ms ease;
+}
+
+.accion-grande:hover {
+  border-color: #cfc3a6;
+  box-shadow: 0 14px 32px rgba(28, 43, 58, 0.1);
+  transform: translateY(-1px);
+}
+
+.accion-grande:active {
+  transform: scale(0.98);
+  transition-duration: 80ms;
+}
+
+/* Filas que abren algo al tocarlas. */
+.fila-tocable {
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.fila-tocable:hover {
+  background: rgba(228, 221, 201, 0.35);
+}
+
+.fila-tocable:active {
+  background: rgba(228, 221, 201, 0.6);
 }

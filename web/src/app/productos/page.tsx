@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, type MouseEvent } from 'react';
 import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
 import { AvisoDeCampo, Button, EmptyState, ErrorState, LoadingState } from '@/components/ui';
 import { Banda, Hoja } from '@/components/banda';
-import { BoxIcon, PlusIcon } from '@/components/icons';
+import { BoxIcon, PencilIcon, PlusIcon } from '@/components/icons';
+import { Ventana, VentanaPie, useVentana } from '@/components/ventana';
 import { useAuth } from '@/lib/auth-context';
 import {
   listarProductos,
@@ -29,14 +30,9 @@ import {
 } from '@/lib/filtro-productos';
 import type { Producto } from '@/lib/tipos';
 
-function FormularioNuevoProducto({
-  onCreado,
-  onCerrar,
-}: {
-  onCreado: (p: Producto) => void;
-  onCerrar: () => void;
-}) {
+function FormularioNuevoProducto({ onCreado }: { onCreado: (p: Producto) => void }) {
   const { token } = useAuth();
+  const { cerrar } = useVentana();
   const [codigoBarras, setCodigoBarras] = useState('');
   const [nombre, setNombre] = useState('');
   const [precioVenta, setPrecioVenta] = useState('');
@@ -72,7 +68,7 @@ function FormularioNuevoProducto({
         ivaExento,
       });
       onCreado(producto);
-      onCerrar();
+      cerrar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo crear el producto');
     } finally {
@@ -81,7 +77,7 @@ function FormularioNuevoProducto({
   }
 
   return (
-    <form onSubmit={manejarSubmit} className="app-card p-5 sm:p-6">
+    <form onSubmit={manejarSubmit}>
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2">
           <label className="field-label" htmlFor="producto-codigo">
@@ -212,14 +208,14 @@ function FormularioNuevoProducto({
         </p>
       )}
 
-      <div className="mt-5 flex gap-2">
+      <VentanaPie>
         <Button type="submit" variant="primary" disabled={enviando}>
           {enviando ? 'Guardando…' : 'Guardar producto'}
         </Button>
-        <Button type="button" variant="ghost" onClick={onCerrar}>
+        <Button type="button" variant="ghost" onClick={cerrar}>
           Cancelar
         </Button>
-      </div>
+      </VentanaPie>
     </form>
   );
 }
@@ -228,15 +224,14 @@ function FormularioEditarProducto({
   producto,
   onActualizado,
   onDadoDeBaja,
-  onCerrar,
 }: {
   producto: Producto;
   onActualizado: (p: Producto) => void;
   onDadoDeBaja: (p: Producto) => void;
-  onCerrar: () => void;
 }) {
   const { token } = useAuth();
-  const [precioVenta, setPrecioVenta] = useState((producto.precioVentaCentavos / 100).toString());
+  const { cerrar } = useVentana();
+  const [precioVenta, setPrecioVenta] = useState((producto.precioVentaCentavos / 100).toFixed(2));
   const [stockMinimo, setStockMinimo] = useState(producto.stockMinimo.toString());
   const [fechaVencimiento, setFechaVencimiento] = useState(producto.fechaVencimiento ?? '');
   const [error, setError] = useState<string | null>(null);
@@ -252,7 +247,7 @@ function FormularioEditarProducto({
     setEnviando(true);
     try {
       onDadoDeBaja(await darDeBajaProducto(token, producto.id));
-      onCerrar();
+      cerrar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo dar de baja el producto');
       setConfirmandoBaja(false);
@@ -279,7 +274,7 @@ function FormularioEditarProducto({
           : {}),
       });
       onActualizado(actualizado);
-      onCerrar();
+      cerrar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo actualizar el producto');
     } finally {
@@ -288,9 +283,27 @@ function FormularioEditarProducto({
   }
 
   return (
-    <form onSubmit={manejarSubmit} className="app-card p-4 sm:p-5">
-      <p className="text-sm font-semibold text-tinta">Editando: {producto.nombre}</p>
-      <div className="mt-3 grid grid-cols-2 gap-4">
+    <form onSubmit={manejarSubmit}>
+      {/* Qué se está tocando, a la vista mientras se edita. */}
+      <div className="ficha">
+        <div className="ficha-dato">
+          <span>Código</span>
+          <strong className="truncate text-xs">{producto.codigoBarras}</strong>
+        </div>
+        <div className="ficha-dato">
+          <span>Stock</span>
+          <strong>{producto.stock}</strong>
+        </div>
+        <div className="ficha-dato">
+          <span>Costo</span>
+          <strong>
+            {producto.costoUnitarioCentavos > 0
+              ? formatearCentavos(producto.costoUnitarioCentavos)
+              : '—'}
+          </strong>
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-4">
         <div>
           <label className="field-label" htmlFor={`editar-precio-${producto.id}`}>
             Precio de venta
@@ -371,44 +384,47 @@ function FormularioEditarProducto({
         </p>
       )}
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button type="submit" variant="primary" disabled={enviando}>
-          {enviando ? 'Guardando…' : 'Guardar cambios'}
-        </Button>
-        <Button type="button" variant="ghost" onClick={onCerrar}>
-          Cancelar
-        </Button>
-        {!confirmandoBaja && (
-          <Button
-            type="button"
-            variant="ghost"
-            className="sm:ml-auto"
-            disabled={enviando}
-            onClick={() => setConfirmandoBaja(true)}
-          >
-            Dar de baja
-          </Button>
-        )}
-      </div>
-
       {/* Confirmación en dos pasos: la baja saca el producto de la caja,
           no conviene que un click perdido lo haga. */}
       {confirmandoBaja && (
-        <div className="mt-4 rounded-lg border border-rojo-perdida/30 bg-rojo-perdida/5 p-3">
+        <div className="entra mt-4 rounded-xl border border-rojo-perdida/30 bg-rojo-perdida/5 p-3">
           <p className="text-sm text-tinta">
             <strong>{producto.nombre}</strong> dejará de aparecer en el catálogo y no se podrá
             vender. Sus ventas pasadas se conservan, y podés reactivarlo después.
           </p>
-          <div className="mt-3 flex gap-2">
+        </div>
+      )}
+
+      <VentanaPie>
+        {confirmandoBaja ? (
+          <>
             <Button type="button" variant="danger" disabled={enviando} onClick={darDeBaja}>
               {enviando ? 'Dando de baja…' : 'Sí, dar de baja'}
             </Button>
             <Button type="button" variant="ghost" onClick={() => setConfirmandoBaja(false)}>
               No
             </Button>
-          </div>
-        </div>
-      )}
+          </>
+        ) : (
+          <>
+            <Button type="submit" variant="primary" disabled={enviando}>
+              {enviando ? 'Guardando…' : 'Guardar cambios'}
+            </Button>
+            <Button type="button" variant="ghost" onClick={cerrar}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="ml-auto !text-rojo-perdida"
+              disabled={enviando}
+              onClick={() => setConfirmandoBaja(true)}
+            >
+              Dar de baja
+            </Button>
+          </>
+        )}
+      </VentanaPie>
     </form>
   );
 }
@@ -521,46 +537,36 @@ function CeldaFechaVencimiento({
   );
 }
 
+// Tocar la fila abre la edición, salvo que el toque haya sido en un
+// botón o enlace de la fila (la fecha, por ejemplo, se edita ahí mismo).
+const tocoAlgoAdentro = (e: MouseEvent) =>
+  !!(e.target as HTMLElement).closest('button, a, input, select, label');
+
 function TablaProductos({
   productos,
-  productoEditandoId,
   onEditar,
   onActualizado,
-  onDadoDeBaja,
-  onCerrarEdicion,
   soloLectura,
 }: {
   soloLectura: boolean;
   productos: Producto[];
-  productoEditandoId: string | null;
-  onEditar: (id: string) => void;
+  onEditar: (p: Producto) => void;
   onActualizado: (p: Producto) => void;
-  onDadoDeBaja: (p: Producto) => void;
-  onCerrarEdicion: () => void;
 }) {
   const pantallaChica = usePantallaChica();
 
-  // En celular la tabla no entra (se cortaban Vence y Editar): tarjetas,
-  // y la edición se abre en el lugar del producto, no al final de la lista.
+  // En celular la tabla no entra (se cortaban Vence y Editar): tarjetas.
   if (pantallaChica) {
     return (
       <ul className="space-y-3">
         {productos.map((p) => {
-          if (!soloLectura && p.id === productoEditandoId) {
-            return (
-              <li key={p.id}>
-                <FormularioEditarProducto
-                  producto={p}
-                  onActualizado={onActualizado}
-                  onDadoDeBaja={onDadoDeBaja}
-                  onCerrar={onCerrarEdicion}
-                />
-              </li>
-            );
-          }
           const stockBajo = p.stock <= p.stockMinimo && p.stockMinimo > 0;
           return (
-            <li key={p.id} className="app-card p-4">
+            <li
+              key={p.id}
+              className={`app-card p-4 ${soloLectura ? '' : 'fila-tocable'}`}
+              onClick={soloLectura ? undefined : (e) => !tocoAlgoAdentro(e) && onEditar(p)}
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-medium text-tinta">{p.nombre}</p>
@@ -589,9 +595,10 @@ function TablaProductos({
                 {!soloLectura && (
                   <button
                     type="button"
-                    onClick={() => onEditar(p.id)}
-                    className="ml-auto text-xs font-medium text-tinta-suave underline hover:text-tinta"
+                    onClick={() => onEditar(p)}
+                    className="ml-auto inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10"
                   >
+                    <PencilIcon className="h-3 w-3" />
                     Editar
                   </button>
                 )}
@@ -621,7 +628,11 @@ function TablaProductos({
             {productos.map((p) => {
               const stockBajo = p.stock <= p.stockMinimo && p.stockMinimo > 0;
               return (
-                <tr key={p.id} className="border-t border-papel-linea">
+                <tr
+                  key={p.id}
+                  className={`border-t border-papel-linea ${soloLectura ? '' : 'fila-tocable'}`}
+                  onClick={soloLectura ? undefined : (e) => !tocoAlgoAdentro(e) && onEditar(p)}
+                >
                   <td className="px-4 py-3 text-tinta">{p.nombre}</td>
                   <td className="px-4 py-3 font-ticket text-xs text-tinta-suave">
                     {p.codigoBarras}
@@ -647,9 +658,10 @@ function TablaProductos({
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button"
-                        onClick={() => onEditar(p.id)}
-                        className="text-xs font-medium text-tinta-suave underline hover:text-tinta"
+                        onClick={() => onEditar(p)}
+                        className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10"
                       >
+                        <PencilIcon className="h-3 w-3" />
                         Editar
                       </button>
                     </td>
@@ -660,20 +672,6 @@ function TablaProductos({
           </tbody>
         </table>
       </div>
-
-      {productoEditandoId &&
-        (() => {
-          const producto = productos.find((p) => p.id === productoEditandoId);
-          if (!producto) return null;
-          return (
-            <FormularioEditarProducto
-              producto={producto}
-              onActualizado={onActualizado}
-              onDadoDeBaja={onDadoDeBaja}
-              onCerrar={onCerrarEdicion}
-            />
-          );
-        })()}
     </div>
   );
 }
@@ -864,8 +862,10 @@ function ContenidoProductos() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [formularioAbierto, setFormularioAbierto] = useState(false);
-  const [productoEditandoId, setProductoEditandoId] = useState<string | null>(null);
+  const [nuevoAbierto, setNuevoAbierto] = useState(false);
+  // Una copia del producto (no su id): si se da de baja, la ventana puede
+  // irse con su animación aunque ya no esté en la lista.
+  const [editando, setEditando] = useState<Producto | null>(null);
   const [busqueda, setBusqueda] = useState('');
   const [filtro, setFiltro] = useState<FiltroProductos>('todos');
   const productosVisibles = filtrarProductos(productos, busqueda, filtro);
@@ -926,8 +926,8 @@ function ContenidoProductos() {
               : 'Todavía no hay productos en el catálogo.'
         }
         accion={
-          esAdmin && !formularioAbierto ? (
-            <Button variant="claro" onClick={() => setFormularioAbierto(true)}>
+          esAdmin ? (
+            <Button variant="claro" onClick={() => setNuevoAbierto(true)}>
               <PlusIcon className="h-4 w-4" />
               Nuevo producto
             </Button>
@@ -937,11 +937,34 @@ function ContenidoProductos() {
 
       <Hoja>
         <div className="mt-8 space-y-6">
-          {formularioAbierto && (
-            <FormularioNuevoProducto
-              onCreado={(p) => setProductos((prev) => [p, ...prev])}
-              onCerrar={() => setFormularioAbierto(false)}
-            />
+          {nuevoAbierto && (
+            <Ventana
+              titulo="Nuevo producto"
+              descripcion="Se suma al catálogo y ya se puede vender."
+              icono={<PlusIcon className="h-5 w-5" />}
+              onCerrar={() => setNuevoAbierto(false)}
+            >
+              <FormularioNuevoProducto onCreado={(p) => setProductos((prev) => [p, ...prev])} />
+            </Ventana>
+          )}
+
+          {editando && (
+            <Ventana
+              titulo={editando.nombre}
+              descripcion="Precio, stock mínimo y vencimiento."
+              icono={<PencilIcon className="h-5 w-5" />}
+              onCerrar={() => setEditando(null)}
+            >
+              <FormularioEditarProducto
+                producto={editando}
+                onActualizado={(actualizado) =>
+                  setProductos((prev) =>
+                    prev.map((p) => (p.id === actualizado.id ? actualizado : p)),
+                  )
+                }
+                onDadoDeBaja={manejarDadoDeBaja}
+              />
+            </Ventana>
           )}
 
           {cargando && <LoadingState label="Cargando catálogo…" />}
@@ -996,13 +1019,10 @@ function ContenidoProductos() {
             <TablaProductos
               productos={productosVisibles}
               soloLectura={!esAdmin}
-              productoEditandoId={productoEditandoId}
-              onEditar={(id) => setProductoEditandoId(id)}
+              onEditar={setEditando}
               onActualizado={(actualizado) =>
                 setProductos((prev) => prev.map((p) => (p.id === actualizado.id ? actualizado : p)))
               }
-              onDadoDeBaja={manejarDadoDeBaja}
-              onCerrarEdicion={() => setProductoEditandoId(null)}
             />
           )}
 

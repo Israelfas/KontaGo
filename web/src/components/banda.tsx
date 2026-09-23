@@ -1,4 +1,9 @@
 import type { ReactNode } from 'react';
+import { CifraAnimada } from './cifra';
+
+// Los montos que llegan como texto cuentan hasta su valor al aparecer.
+const animar = (valor: ReactNode) =>
+  typeof valor === 'string' ? <CifraAnimada texto={valor} /> : valor;
 
 /**
  * Encabezado inmersivo: una franja oscura a todo el ancho que lleva EL
@@ -35,7 +40,7 @@ export function Banda({
           {accion && <div className="shrink-0">{accion}</div>}
         </div>
 
-        {valor !== undefined && <p className="banda-valor">{valor}</p>}
+        {valor !== undefined && <p className="banda-valor">{animar(valor)}</p>}
         {detalle && <p className="banda-detalle">{detalle}</p>}
         {extra}
       </div>
@@ -81,7 +86,7 @@ export function Pieza({
   return (
     <article className={clases}>
       <p className="pieza-etiqueta">{etiqueta}</p>
-      {valor !== undefined && <p className="pieza-valor">{valor}</p>}
+      {valor !== undefined && <p className="pieza-valor">{animar(valor)}</p>}
       {children}
       {detalle && <p className="pieza-detalle">{detalle}</p>}
     </article>

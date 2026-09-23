@@ -189,3 +189,20 @@ export function SparklesIcon(props: IconProps) {
     </IconBase>
   );
 }
+
+export function CloseIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M6 6l12 12M18 6 6 18" />
+    </IconBase>
+  );
+}
+
+export function PencilIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M4 20h4L19 9l-4-4L4 16v4Z" />
+      <path d="m13.5 6.5 4 4" />
+    </IconBase>
+  );
+}

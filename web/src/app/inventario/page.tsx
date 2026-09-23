@@ -13,7 +13,15 @@ import {
 } from '@/components/ui';
 import { Banda, Hoja } from '@/components/banda';
 import Link from 'next/link';
-import { AlertIcon, BoxIcon, MinusIcon, PlusIcon, ReceiptIcon } from '@/components/icons';
+import {
+  AlertIcon,
+  BoxIcon,
+  MinusIcon,
+  PencilIcon,
+  PlusIcon,
+  ReceiptIcon,
+} from '@/components/icons';
+import { Ventana, VentanaPie, useVentana } from '@/components/ventana';
 import { useAuth } from '@/lib/auth-context';
 import {
   corregirLotes,
@@ -88,6 +96,7 @@ function FormularioAbastecimiento({
   productoInicialId?: string;
 }) {
   const { token } = useAuth();
+  const { cerrar } = useVentana();
   const [productoId, setProductoId] = useState(productoInicialId);
   const [cantidad, setCantidad] = useState('');
   const [costoUnitario, setCostoUnitario] = useState('');
@@ -115,12 +124,8 @@ function FormularioAbastecimiento({
         proveedor: proveedor || undefined,
         fechaVencimiento: fechaVencimiento || undefined,
       });
-      setProductoId('');
-      setCantidad('');
-      setCostoUnitario('');
-      setProveedor('');
-      setFechaVencimiento('');
       onRegistrado();
+      cerrar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo registrar el abastecimiento');
     } finally {
@@ -129,20 +134,8 @@ function FormularioAbastecimiento({
   }
 
   return (
-    <form onSubmit={manejarSubmit} className="app-card p-5 sm:p-6">
-      <div className="flex items-center gap-2.5">
-        <span className="metric-icon !relative !z-auto !mt-0">
-          <PlusIcon className="h-4 w-4" />
-        </span>
-        <div>
-          <h2 className="font-display text-base font-bold text-tinta">Abastecimiento</h2>
-          <p className="text-xs text-tinta-suave">
-            Suma stock y recalcula el costo promedio del producto.
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-5 space-y-4">
+    <form onSubmit={manejarSubmit}>
+      <div className="space-y-4">
         <div>
           <label className="field-label" htmlFor="abastecimiento-producto">
             Producto
@@ -244,14 +237,14 @@ function FormularioAbastecimiento({
         </p>
       )}
 
-      <Button
-        type="submit"
-        variant="primary"
-        disabled={enviando || !productoId}
-        className="mt-5 w-full"
-      >
-        {enviando ? 'Registrando…' : 'Registrar abastecimiento'}
-      </Button>
+      <VentanaPie>
+        <Button type="submit" variant="primary" disabled={enviando || !productoId}>
+          {enviando ? 'Registrando…' : 'Registrar abastecimiento'}
+        </Button>
+        <Button type="button" variant="ghost" onClick={cerrar}>
+          Cancelar
+        </Button>
+      </VentanaPie>
     </form>
   );
 }
@@ -268,6 +261,7 @@ function FormularioMerma({
   onRegistrado: () => void;
 }) {
   const { token } = useAuth();
+  const { cerrar } = useVentana();
   const [productoId, setProductoId] = useState('');
   const [cantidad, setCantidad] = useState('');
   const [motivo, setMotivo] = useState<MotivoMerma>('vencido');
@@ -298,11 +292,8 @@ function FormularioMerma({
         motivo,
         loteId: loteId || undefined,
       });
-      setProductoId('');
-      setCantidad('');
-      setMotivo('vencido');
-      setLoteId('');
       onRegistrado();
+      cerrar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo registrar la merma');
     } finally {
@@ -311,20 +302,8 @@ function FormularioMerma({
   }
 
   return (
-    <form onSubmit={manejarSubmit} className="app-card p-5 sm:p-6">
-      <div className="flex items-center gap-2.5">
-        <span className="metric-icon !relative !z-auto !mt-0 !bg-rojo-perdida/10 !text-rojo-perdida">
-          <MinusIcon className="h-4 w-4" />
-        </span>
-        <div>
-          <h2 className="font-display text-base font-bold text-tinta">Merma</h2>
-          <p className="text-xs text-tinta-suave">
-            Descuenta stock y valoriza la pérdida a costo, no a precio de venta.
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-5 space-y-4">
+    <form onSubmit={manejarSubmit}>
+      <div className="space-y-4">
         <div>
           <label className="field-label" htmlFor="merma-producto">
             Producto
@@ -406,14 +385,18 @@ function FormularioMerma({
         </p>
       )}
 
-      <Button
-        type="submit"
-        variant="danger"
-        disabled={enviando || !productoId || !!problemaCantidad}
-        className="mt-5 w-full"
-      >
-        {enviando ? 'Registrando…' : 'Registrar merma'}
-      </Button>
+      <VentanaPie>
+        <Button
+          type="submit"
+          variant="danger"
+          disabled={enviando || !productoId || !!problemaCantidad}
+        >
+          {enviando ? 'Registrando…' : 'Registrar merma'}
+        </Button>
+        <Button type="button" variant="ghost" onClick={cerrar}>
+          Cancelar
+        </Button>
+      </VentanaPie>
     </form>
   );
 }
@@ -432,8 +415,53 @@ function FilaVencido({
   puedeDarDeBaja: boolean;
   onDadoDeBaja: () => void;
 }) {
-  const { token } = useAuth();
   const [confirmando, setConfirmando] = useState(false);
+
+  return (
+    <tr className="border-t border-papel-linea">
+      <td className="px-4 py-3 text-tinta">
+        {producto.nombre}
+        <span className="block font-ticket text-xs text-rojo-perdida">
+          {unidades(lote.cantidad)} · {textoVencimiento(lote)}
+        </span>
+      </td>
+      <td className="px-4 py-3 text-right">
+        {puedeDarDeBaja && (
+          <button
+            type="button"
+            onClick={() => setConfirmando(true)}
+            className="inline-flex items-center gap-1 rounded-full bg-rojo-perdida/10 px-2.5 py-1 text-xs font-medium text-rojo-perdida transition-colors hover:bg-rojo-perdida/15"
+          >
+            Dar de baja
+          </button>
+        )}
+        {confirmando && (
+          <Ventana
+            titulo="Dar de baja lo vencido"
+            descripcion="Sale del stock como merma por vencimiento, valorizada a costo."
+            icono={<MinusIcon className="h-5 w-5" />}
+            tono="rojo"
+            onCerrar={() => setConfirmando(false)}
+          >
+            <ConfirmarBajaVencido producto={producto} lote={lote} onDadoDeBaja={onDadoDeBaja} />
+          </Ventana>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function ConfirmarBajaVencido({
+  producto,
+  lote,
+  onDadoDeBaja,
+}: {
+  producto: Producto;
+  lote: Lote;
+  onDadoDeBaja: () => void;
+}) {
+  const { token } = useAuth();
+  const { cerrar } = useVentana();
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -449,6 +477,7 @@ function FilaVencido({
         loteId: lote.id,
       });
       onDadoDeBaja();
+      cerrar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo dar de baja');
       setEnviando(false);
@@ -456,36 +485,37 @@ function FilaVencido({
   }
 
   return (
-    <tr className="border-t border-papel-linea">
-      <td className="px-4 py-3 text-tinta">
-        {producto.nombre}
-        <span className="block font-ticket text-xs text-rojo-perdida">
-          {unidades(lote.cantidad)} · {textoVencimiento(lote)}
-        </span>
-        {error && <span className="block text-xs text-rojo-perdida">{error}</span>}
-      </td>
-      <td className="px-4 py-3 text-right">
-        {puedeDarDeBaja &&
-          (confirmando ? (
-            <span className="inline-flex flex-wrap justify-end gap-2">
-              <Button variant="danger" onClick={darDeBaja} disabled={enviando}>
-                {enviando ? 'Dando de baja…' : `Sí, dar de baja ${unidades(lote.cantidad)}`}
-              </Button>
-              <Button variant="ghost" onClick={() => setConfirmando(false)} disabled={enviando}>
-                No
-              </Button>
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmando(true)}
-              className="text-xs font-medium text-tinta underline"
-            >
-              Dar de baja
-            </button>
-          ))}
-      </td>
-    </tr>
+    <div className="text-left">
+      <div className="ficha !grid-cols-2">
+        <div className="ficha-dato col-span-2">
+          <span>Producto</span>
+          <p className="text-sm font-medium text-tinta">{producto.nombre}</p>
+        </div>
+        <div className="ficha-dato">
+          <span>Unidades</span>
+          <strong>{lote.cantidad}</strong>
+        </div>
+        <div className="ficha-dato">
+          <span>Venció</span>
+          <strong className="text-rojo-perdida">
+            {formatearFechaCorta(lote.fechaVencimiento!)}
+          </strong>
+        </div>
+      </div>
+      {error && (
+        <p className="mt-3 rounded-lg bg-rojo-perdida/10 px-3 py-2 text-sm text-rojo-perdida">
+          {error}
+        </p>
+      )}
+      <VentanaPie>
+        <Button variant="danger" onClick={darDeBaja} disabled={enviando}>
+          {enviando ? 'Dando de baja…' : `Sí, dar de baja ${unidades(lote.cantidad)}`}
+        </Button>
+        <Button variant="ghost" onClick={cerrar} disabled={enviando}>
+          Cancelar
+        </Button>
+      </VentanaPie>
+    </div>
   );
 }
 
@@ -566,8 +596,9 @@ function TablaAlertas({
                       <button
                         type="button"
                         onClick={() => onAbastecer(p.id)}
-                        className="ml-3 text-xs font-medium text-tinta underline"
+                        className="ml-3 inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10"
                       >
+                        <PlusIcon className="h-3 w-3" />
                         Abastecer
                       </button>
                     )}
@@ -624,16 +655,9 @@ interface FilaEditable extends FilaDeLote {
  * 6 y 6"). El total no cambia: si falta o sobra mercadería, es una merma
  * o un abastecimiento.
  */
-function EditorLotes({
-  producto,
-  onGuardado,
-  onCancelar,
-}: {
-  producto: Producto;
-  onGuardado: () => void;
-  onCancelar: () => void;
-}) {
+function EditorLotes({ producto, onGuardado }: { producto: Producto; onGuardado: () => void }) {
   const { token } = useAuth();
+  const { cerrar } = useVentana();
   const [filas, setFilas] = useState<FilaEditable[]>(() =>
     (producto.lotes ?? []).map((l) => ({
       clave: l.id,
@@ -667,6 +691,7 @@ function EditorLotes({
         })),
       );
       onGuardado();
+      cerrar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudieron guardar los lotes');
       setEnviando(false);
@@ -674,7 +699,7 @@ function EditorLotes({
   }
 
   return (
-    <form onSubmit={guardar} className="mt-3 space-y-3 rounded-lg bg-papel p-3">
+    <form onSubmit={guardar} className="space-y-3">
       {filas.map((fila, i) => (
         <div key={fila.clave} className="flex flex-wrap items-end gap-2">
           <div className="min-w-0 flex-1">
@@ -757,20 +782,20 @@ function EditorLotes({
         <p className="rounded-lg bg-rojo-perdida/10 px-3 py-2 text-sm text-rojo-perdida">{error}</p>
       )}
 
-      <div className="flex gap-2">
+      <VentanaPie>
         <Button type="submit" variant="primary" disabled={enviando || diferencia !== 0}>
           {enviando ? 'Guardando…' : 'Guardar'}
         </Button>
-        <Button variant="ghost" onClick={onCancelar} disabled={enviando}>
+        <Button variant="ghost" onClick={cerrar} disabled={enviando}>
           Cancelar
         </Button>
-      </div>
+      </VentanaPie>
     </form>
   );
 }
 
 function SeccionLotes({ productos, onCambio }: { productos: Producto[]; onCambio: () => void }) {
-  const [editando, setEditando] = useState<string | null>(null);
+  const [editando, setEditando] = useState<Producto | null>(null);
   const conLotes = productos.filter((p) => (p.lotes?.length ?? 0) > 0);
 
   return (
@@ -786,7 +811,7 @@ function SeccionLotes({ productos, onCambio }: { productos: Producto[]; onCambio
       ) : (
         <ul className="mt-4 grid gap-3 lg:grid-cols-2">
           {conLotes.map((p) => (
-            <li key={p.id} className={`app-card p-4 ${editando === p.id ? 'lg:col-span-2' : ''}`}>
+            <li key={p.id} className="app-card p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-medium text-tinta">{p.nombre}</p>
@@ -794,50 +819,48 @@ function SeccionLotes({ productos, onCambio }: { productos: Producto[]; onCambio
                     {unidades(p.stock)} en stock
                   </p>
                 </div>
-                {editando !== p.id && (
-                  <button
-                    type="button"
-                    onClick={() => setEditando(p.id)}
-                    className="shrink-0 text-xs font-medium text-tinta underline"
-                  >
-                    Corregir
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setEditando(p)}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10"
+                >
+                  <PencilIcon className="h-3 w-3" />
+                  Corregir
+                </button>
               </div>
-              {editando === p.id ? (
-                <EditorLotes
-                  producto={p}
-                  onGuardado={() => {
-                    setEditando(null);
-                    onCambio();
-                  }}
-                  onCancelar={() => setEditando(null)}
-                />
-              ) : (
-                <ul className="mt-2 flex flex-wrap gap-1.5">
-                  {p.lotes!.map((l) => {
-                    const vencido = lotesVencidos(p).includes(l);
-                    const pronto = lotesPorVencer(p).includes(l);
-                    return (
-                      <li
-                        key={l.id}
-                        className={`status-pill font-ticket text-xs ${
-                          vencido
-                            ? 'status-pill-danger'
-                            : pronto
-                              ? 'status-pill-warning'
-                              : 'status-pill-neutral'
-                        }`}
-                      >
-                        {unidades(l.cantidad)} · {textoVencimiento(l)}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+              <ul className="mt-2 flex flex-wrap gap-1.5">
+                {p.lotes!.map((l) => {
+                  const vencido = lotesVencidos(p).includes(l);
+                  const pronto = lotesPorVencer(p).includes(l);
+                  return (
+                    <li
+                      key={l.id}
+                      className={`status-pill font-ticket text-xs ${
+                        vencido
+                          ? 'status-pill-danger'
+                          : pronto
+                            ? 'status-pill-warning'
+                            : 'status-pill-neutral'
+                      }`}
+                    >
+                      {unidades(l.cantidad)} · {textoVencimiento(l)}
+                    </li>
+                  );
+                })}
+              </ul>
             </li>
           ))}
         </ul>
+      )}
+      {editando && (
+        <Ventana
+          titulo={`Lotes de ${editando.nombre}`}
+          descripcion={`Cuántas de las ${unidades(editando.stock)} vencen en cada fecha, según la góndola.`}
+          icono={<PencilIcon className="h-5 w-5" />}
+          onCerrar={() => setEditando(null)}
+        >
+          <EditorLotes producto={editando} onGuardado={onCambio} />
+        </Ventana>
       )}
     </div>
   );
@@ -853,18 +876,10 @@ function ContenidoInventario() {
   const [alertas, setAlertas] = useState<AlertasProductos | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Producto elegido desde "Abastecer" en una alerta. `vez` fuerza a
-  // rearmar el formulario aunque se toque dos veces el mismo producto.
-  const [sugerido, setSugerido] = useState<{ id: string; vez: number } | null>(null);
-
-  function abastecerDesdeAlerta(productoId: string) {
-    setSugerido({ id: productoId, vez: Date.now() });
-    requestAnimationFrame(() =>
-      document
-        .getElementById('formulario-abastecimiento')
-        ?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-    );
-  }
+  // Qué ventana está abierta. Abastecer desde una alerta la abre con el
+  // producto ya elegido.
+  const [abasteciendo, setAbasteciendo] = useState<{ productoId?: string } | null>(null);
+  const [registrandoMerma, setRegistrandoMerma] = useState(false);
 
   async function cargarTodo() {
     if (!token) return;
@@ -928,8 +943,48 @@ function ContenidoInventario() {
 
           {!cargando && !error && (
             <div className="space-y-8">
-              {/* Las alertas van antes que los formularios: es lo que más se
-                  consulta, y en el celular quedaban al fondo de la página. */}
+              {/* Las dos cosas que se hacen a diario, a un toque. Los formularios
+                  se abren en una ventana: antes ocupaban media pantalla todo
+                  el tiempo aunque no se usaran. */}
+              {esAdmin && productos.length > 0 && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    className="accion-grande"
+                    onClick={() => setAbasteciendo({})}
+                  >
+                    <span className="ventana-icono ventana-icono-verde">
+                      <PlusIcon className="h-5 w-5" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block font-display font-bold text-tinta">
+                        Registrar abastecimiento
+                      </span>
+                      <span className="block text-xs text-tinta-suave">
+                        Llegó mercadería: suma stock y actualiza el costo.
+                      </span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="accion-grande"
+                    onClick={() => setRegistrandoMerma(true)}
+                  >
+                    <span className="ventana-icono ventana-icono-rojo">
+                      <MinusIcon className="h-5 w-5" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block font-display font-bold text-tinta">
+                        Registrar merma
+                      </span>
+                      <span className="block text-xs text-tinta-suave">
+                        Se venció, se rompió o se perdió: sale del stock.
+                      </span>
+                    </span>
+                  </button>
+                </div>
+              )}
+
               <div>
                 <SectionHeader
                   title="Alertas"
@@ -938,7 +993,9 @@ function ContenidoInventario() {
                 <div className="mt-4">
                   <TablaAlertas
                     alertas={alertas}
-                    onAbastecer={esAdmin ? abastecerDesdeAlerta : undefined}
+                    onAbastecer={
+                      esAdmin ? (productoId) => setAbasteciendo({ productoId }) : undefined
+                    }
                     onCambio={cargarTodo}
                   />
                 </div>
@@ -952,17 +1009,34 @@ function ContenidoInventario() {
                     description="Agregá alguno en la sección Productos antes de registrar movimientos de inventario."
                   />
                 ) : (
-                  <div className="grid gap-6 lg:grid-cols-2">
-                    <div id="formulario-abastecimiento" className="scroll-mt-24">
-                      <FormularioAbastecimiento
-                        key={sugerido?.vez ?? 'inicial'}
-                        productos={productos}
-                        onRegistrado={cargarTodo}
-                        productoInicialId={sugerido?.id}
-                      />
-                    </div>
-                    <FormularioMerma productos={productos} onRegistrado={cargarTodo} />
-                  </div>
+                  <>
+                    {abasteciendo && (
+                      <Ventana
+                        titulo="Abastecimiento"
+                        descripcion="Suma stock y recalcula el costo promedio del producto."
+                        icono={<PlusIcon className="h-5 w-5" />}
+                        tono="verde"
+                        onCerrar={() => setAbasteciendo(null)}
+                      >
+                        <FormularioAbastecimiento
+                          productos={productos}
+                          onRegistrado={cargarTodo}
+                          productoInicialId={abasteciendo.productoId}
+                        />
+                      </Ventana>
+                    )}
+                    {registrandoMerma && (
+                      <Ventana
+                        titulo="Merma"
+                        descripcion="Descuenta stock y valoriza la pérdida a costo, no a precio de venta."
+                        icono={<MinusIcon className="h-5 w-5" />}
+                        tono="rojo"
+                        onCerrar={() => setRegistrandoMerma(false)}
+                      >
+                        <FormularioMerma productos={productos} onRegistrado={cargarTodo} />
+                      </Ventana>
+                    )}
+                  </>
                 ))}
 
               {esAdmin && productos.length > 0 && (
