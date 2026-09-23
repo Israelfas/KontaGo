@@ -1,17 +1,31 @@
 import { useCallback, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../lib/auth-context';
 import {
+  corregirLotes,
   listarProductos,
   obtenerResumenInventarioDelDia,
   obtenerAlertas,
   registrarAbastecimiento,
   registrarMerma,
   ApiError,
+  type FilaDeLote,
 } from '../lib/api';
-import { formatearCentavos, formatearFechaCorta } from '../lib/formato';
+import {
+  esFechaValida,
+  escribirFecha,
+  formatearCentavos,
+  formatearFechaCorta,
+} from '../lib/formato';
+import {
+  lotesPorVencer,
+  lotesVencidos,
+  resumenDeLotes,
+  textoVencimiento,
+  unidades,
+} from '../lib/lotes';
 import {
   BarraProporcional,
   Boton,
@@ -29,6 +43,7 @@ import { Banda, Hoja, Mosaico, Pieza } from '../components/banda';
 import {
   ETIQUETAS_MOTIVO_MERMA,
   type AlertasProductos,
+  type Lote,
   type MotivoMerma,
   type Producto,
   type ResumenMovimientosDelDia,
@@ -50,8 +65,11 @@ function FormularioAbastecimiento({
   const [cantidad, setCantidad] = useState('');
   const [costoUnitario, setCostoUnitario] = useState('');
   const [proveedor, setProveedor] = useState('');
+  const [fechaVencimiento, setFechaVencimiento] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const elegido = productos.find((p) => p.id === productoId);
+  const fechaValida = !fechaVencimiento || esFechaValida(fechaVencimiento);
 
   async function manejarSubmit() {
     if (!token) return;
@@ -63,11 +81,13 @@ function FormularioAbastecimiento({
         cantidad: parseInt(cantidad, 10),
         costoUnitarioCentavos: Math.round(parseFloat(costoUnitario) * 100),
         proveedor: proveedor || undefined,
+        fechaVencimiento: fechaVencimiento || undefined,
       });
       setProductoId('');
       setCantidad('');
       setCostoUnitario('');
       setProveedor('');
+      setFechaVencimiento('');
       onRegistrado();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo registrar el abastecimiento');
@@ -112,9 +132,32 @@ function FormularioAbastecimiento({
         placeholder="Ej: Distribuidora Central"
       />
 
+      <Etiqueta>Vence el (opcional)</Etiqueta>
+      <TextInput
+        value={fechaVencimiento}
+        onChangeText={(t) => setFechaVencimiento(escribirFecha(t))}
+        keyboardType="number-pad"
+        style={estilosCampo.input}
+        placeholder="AAAA-MM-DD"
+        maxLength={10}
+      />
+      {!fechaValida && fechaVencimiento.length === 10 && (
+        <Text style={styles.error}>Esa fecha no existe.</Text>
+      )}
+      {/* Lo que ya hay: si la mercadería nueva trae otra fecha, no se mezcla. */}
+      <Text style={styles.ayuda}>
+        {elegido?.lotes && elegido.lotes.length > 0
+          ? `Hoy hay ${resumenDeLotes(elegido)}. Si esta mercadería trae otra fecha, queda como un lote aparte.`
+          : 'Dejalo vacío si el producto no vence.'}
+      </Text>
+
       {error && <Text style={styles.error}>{error}</Text>}
 
-      <Boton onPress={manejarSubmit} cargando={enviando} disabled={!productoId || !cantidad || !costoUnitario}>
+      <Boton
+        onPress={manejarSubmit}
+        cargando={enviando}
+        disabled={!productoId || !cantidad || !costoUnitario || !fechaValida}
+      >
         Registrar abastecimiento
       </Boton>
     </View>
@@ -132,18 +175,27 @@ function FormularioMerma({
   const [productoId, setProductoId] = useState('');
   const [cantidad, setCantidad] = useState('');
   const [motivo, setMotivo] = useState<MotivoMerma>('vencido');
+  // '' = del que vence antes (lo mismo que hace una venta).
+  const [loteId, setLoteId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const lotes = productos.find((p) => p.id === productoId)?.lotes ?? [];
 
   async function manejarSubmit() {
     if (!token) return;
     setError(null);
     setEnviando(true);
     try {
-      await registrarMerma(token, { productoId, cantidad: parseInt(cantidad, 10), motivo });
+      await registrarMerma(token, {
+        productoId,
+        cantidad: parseInt(cantidad, 10),
+        motivo,
+        loteId: loteId || undefined,
+      });
       setProductoId('');
       setCantidad('');
       setMotivo('vencido');
+      setLoteId('');
       onRegistrado();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo registrar la merma');
@@ -160,7 +212,39 @@ function FormularioMerma({
       </Text>
 
       <Etiqueta>Producto</Etiqueta>
-      <SelectorProducto productos={productos} seleccionadoId={productoId} onSeleccionar={setProductoId} />
+      <SelectorProducto
+        productos={productos}
+        seleccionadoId={productoId}
+        onSeleccionar={(id) => {
+          setProductoId(id);
+          setLoteId('');
+        }}
+      />
+
+      {lotes.length > 1 && (
+        <>
+          <Etiqueta>De qué lote</Etiqueta>
+          <View style={styles.selectorContenedor}>
+            <Boton
+              variante={loteId === '' ? 'primary' : 'secondary'}
+              onPress={() => setLoteId('')}
+              style={styles.selectorItem}
+            >
+              El que vence antes
+            </Boton>
+            {lotes.map((l) => (
+              <Boton
+                key={l.id}
+                variante={loteId === l.id ? 'primary' : 'secondary'}
+                onPress={() => setLoteId(l.id)}
+                style={styles.selectorItem}
+              >
+                {`${unidades(l.cantidad)} · ${textoVencimiento(l)}`}
+              </Boton>
+            ))}
+          </View>
+        </>
+      )}
 
       <Etiqueta>Cantidad</Etiqueta>
       <TextInput
@@ -197,19 +281,48 @@ function FormularioMerma({
 function SeccionAlertas({
   alertas,
   onAbastecer,
+  onDarDeBaja,
 }: {
   alertas: AlertasProductos | null;
   onAbastecer?: (productoId: string) => void;
+  onDarDeBaja?: (producto: Producto, lote: Lote) => void;
 }) {
   if (!alertas) return null;
-  const sinAlertas = alertas.stockBajo.length === 0 && alertas.porVencer.length === 0;
+  const sinAlertas =
+    alertas.stockBajo.length === 0 &&
+    alertas.porVencer.length === 0 &&
+    alertas.vencidos.length === 0;
 
   if (sinAlertas) {
     return <EstadoVacio titulo="Todo en orden" descripcion="No hay alertas de stock bajo ni de vencimiento." />;
   }
 
+  // Una fila por lote: de 18 leches pueden vencer 6 y las otras 12 no.
+  const porVencer = alertas.porVencer.flatMap((p) => lotesPorVencer(p).map((lote) => ({ p, lote })));
+  const vencidos = alertas.vencidos.flatMap((p) => lotesVencidos(p).map((lote) => ({ p, lote })));
+
   return (
     <View style={{ gap: espaciado.md }}>
+      {vencidos.length > 0 && (
+        <View style={styles.alertaBloque}>
+          <Text style={[styles.alertaTitulo, { color: colores.rojoPerdida }]}>Vencidos en la góndola</Text>
+          {vencidos.map(({ p, lote }) => (
+            <View key={lote.id} style={styles.alertaFila}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.alertaNombre}>{p.nombre}</Text>
+                <Text style={[styles.alertaDetalle, { color: colores.rojoPerdida }]}>
+                  {unidades(lote.cantidad)} · {textoVencimiento(lote)}
+                </Text>
+              </View>
+              {onDarDeBaja && (
+                <Pressable onPress={() => onDarDeBaja(p, lote)} hitSlop={8}>
+                  <Text style={styles.alertaAccion}>Dar de baja</Text>
+                </Pressable>
+              )}
+            </View>
+          ))}
+        </View>
+      )}
       {alertas.stockBajo.length > 0 && (
         <View style={styles.alertaBloque}>
           <Text style={[styles.alertaTitulo, { color: colores.ambar }]}>Stock bajo</Text>
@@ -230,19 +343,218 @@ function SeccionAlertas({
           ))}
         </View>
       )}
-      {alertas.porVencer.length > 0 && (
+      {porVencer.length > 0 && (
         <View style={styles.alertaBloque}>
           <Text style={[styles.alertaTitulo, { color: colores.rojoPerdida }]}>Por vencer</Text>
-          {alertas.porVencer.map((p) => (
-            <View key={p.id} style={styles.alertaFila}>
-              <Text style={styles.alertaNombre}>{p.nombre}</Text>
+          {porVencer.map(({ p, lote }) => (
+            <View key={lote.id} style={styles.alertaFila}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.alertaNombre}>{p.nombre}</Text>
+                {/* Con varias fechas, cuántas son las que vencen. */}
+                {p.stock !== lote.cantidad && (
+                  <Text style={styles.alertaDetalle}>
+                    {unidades(lote.cantidad)} de {p.stock}
+                  </Text>
+                )}
+              </View>
               <Text style={[styles.alertaValor, { color: colores.rojoPerdida }]}>
-                {p.fechaVencimiento
-                  ? formatearFechaCorta(p.fechaVencimiento)
-                  : '—'}
+                {formatearFechaCorta(lote.fechaVencimiento!)}
               </Text>
             </View>
           ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// --- Lotes: cómo está repartido el stock entre fechas ---
+
+interface FilaEditable {
+  clave: string;
+  id?: string;
+  fecha: string; // lo que se tipea ('' = sin fecha)
+  cantidad: string;
+}
+
+/**
+ * Corrección después de revisar la góndola ("hay 8 del 28 y 4 del 5, no
+ * 6 y 6"). El total no cambia: si falta o sobra mercadería, es una merma
+ * o un abastecimiento.
+ */
+function EditorLotes({
+  producto,
+  onGuardado,
+  onCancelar,
+}: {
+  producto: Producto;
+  onGuardado: () => void;
+  onCancelar: () => void;
+}) {
+  const { token } = useAuth();
+  const [filas, setFilas] = useState<FilaEditable[]>(() =>
+    (producto.lotes ?? []).map((l) => ({
+      clave: l.id,
+      id: l.id,
+      fecha: l.fechaVencimiento ?? '',
+      cantidad: String(l.cantidad),
+    })),
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const suma = filas.reduce((acc, f) => acc + (parseInt(f.cantidad, 10) || 0), 0);
+  const diferencia = suma - producto.stock;
+  const fechasValidas = filas.every((f) => !f.fecha || esFechaValida(f.fecha));
+
+  function cambiar(clave: string, cambios: Partial<FilaEditable>) {
+    setFilas((prev) => prev.map((f) => (f.clave === clave ? { ...f, ...cambios } : f)));
+  }
+
+  async function guardar() {
+    if (!token || diferencia !== 0 || !fechasValidas) return;
+    setEnviando(true);
+    setError(null);
+    try {
+      const lotes: FilaDeLote[] = filas.map((f) => ({
+        id: f.id,
+        fechaVencimiento: f.fecha || null,
+        cantidad: parseInt(f.cantidad, 10) || 0,
+      }));
+      await corregirLotes(token, producto.id, lotes);
+      onGuardado();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudieron guardar los lotes');
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <View style={styles.editor}>
+      {filas.map((fila) => (
+        <View key={fila.clave} style={styles.editorFila}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.editorEtiqueta}>Vence el</Text>
+            <TextInput
+              value={fila.fecha}
+              onChangeText={(t) => cambiar(fila.clave, { fecha: escribirFecha(t) })}
+              keyboardType="number-pad"
+              style={[estilosCampo.input, styles.editorInput]}
+              placeholder="Sin fecha"
+              maxLength={10}
+              accessibilityLabel="Fecha de vencimiento"
+            />
+          </View>
+          <View style={{ width: 84 }}>
+            <Text style={styles.editorEtiqueta}>Unidades</Text>
+            <TextInput
+              value={fila.cantidad}
+              onChangeText={(t) => cambiar(fila.clave, { cantidad: t.replace(/\D/g, '') })}
+              keyboardType="number-pad"
+              style={[estilosCampo.input, styles.editorInput]}
+              accessibilityLabel="Unidades"
+            />
+          </View>
+        </View>
+      ))}
+
+      <Pressable
+        onPress={() =>
+          setFilas((prev) => [...prev, { clave: `nueva-${Date.now()}`, fecha: '', cantidad: '0' }])
+        }
+        hitSlop={8}
+      >
+        <Text style={styles.alertaAccion}>+ Agregar otra fecha</Text>
+      </Pressable>
+
+      <Text style={[styles.ayuda, diferencia !== 0 && { color: colores.rojoPerdida, fontWeight: '600' }]}>
+        Suman {suma} de {producto.stock} en stock
+        {diferencia > 0 ? ` · sobran ${diferencia}` : ''}
+        {diferencia < 0 ? ` · faltan ${-diferencia}` : ''}.
+        {diferencia !== 0
+          ? ' Si en la góndola hay otra cantidad, registrá la diferencia como merma o abastecimiento.'
+          : ''}
+      </Text>
+      {!fechasValidas && <Text style={styles.error}>Hay una fecha que no existe.</Text>}
+      {error && <Text style={styles.error}>{error}</Text>}
+
+      <View style={{ flexDirection: 'row', gap: espaciado.sm }}>
+        <Boton
+          onPress={guardar}
+          cargando={enviando}
+          disabled={diferencia !== 0 || !fechasValidas}
+          style={{ flex: 1 }}
+        >
+          Guardar
+        </Boton>
+        <Boton variante="ghost" onPress={onCancelar} style={{ flex: 1 }}>
+          Cancelar
+        </Boton>
+      </View>
+    </View>
+  );
+}
+
+function SeccionLotes({ productos, onCambio }: { productos: Producto[]; onCambio: () => void }) {
+  const [editando, setEditando] = useState<string | null>(null);
+  const conLotes = productos.filter((p) => (p.lotes?.length ?? 0) > 0);
+
+  return (
+    <View>
+      <Text style={styles.seccionTitulo}>Lotes</Text>
+      <Text style={[styles.ayuda, { marginBottom: espaciado.sm }]}>
+        Cuántas unidades vencen en cada fecha. Las ventas y las mermas descuentan primero lo que
+        vence antes.
+      </Text>
+      {conLotes.length === 0 ? (
+        <Text style={styles.ayuda}>
+          Todavía ningún producto tiene fecha de vencimiento. Se carga al abastecer.
+        </Text>
+      ) : (
+        <View style={{ gap: espaciado.sm }}>
+          {conLotes.map((p) => {
+            const vencidos = lotesVencidos(p);
+            const pronto = lotesPorVencer(p);
+            return (
+              <View key={p.id} style={styles.loteTarjeta}>
+                <View style={styles.loteCabecera}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.loteNombre}>{p.nombre}</Text>
+                    <Text style={styles.alertaDetalle}>{unidades(p.stock)} en stock</Text>
+                  </View>
+                  {editando !== p.id && (
+                    <Pressable onPress={() => setEditando(p.id)} hitSlop={8}>
+                      <Text style={styles.alertaAccion}>Corregir</Text>
+                    </Pressable>
+                  )}
+                </View>
+                {editando === p.id ? (
+                  <EditorLotes
+                    producto={p}
+                    onGuardado={() => {
+                      setEditando(null);
+                      onCambio();
+                    }}
+                    onCancelar={() => setEditando(null)}
+                  />
+                ) : (
+                  <View style={styles.lotePildoras}>
+                    {p.lotes!.map((l) => {
+                      const tono = vencidos.includes(l)
+                        ? styles.pildoraRoja
+                        : pronto.includes(l)
+                          ? styles.pildoraAmbar
+                          : null;
+                      return (
+                        <Text key={l.id} style={[styles.pildora, tono]}>
+                          {unidades(l.cantidad)} · {textoVencimiento(l)}
+                        </Text>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            );
+          })}
         </View>
       )}
     </View>
@@ -262,6 +574,34 @@ export function InventarioScreen() {
   const [sugerido, setSugerido] = useState<{ id: string; vez: number } | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const formularioYRef = useRef(0);
+
+  function darDeBaja(producto: Producto, lote: Lote) {
+    Alert.alert(
+      'Dar de baja lo vencido',
+      `${unidades(lote.cantidad)} de ${producto.nombre} (${textoVencimiento(lote)}) salen del stock como pérdida.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Dar de baja',
+          style: 'destructive',
+          onPress: async () => {
+            if (!token) return;
+            try {
+              await registrarMerma(token, {
+                productoId: producto.id,
+                cantidad: lote.cantidad,
+                motivo: 'vencido',
+                loteId: lote.id,
+              });
+              cargarTodo();
+            } catch (err) {
+              Alert.alert('No se pudo dar de baja', err instanceof ApiError ? err.message : '');
+            }
+          },
+        },
+      ],
+    );
+  }
 
   function abastecerDesdeAlerta(productoId: string) {
     setSugerido({ id: productoId, vez: Date.now() });
@@ -364,6 +704,7 @@ export function InventarioScreen() {
             <SeccionAlertas
               alertas={alertas}
               onAbastecer={esAdmin ? abastecerDesdeAlerta : undefined}
+              onDarDeBaja={esAdmin ? darDeBaja : undefined}
             />
           </View>
         )}
@@ -379,6 +720,7 @@ export function InventarioScreen() {
               />
             </View>
             <FormularioMerma productos={productos} onRegistrado={cargarTodo} />
+            <SeccionLotes productos={productos} onCambio={cargarTodo} />
           </>
         )}
         </Hoja>
@@ -433,4 +775,33 @@ const styles = StyleSheet.create({
   alertaAccion: { fontSize: 13, fontWeight: '600', color: colores.tinta, textDecorationLine: 'underline' },
   alertaNombre: { flex: 1, fontSize: 13, color: colores.tinta, marginRight: espaciado.sm },
   alertaValor: { fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  alertaDetalle: { fontSize: 12, color: colores.tintaSuave, marginTop: 2, fontVariant: ['tabular-nums'] },
+  ayuda: { fontSize: 12, color: colores.tintaSuave, lineHeight: 17, marginBottom: espaciado.md },
+  loteTarjeta: {
+    padding: espaciado.md,
+    backgroundColor: colores.superficie,
+    borderRadius: radios.md,
+    borderWidth: 1,
+    borderColor: colores.papelLinea,
+  },
+  loteCabecera: { flexDirection: 'row', alignItems: 'flex-start', gap: espaciado.sm },
+  loteNombre: { fontSize: 14, fontWeight: '600', color: colores.tinta },
+  lotePildoras: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: espaciado.sm },
+  pildora: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colores.tintaSuave,
+    backgroundColor: colores.papel,
+    borderRadius: radios.full,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    overflow: 'hidden',
+    fontVariant: ['tabular-nums'],
+  },
+  pildoraAmbar: { color: '#9a5b08', backgroundColor: 'rgba(217,140,43,0.14)' },
+  pildoraRoja: { color: colores.rojoPerdida, backgroundColor: 'rgba(182,70,47,0.1)' },
+  editor: { marginTop: espaciado.sm, gap: espaciado.sm },
+  editorFila: { flexDirection: 'row', gap: espaciado.sm },
+  editorEtiqueta: { fontSize: 11, fontWeight: '700', color: colores.tintaSuave, marginBottom: 2 },
+  editorInput: { marginBottom: 0 },
 });

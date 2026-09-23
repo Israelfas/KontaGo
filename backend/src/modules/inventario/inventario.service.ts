@@ -4,12 +4,19 @@ import { Producto } from '../productos/entities/producto.entity';
 import { MovimientoInventario } from './entities/movimiento-inventario.entity';
 import { RegistrarAbastecimientoDto } from './dto/registrar-abastecimiento.dto';
 import { RegistrarMermaDto } from './dto/registrar-merma.dto';
+import { CorregirLotesDto } from './dto/corregir-lotes.dto';
 import { ResumenMovimientosDelDiaDto } from './dto/resumen-movimientos-del-dia.dto';
 import { TipoMovimientoInventario } from '../../common/enums/tipo-movimiento-inventario.enum';
 import {
   ProductoNoEncontradoError,
   StockInsuficienteParaMermaError,
 } from './inventario.errors';
+import {
+  agregarAlLote,
+  corregirLotes,
+  lotesDelProducto,
+  sacarDeLotes,
+} from './lotes';
 
 @Injectable()
 export class InventarioService {
@@ -47,6 +54,14 @@ export class InventarioService {
         throw new ProductoNoEncontradoError(dto.productoId);
       }
 
+      // Antes de sumar al stock (ver agregarAlLote).
+      const lote = await agregarAlLote(
+        manager,
+        producto,
+        dto.cantidad,
+        dto.fechaVencimiento ?? null,
+      );
+
       const costoTotalActual = producto.stock * producto.costoUnitarioCentavos;
       const costoTotalNuevo = dto.cantidad * dto.costoUnitarioCentavos;
       const stockResultante = producto.stock + dto.cantidad;
@@ -69,6 +84,7 @@ export class InventarioService {
         costoUnitarioCentavos: dto.costoUnitarioCentavos,
         proveedor: dto.proveedor ?? null,
         motivo: null,
+        loteId: lote?.id ?? null,
       });
 
       return movimientoRepo.save(movimiento);
@@ -105,6 +121,12 @@ export class InventarioService {
         );
       }
 
+      const deLotes = await sacarDeLotes(
+        manager,
+        producto,
+        dto.cantidad,
+        dto.loteId,
+      );
       producto.stock -= dto.cantidad;
       await productoRepo.save(producto);
 
@@ -120,9 +142,47 @@ export class InventarioService {
         costoUnitarioCentavos: producto.costoUnitarioCentavos,
         proveedor: null,
         motivo: dto.motivo,
+        loteId: deLotes.length === 1 ? deLotes[0].loteId : null,
       });
 
       return movimientoRepo.save(movimiento);
+    });
+  }
+
+  /**
+   * Corrección de lotes del admin (ver corregirLotes en lotes.ts): cuántas
+   * unidades hay de cada fecha. No cambia el stock ni el costo, así que no
+   * genera movimiento. Devuelve el producto con sus lotes.
+   */
+  async corregirLotes(
+    tenantId: string,
+    productoId: string,
+    dto: CorregirLotesDto,
+  ): Promise<Producto> {
+    return this.dataSource.transaction(async (manager) => {
+      const productoRepo = manager.getRepository(Producto);
+      const producto = await productoRepo.findOne({
+        where: { id: productoId, tenantId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!producto) {
+        throw new ProductoNoEncontradoError(productoId);
+      }
+
+      await corregirLotes(
+        manager,
+        producto,
+        dto.lotes.map((fila) => ({
+          id: fila.id,
+          fechaVencimiento: fila.fechaVencimiento ?? null,
+          cantidad: fila.cantidad,
+        })),
+      );
+      await productoRepo.save(producto);
+      producto.lotes = (await lotesDelProducto(manager, producto.id)).filter(
+        (lote) => lote.cantidad > 0,
+      );
+      return producto;
     });
   }
 

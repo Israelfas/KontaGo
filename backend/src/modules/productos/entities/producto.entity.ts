@@ -5,10 +5,12 @@ import {
   Index,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { Tenant } from '../../tenants/entities/tenant.entity';
+import { Lote } from '../../inventario/entities/lote.entity';
 
 /**
  * Producto de una tienda.
@@ -68,6 +70,11 @@ export class Producto {
   @Column({ name: 'stock_minimo', type: 'integer', default: 0 })
   stockMinimo: number;
 
+  // Con lotes, es la fecha del lote con unidades que vence antes (se
+  // recalcula en cada movimiento, ver inventario/lotes.ts): la muestran
+  // las listas y el filtro "por vencer" sin tener que cargar los lotes.
+  // Sin lotes (productos que no vencen) queda en null.
+  //
   // 'AAAA-MM-DD' como texto, no Date: es una fecha de calendario, sin
   // hora ni zona horaria. TypeORM ya devuelve las columnas `date` como
   // string; y al revés, un Date se convierte con la hora LOCAL del
@@ -85,6 +92,10 @@ export class Producto {
 
   @Column({ default: true })
   activo: boolean;
+
+  // Solo se carga cuando hace falta (listado, alertas).
+  @OneToMany(() => Lote, (lote) => lote.producto)
+  lotes?: Lote[];
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

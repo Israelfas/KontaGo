@@ -75,6 +75,12 @@ export class MovimientoInventario {
   @Column({ type: 'enum', enum: MotivoMerma, nullable: true })
   motivo: MotivoMerma | null;
 
+  // El lote que entró (abastecimiento con fecha) o del que salió la
+  // pérdida, cuando fue uno solo. null si el producto no maneja lotes o
+  // la merma tocó varios.
+  @Column({ name: 'lote_id', type: 'uuid', nullable: true })
+  loteId: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 }

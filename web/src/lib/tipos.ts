@@ -14,9 +14,22 @@ export interface Producto {
   costoUnitarioCentavos: number;
   stock: number;
   stockMinimo: number;
+  // Con lotes: la fecha del lote que vence antes.
   fechaVencimiento: string | null;
   ivaExento: boolean;
   activo: boolean;
+  // Lotes con unidades, del que vence antes al último (vacío si el
+  // producto no vence). Viene en el listado y en las alertas.
+  lotes?: Lote[];
+}
+
+// Unidades de un producto que vencen el mismo día. La suma de los lotes
+// de un producto es su stock.
+export interface Lote {
+  id: string;
+  fechaVencimiento: string | null; // null = sin fecha conocida
+  cantidad: number;
+  cantidadInicial: number;
 }
 
 export interface UsuarioEquipo {
@@ -151,5 +164,6 @@ export interface ResumenMovimientosDelDia {
 
 export interface AlertasProductos {
   stockBajo: Producto[];
-  porVencer: Producto[];
+  porVencer: Producto[]; // con algún lote que vence en los próximos días
+  vencidos: Producto[]; // con algún lote ya vencido (hay que darlo de baja)
 }

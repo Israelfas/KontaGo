@@ -39,3 +39,23 @@ export function formatearFechaCorta(fecha: string): string {
     ...(anio !== new Date().getFullYear() ? { year: 'numeric' } : {}),
   });
 }
+
+/**
+ * Lo que se va tipeando en un campo de fecha → 'AAAA-MM-DD'. El teclado
+ * numérico del iPhone no tiene guion: los pone solo (20261005 →
+ * 2026-10-05). También acepta lo que se pegue con guiones.
+ */
+export function escribirFecha(texto: string): string {
+  const digitos = texto.replace(/\D/g, '').slice(0, 8);
+  if (digitos.length <= 4) return digitos;
+  if (digitos.length <= 6) return `${digitos.slice(0, 4)}-${digitos.slice(4)}`;
+  return `${digitos.slice(0, 4)}-${digitos.slice(4, 6)}-${digitos.slice(6)}`;
+}
+
+/** 'AAAA-MM-DD' de una fecha que existe (no 2026-02-30). */
+export function esFechaValida(fecha: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return false;
+  const [anio, mes, dia] = fecha.split('-').map(Number);
+  const d = new Date(anio, mes - 1, dia);
+  return d.getFullYear() === anio && d.getMonth() === mes - 1 && d.getDate() === dia;
+}

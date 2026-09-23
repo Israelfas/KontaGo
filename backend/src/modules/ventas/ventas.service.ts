@@ -4,6 +4,8 @@ import { DataSource } from 'typeorm';
 import { Producto } from '../productos/entities/producto.entity';
 import { Venta } from './entities/venta.entity';
 import { VentaItem } from './entities/venta-item.entity';
+import { VentaItemLote } from './entities/venta-item-lote.entity';
+import { devolverALotes, sacarDeLotes } from '../inventario/lotes';
 import { CrearVentaDto } from './dto/crear-venta.dto';
 import {
   ProductoVendido,
@@ -88,6 +90,8 @@ export class VentasService {
       const productoRepo = manager.getRepository(Producto);
       let totalCentavos = 0;
       const items: VentaItem[] = [];
+      // De qué lotes salió cada línea (mismo índice que items).
+      const deLotesPorLinea: { loteId: string; cantidad: number }[][] = [];
 
       // Los bloqueos se toman SIEMPRE en el mismo orden (por id), no en
       // el orden del carrito. Si la venta 1 bloquea A y después B, y la
@@ -128,6 +132,10 @@ export class VentasService {
         }
 
         producto.stock -= linea.cantidad;
+        // Del lote que vence antes (FEFO); nada si el producto no vence.
+        deLotesPorLinea.push(
+          await sacarDeLotes(manager, producto, linea.cantidad),
+        );
 
         const subtotalCentavos = producto.precioVentaCentavos * linea.cantidad;
         totalCentavos += subtotalCentavos;
@@ -164,6 +172,19 @@ export class VentasService {
 
       const ventaRepo = manager.getRepository(Venta);
       const ventaGuardada = await ventaRepo.save(venta);
+
+      const consumos = ventaGuardada.items.flatMap((item, i) =>
+        deLotesPorLinea[i].map((paso) =>
+          manager.getRepository(VentaItemLote).create({
+            ventaItemId: item.id,
+            loteId: paso.loteId,
+            cantidad: paso.cantidad,
+          }),
+        ),
+      );
+      if (consumos.length > 0) {
+        await manager.getRepository(VentaItemLote).save(consumos);
+      }
       const ivaCentavos = this.calcularIvaCentavos(ventaGuardada);
 
       return {
@@ -414,24 +435,28 @@ export class VentasService {
 
       // Devolver stock bloqueando los productos en orden fijo, igual que
       // crearVenta (evita deadlocks con ventas en curso). Un producto
-      // dado de baja igual recupera sus unidades.
-      const cantidadPorProducto = new Map<string, number>();
+      // dado de baja igual recupera sus unidades. Cada línea devuelve sus
+      // unidades a los lotes de los que salieron.
+      const lineasPorProducto = new Map<string, [string, number][]>();
       for (const [itemId, cantidad] of aAnular) {
         const productoId = itemsPorId.get(itemId)!.productoId;
-        cantidadPorProducto.set(
-          productoId,
-          (cantidadPorProducto.get(productoId) ?? 0) + cantidad,
-        );
+        lineasPorProducto.set(productoId, [
+          ...(lineasPorProducto.get(productoId) ?? []),
+          [itemId, cantidad],
+        ]);
       }
-      for (const productoId of [...cantidadPorProducto.keys()].sort()) {
+      for (const productoId of [...lineasPorProducto.keys()].sort()) {
         const producto = await productoRepo.findOne({
           where: { id: productoId, tenantId },
           lock: { mode: 'pessimistic_write' },
         });
-        if (producto) {
-          producto.stock += cantidadPorProducto.get(productoId)!;
-          await productoRepo.save(producto);
+        if (!producto) continue;
+        for (const [itemId, cantidad] of lineasPorProducto.get(productoId)!) {
+          // Antes de sumar al stock (ver devolverALotes).
+          await devolverALotes(manager, producto, itemId, cantidad);
+          producto.stock += cantidad;
         }
+        await productoRepo.save(producto);
       }
 
       let montoDevueltoCentavos = 0;

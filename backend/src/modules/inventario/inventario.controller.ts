@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -8,6 +17,7 @@ import type { AuthenticatedUser } from '../auth/interfaces/jwt-payload.interface
 import { InventarioService } from './inventario.service';
 import { RegistrarAbastecimientoDto } from './dto/registrar-abastecimiento.dto';
 import { RegistrarMermaDto } from './dto/registrar-merma.dto';
+import { CorregirLotesDto } from './dto/corregir-lotes.dto';
 
 @Controller('inventario')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -41,6 +51,18 @@ export class InventarioController {
       user.usuarioId,
       dto,
     );
+  }
+
+  // Reparto del stock entre fechas de vencimiento, después de revisar la
+  // góndola. Solo admin, como el resto del inventario.
+  @Put('productos/:id/lotes')
+  @Roles(Rol.ADMIN)
+  corregirLotes(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) productoId: string,
+    @Body() dto: CorregirLotesDto,
+  ) {
+    return this.inventarioService.corregirLotes(user.tenantId, productoId, dto);
   }
 
   // Egresos y pérdidas del día: información del dueño, no del cajero.

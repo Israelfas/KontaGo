@@ -9,7 +9,7 @@ import { Rol } from '../../common/enums/rol.enum';
 import { Producto } from '../productos/entities/producto.entity';
 import { ProductosService } from '../productos/productos.service';
 import { MailService } from '../mail/mail.service';
-import { fechaLegible } from '../../common/formato-fecha';
+import { fechaLegible, fechaLocal } from '../../common/formato-fecha';
 
 // El nombre del producto lo escribe el usuario: sin escapar, un nombre
 // como '<a href=...>' se renderizaría como HTML dentro del correo.
@@ -91,17 +91,29 @@ export class NotificacionesService {
   }
 
   private construirHtml(productos: Producto[], dias: number): string {
+    // Una fila por lote que vence en el período, con SUS unidades: de 18
+    // leches pueden vencer 6 (las del 28) y las otras 12 una semana después.
+    const hoy = fechaLocal(new Date());
+    const limite = new Date();
+    limite.setDate(limite.getDate() + dias);
+    const hasta = fechaLocal(limite);
     const filas = productos
-      .map((p) => {
-        const fecha = p.fechaVencimiento
-          ? fechaLegible(p.fechaVencimiento)
-          : '—';
-        return `<tr>
+      .flatMap((p) =>
+        (p.lotes ?? [])
+          .filter(
+            (lote) =>
+              lote.fechaVencimiento !== null &&
+              lote.fechaVencimiento >= hoy &&
+              lote.fechaVencimiento <= hasta,
+          )
+          .map(
+            (lote) => `<tr>
           <td style="padding:8px 12px;border-bottom:1px solid #e5e0d8;">${escaparHtml(p.nombre)}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e5e0d8;text-align:right;">${p.stock}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e5e0d8;text-align:right;">${fecha}</td>
-        </tr>`;
-      })
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e0d8;text-align:right;">${lote.cantidad}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e0d8;text-align:right;">${fechaLegible(lote.fechaVencimiento!)}</td>
+        </tr>`,
+          ),
+      )
       .join('');
 
     return `
@@ -114,7 +126,7 @@ export class NotificacionesService {
           <thead>
             <tr style="text-align:left;color:#5b6b7a;font-size:12px;text-transform:uppercase;">
               <th style="padding:8px 12px;">Producto</th>
-              <th style="padding:8px 12px;text-align:right;">Stock</th>
+              <th style="padding:8px 12px;text-align:right;">Unidades</th>
               <th style="padding:8px 12px;text-align:right;">Vence</th>
             </tr>
           </thead>

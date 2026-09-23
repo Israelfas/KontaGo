@@ -97,7 +97,11 @@ export function Nav() {
     // depender de que el usuario entre a /inventario. Si falla, no
     // rompemos la navegación por un badge — solo lo dejamos en 0.
     obtenerAlertas(token)
-      .then((alertas) => setPorVencer(alertas.porVencer.length))
+      // Productos con algo por vencer o ya vencido (sin contar dos veces
+      // uno que tenga las dos cosas).
+      .then((alertas) =>
+        setPorVencer(new Set([...alertas.porVencer, ...alertas.vencidos].map((p) => p.id)).size),
+      )
       .catch(() => setPorVencer(0));
   }, [token, esAdmin]);
 

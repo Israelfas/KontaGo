@@ -430,6 +430,8 @@ export interface RegistrarAbastecimientoInput {
   cantidad: number;
   costoUnitarioCentavos: number;
   proveedor?: string;
+  // Vencimiento de esta mercadería: entra como un lote aparte.
+  fechaVencimiento?: string;
 }
 
 export function registrarAbastecimiento(
@@ -447,6 +449,28 @@ export interface RegistrarMermaInput {
   productoId: string;
   cantidad: number;
   motivo: MotivoMerma;
+  // Omitido: sale del lote que vence antes.
+  loteId?: string;
+}
+
+export interface FilaDeLote {
+  id?: string; // sin id: lote nuevo
+  fechaVencimiento: string | null;
+  cantidad: number;
+}
+
+// Reparto del stock entre fechas (después de revisar la góndola). Tiene
+// que sumar el stock actual. Solo admin.
+export function corregirLotes(
+  token: string,
+  productoId: string,
+  lotes: FilaDeLote[],
+): Promise<Producto> {
+  return apiFetch<Producto>(`/inventario/productos/${productoId}/lotes`, {
+    method: 'PUT',
+    token,
+    body: JSON.stringify({ lotes }),
+  });
 }
 
 export function registrarMerma(token: string, dto: RegistrarMermaInput) {

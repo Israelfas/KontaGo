@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MovimientoInventario } from './entities/movimiento-inventario.entity';
+import { Lote } from './entities/lote.entity';
 import { Producto } from '../productos/entities/producto.entity';
 import { InventarioController } from './inventario.controller';
 import { InventarioService } from './inventario.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([MovimientoInventario, Producto])],
+  imports: [TypeOrmModule.forFeature([MovimientoInventario, Producto, Lote])],
   controllers: [InventarioController],
   providers: [InventarioService],
 })

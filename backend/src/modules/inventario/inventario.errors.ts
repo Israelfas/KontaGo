@@ -13,3 +13,25 @@ export class StockInsuficienteParaMermaError extends BadRequestException {
     );
   }
 }
+
+export class LoteDeOtroProductoError extends NotFoundException {
+  constructor(loteId: string) {
+    super(`El lote ${loteId} no existe o no es de este producto`);
+  }
+}
+
+export class StockDelLoteInsuficienteError extends BadRequestException {
+  constructor(disponible: number, solicitado: number) {
+    super(
+      `Ese lote tiene ${disponible} unidad${disponible === 1 ? '' : 'es'}: no se pueden sacar ${solicitado}`,
+    );
+  }
+}
+
+export class LotesNoSumanElStockError extends BadRequestException {
+  constructor(suma: number, stock: number) {
+    super(
+      `Los lotes suman ${suma} unidades pero hay ${stock} en stock. Si falta mercadería, registrala como pérdida; si sobra, como abastecimiento.`,
+    );
+  }
+}

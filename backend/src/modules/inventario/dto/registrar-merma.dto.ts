@@ -1,4 +1,4 @@
-import { IsEnum, IsInt, IsUUID, Min } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsUUID, Min } from 'class-validator';
 import { MotivoMerma } from '../../../common/enums/motivo-merma.enum';
 
 export class RegistrarMermaDto {
@@ -11,4 +11,10 @@ export class RegistrarMermaDto {
 
   @IsEnum(MotivoMerma)
   motivo: MotivoMerma;
+
+  // De qué lote sale (ej. dar de baja el lote vencido). Omitido: del que
+  // vence antes, igual que una venta.
+  @IsOptional()
+  @IsUUID()
+  loteId?: string;
 }

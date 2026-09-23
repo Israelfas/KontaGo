@@ -92,13 +92,24 @@ const MOTIVOS_ANULACION = [
   'El cliente no tenía suficiente dinero',
 ];
 
-// Mercadería que llegó a primera hora: [producto, cantidad, costo unitario¢, proveedor]
+// Mercadería que llega a primera hora (hoy y cada semana):
+// [producto, cantidad, costo unitario¢, proveedor, vence a los N días de llegar (null: no vence)]
 const ABASTECIMIENTOS = [
-  ['coca', 24, 52, 'Arca Continental'],
-  ['leche', 12, 78, 'Pasteurizadora Quito'],
-  ['galletas', 24, 34, 'Nestlé Ecuador'],
-  ['pan', 6, 168, 'Supan'],
+  ['coca', 24, 52, 'Arca Continental', null],
+  ['leche', 12, 78, 'Pasteurizadora Quito', 10],
+  ['galletas', 24, 34, 'Nestlé Ecuador', 60],
+  ['pan', 6, 168, 'Supan', 4],
 ];
+
+// Cómo quedan repartidos los lotes al final (lo que se ve en Inventario):
+// [vence en N días, unidades], y el último lote se lleva el resto del stock.
+// Incluye un yogurt ya vencido, para ver la alerta de "dar de baja".
+const LOTES_FINALES = {
+  leche: [[1, 1], [9]],
+  yogurt: [[-1, 1], [4]],
+  queso: [[0, 2], [12]],
+  jugo: [[5, 4], [40]],
+};
 
 // Pérdidas del día: [producto, cantidad, motivo]
 const MERMAS = [
@@ -349,15 +360,22 @@ try {
 
   // 5. Mercadería: el pedido semanal y el de esta mañana. Todo se carga
   // antes de las ventas para que nunca falte stock al registrarlas.
-  const llegadas = [...REPOSICIONES.filter((hace) => hace <= DIAS_DE_HISTORIA).map((hace) => diaA(hace, 7, 40))];
-  llegadas.push(new Date(horarios[0].getTime() - 20 * 60_000));
-  for (const cuando of llegadas) {
-    for (const [clave, cantidad, costo, proveedor] of ABASTECIMIENTOS) {
+  // Cada entrega trae su fecha de vencimiento: queda como un lote aparte.
+  const llegadas = REPOSICIONES.filter((hace) => hace <= DIAS_DE_HISTORIA).map((hace) => [hace, diaA(hace, 7, 40)]);
+  llegadas.push([0, new Date(horarios[0].getTime() - 20 * 60_000)]);
+  for (const [hace, cuando] of llegadas) {
+    for (const [clave, cantidad, costo, proveedor, vidaUtil] of ABASTECIMIENTOS) {
       const antes = Date.now();
       const mov = await api('/inventario/abastecimiento', {
         method: 'POST',
         token: admin,
-        body: { productoId: ids.get(clave), cantidad, costoUnitarioCentavos: costo, proveedor },
+        body: {
+          productoId: ids.get(clave),
+          cantidad,
+          costoUnitarioCentavos: costo,
+          proveedor,
+          ...(vidaUtil === null ? {} : { fechaVencimiento: fechaEnDias(vidaUtil - hace) }),
+        },
       });
       await moverA('movimientos_inventario', mov.id, antes, cuando);
     }
@@ -455,6 +473,21 @@ try {
   }
   console.log('· Mermas y anulaciones registradas');
 
+  // 9. Reparto final de lotes (como si el admin hubiera revisado la
+  // góndola): con las ventas del mes, FEFO ya consumió los lotes viejos.
+  for (const [clave, reparto] of Object.entries(LOTES_FINALES)) {
+    const { stock } = await api(`/productos/escanear/${PRODUCTOS.find((p) => p[0] === clave)[1]}`, { token: admin });
+    let queda = stock;
+    const lotes = [];
+    for (const [dias, cantidad] of reparto) {
+      const unidades = cantidad === undefined ? queda : Math.min(cantidad, queda);
+      if (unidades > 0) lotes.push({ fechaVencimiento: fechaEnDias(dias), cantidad: unidades });
+      queda -= unidades;
+    }
+    await api(`/inventario/productos/${ids.get(clave)}/lotes`, { method: 'PUT', token: admin, body: { lotes } });
+  }
+  console.log('· Lotes: leche, yogurt, queso y jugo con dos fechas (un yogurt ya vencido)');
+
   const resumen = await api('/ventas/resumen-dia', { token: admin });
   const mes = await api(`/ventas/resumen?desde=${fechaEnDias(-DIAS_DE_HISTORIA)}&hasta=${fechaEnDias(0)}`, {
     token: admin,
@@ -471,7 +504,7 @@ Listo: "${ADMIN.tienda}"
 ${diaCompleto ? '\n  Nota: es temprano, así que las ventas se repartieron en todo el horario de hoy\n  (8h a 20h), aunque algunas horas todavía no hayan llegado.\n' : ''}
   Hoy: ${resumen.cantidadVentas} ventas · ingreso ${pesos(resumen.ingresoBrutoCentavos)} · ganancia ${pesos(resumen.gananciaCentavos)} · anulado ${pesos(resumen.anuladoCentavos)}
   Con los ${DIAS_DE_HISTORIA} días anteriores: ${mes.cantidadVentas} ventas · ingreso ${pesos(mes.ingresoBrutoCentavos)} · ganancia ${pesos(mes.gananciaCentavos)} · anulado ${pesos(mes.anuladoCentavos)}
-  Alertas: ${alertas.stockBajo.length} con stock bajo, ${alertas.porVencer.length} por vencer
+  Alertas: ${alertas.stockBajo.length} con stock bajo, ${alertas.porVencer.length} por vencer, ${alertas.vencidos.length} con lotes vencidos
 `);
 } finally {
   await db.end();

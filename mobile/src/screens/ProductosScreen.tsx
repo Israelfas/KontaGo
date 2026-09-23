@@ -13,7 +13,13 @@ import {
   listarProductosDadosDeBaja,
   ApiError,
 } from '../lib/api';
-import { formatearCentavos, formatearFechaCorta } from '../lib/formato';
+import {
+  esFechaValida,
+  escribirFecha,
+  formatearCentavos,
+  formatearFechaCorta,
+} from '../lib/formato';
+import { resumenDeLotes, tieneVariosLotes } from '../lib/lotes';
 import {
   Boton,
   EstadoCargando,
@@ -35,8 +41,8 @@ import {
 
 // El backend exige exactamente "AAAA-MM-DD" (una fecha de calendario,
 // sin hora ni zona horaria). Sin librería de selector de fecha (para no
-// meter una dependencia nativa nueva), validamos el formato a mano.
-const FORMATO_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+// meter una dependencia nativa nueva): los guiones se ponen solos al
+// tipear (escribirFecha) y se valida que la fecha exista.
 
 // Editar la fecha desde acá evita el rodeo de tocar "editar" → abrir el
 // formulario completo → buscar el campo → guardar → volver — pensado
@@ -54,12 +60,14 @@ function ChipFechaVencimiento({
   const [editando, setEditando] = useState(false);
   const [valor, setValor] = useState(producto.fechaVencimiento ?? '');
   const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const fechaValida = !valor || FORMATO_FECHA.test(valor);
+  const fechaValida = !valor || esFechaValida(valor);
 
   async function guardar() {
     if (!token || !fechaValida) return;
     setGuardando(true);
+    setError(null);
     try {
       const actualizado = await actualizarProducto(token, producto.id, {
         fechaVencimiento: valor || undefined,
@@ -67,17 +75,31 @@ function ChipFechaVencimiento({
       });
       onActualizado(actualizado);
       setEditando(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo guardar la fecha');
     } finally {
       setGuardando(false);
     }
   }
 
+  // Varias fechas: no hay "una" fecha que editar acá (se corrigen en
+  // Inventario → Lotes).
+  if (tieneVariosLotes(producto)) {
+    return (
+      <Text style={styles.filaVencimiento} accessibilityLabel={resumenDeLotes(producto)}>
+        {`${producto.lotes!.length} fechas · próx. ${formatearFechaCorta(producto.fechaVencimiento!)}`}
+      </Text>
+    );
+  }
+
   if (editando) {
     return (
+      <View>
       <View style={styles.chipFechaEdicion}>
         <TextInput
           value={valor}
-          onChangeText={setValor}
+          onChangeText={(t) => setValor(escribirFecha(t))}
+          maxLength={10}
           placeholder="AAAA-MM-DD"
           keyboardType="number-pad"
           autoFocus
@@ -94,6 +116,8 @@ function ChipFechaVencimiento({
         <Pressable onPress={() => setEditando(false)} hitSlop={8}>
           <Ionicons name="close-circle" size={22} color={colores.tintaSuave} />
         </Pressable>
+      </View>
+      {error && <Text style={styles.error}>{error}</Text>}
       </View>
     );
   }
@@ -185,7 +209,9 @@ function FormularioNuevoProducto({
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
-  const fechaValida = !fechaVencimiento || FORMATO_FECHA.test(fechaVencimiento);
+  // La fecha es del stock inicial: sin unidades no hay qué venza.
+  const sinStockInicial = !(parseInt(stockInicial, 10) > 0);
+  const fechaValida = sinStockInicial || !fechaVencimiento || esFechaValida(fechaVencimiento);
 
   async function manejarSubmit() {
     if (!token || !fechaValida) return;
@@ -201,7 +227,7 @@ function FormularioNuevoProducto({
           : undefined,
         stockInicial: stockInicial ? parseInt(stockInicial, 10) : undefined,
         stockMinimo: stockMinimo ? parseInt(stockMinimo, 10) : undefined,
-        fechaVencimiento: fechaVencimiento || undefined,
+        fechaVencimiento: (!sinStockInicial && fechaVencimiento) || undefined,
       });
       onCreado(producto);
       onCerrar();
@@ -265,16 +291,18 @@ function FormularioNuevoProducto({
         style={estilosCampo.input}
         placeholder="5"
       />
-      <Etiqueta>Fecha de vencimiento (opcional)</Etiqueta>
+      <Etiqueta>Vence el (opcional)</Etiqueta>
       <TextInput
-        value={fechaVencimiento}
-        onChangeText={setFechaVencimiento}
-        style={estilosCampo.input}
-        placeholder="AAAA-MM-DD"
+        value={sinStockInicial ? '' : fechaVencimiento}
+        onChangeText={(t) => setFechaVencimiento(escribirFecha(t))}
+        editable={!sinStockInicial}
+        style={[estilosCampo.input, sinStockInicial && { opacity: 0.5 }]}
+        placeholder={sinStockInicial ? 'Primero cargá el stock inicial' : 'AAAA-MM-DD'}
         keyboardType="number-pad"
+        maxLength={10}
       />
-      {!fechaValida && (
-        <Text style={styles.error}>Formato de fecha inválido, usá AAAA-MM-DD.</Text>
+      {!fechaValida && fechaVencimiento.length === 10 && (
+        <Text style={styles.error}>Esa fecha no existe.</Text>
       )}
 
       {error && <Text style={styles.error}>{error}</Text>}
@@ -315,7 +343,9 @@ function FormularioEditarProducto({
   const [enviando, setEnviando] = useState(false);
   const [confirmandoBaja, setConfirmandoBaja] = useState(false);
 
-  const fechaValida = !fechaVencimiento || FORMATO_FECHA.test(fechaVencimiento);
+  const variosLotes = tieneVariosLotes(producto);
+  const cambioLaFecha = !variosLotes && fechaVencimiento !== (producto.fechaVencimiento ?? '');
+  const fechaValida = !cambioLaFecha || !fechaVencimiento || esFechaValida(fechaVencimiento);
 
   async function darDeBaja() {
     if (!token) return;
@@ -340,8 +370,13 @@ function FormularioEditarProducto({
       const actualizado = await actualizarProducto(token, producto.id, {
         precioVentaCentavos: Math.round(parseFloat(precioVenta || '0') * 100),
         stockMinimo: stockMinimo ? parseInt(stockMinimo, 10) : 0,
-        fechaVencimiento: fechaVencimiento || undefined,
-        quitarFechaVencimiento: !fechaVencimiento,
+        // Solo si se tocó: con varios lotes la fecha no se edita acá.
+        ...(cambioLaFecha
+          ? {
+              fechaVencimiento: fechaVencimiento || undefined,
+              quitarFechaVencimiento: !fechaVencimiento,
+            }
+          : {}),
       });
       onActualizado(actualizado);
       onCerrar();
@@ -376,15 +411,22 @@ function FormularioEditarProducto({
         style={estilosCampo.input}
       />
       <Etiqueta>Fecha de vencimiento</Etiqueta>
-      <TextInput
-        value={fechaVencimiento}
-        onChangeText={setFechaVencimiento}
-        style={estilosCampo.input}
-        placeholder="AAAA-MM-DD (vacío = sin vencimiento)"
-        keyboardType="number-pad"
-      />
-      {!fechaValida && (
-        <Text style={styles.error}>Formato de fecha inválido, usá AAAA-MM-DD.</Text>
+      {variosLotes ? (
+        <Text style={styles.notaLotes}>
+          {resumenDeLotes(producto)}.{'\n'}Tiene varias fechas: se corrigen en Inventario → Lotes.
+        </Text>
+      ) : (
+        <TextInput
+          value={fechaVencimiento}
+          onChangeText={(t) => setFechaVencimiento(escribirFecha(t))}
+          style={estilosCampo.input}
+          placeholder="AAAA-MM-DD (vacío = sin vencimiento)"
+          keyboardType="number-pad"
+          maxLength={10}
+        />
+      )}
+      {!fechaValida && fechaVencimiento.length === 10 && (
+        <Text style={styles.error}>Esa fecha no existe.</Text>
       )}
 
       {error && <Text style={styles.error}>{error}</Text>}
@@ -728,6 +770,7 @@ export function ProductosScreen() {
 }
 
 const styles = StyleSheet.create({
+  notaLotes: { fontSize: 13, color: colores.tinta, lineHeight: 19, marginBottom: espaciado.md },
   contenedor: { flex: 1, backgroundColor: colores.papel },
   // Va sobre la franja oscura: borde claro en vez de fondo oscuro.
   botonNuevo: {

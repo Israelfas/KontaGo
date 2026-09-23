@@ -17,6 +17,8 @@ import {
   ApiError,
 } from '@/lib/api';
 import { formatearCentavos, formatearFechaCorta } from '@/lib/formato';
+import Link from 'next/link';
+import { resumenDeLotes, tieneVariosLotes } from '@/lib/lotes';
 import { usePantallaChica } from '@/lib/use-pantalla-chica';
 import {
   estaPorVencer,
@@ -44,6 +46,7 @@ function FormularioNuevoProducto({
   const [ivaExento, setIvaExento] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const sinStockInicial = !(parseInt(stockInicial, 10) > 0);
 
   async function manejarSubmit(e: FormEvent) {
     e.preventDefault();
@@ -62,7 +65,7 @@ function FormularioNuevoProducto({
           : undefined,
         stockInicial: stockInicial ? parseInt(stockInicial, 10) : undefined,
         stockMinimo: stockMinimo ? parseInt(stockMinimo, 10) : undefined,
-        fechaVencimiento: fechaVencimiento || undefined,
+        fechaVencimiento: (!sinStockInicial && fechaVencimiento) || undefined,
         ivaExento,
       });
       onCreado(producto);
@@ -164,15 +167,21 @@ function FormularioNuevoProducto({
         </div>
         <div>
           <label className="field-label" htmlFor="producto-vencimiento">
-            Fecha de vencimiento (opcional)
+            Vence el (opcional)
           </label>
+          {/* La fecha es del stock inicial: sin unidades no hay qué venza. */}
           <input
             id="producto-vencimiento"
             type="date"
-            value={fechaVencimiento}
+            value={sinStockInicial ? '' : fechaVencimiento}
             onChange={(e) => setFechaVencimiento(e.target.value)}
-            className="field font-ticket"
+            disabled={sinStockInicial}
+            aria-describedby="producto-vencimiento-ayuda"
+            className="field font-ticket disabled:opacity-50"
           />
+          <p id="producto-vencimiento-ayuda" className="mt-1 text-xs text-tinta-suave">
+            {sinStockInicial ? 'Primero cargá el stock inicial.' : 'La del stock inicial.'}
+          </p>
         </div>
         <div className="col-span-2">
           <label className="flex items-center gap-2 text-sm text-tinta">
@@ -217,16 +226,14 @@ function FormularioEditarProducto({
   onCerrar: () => void;
 }) {
   const { token } = useAuth();
-  const [precioVenta, setPrecioVenta] = useState(
-    (producto.precioVentaCentavos / 100).toString(),
-  );
+  const [precioVenta, setPrecioVenta] = useState((producto.precioVentaCentavos / 100).toString());
   const [stockMinimo, setStockMinimo] = useState(producto.stockMinimo.toString());
-  const [fechaVencimiento, setFechaVencimiento] = useState(
-    producto.fechaVencimiento ?? '',
-  );
+  const [fechaVencimiento, setFechaVencimiento] = useState(producto.fechaVencimiento ?? '');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [confirmandoBaja, setConfirmandoBaja] = useState(false);
+  const variosLotes = tieneVariosLotes(producto);
+  const cambioLaFecha = !variosLotes && fechaVencimiento !== (producto.fechaVencimiento ?? '');
 
   async function darDeBaja() {
     if (!token) return;
@@ -252,8 +259,13 @@ function FormularioEditarProducto({
       const actualizado = await actualizarProducto(token, producto.id, {
         precioVentaCentavos: Math.round(parseFloat(precioVenta) * 100),
         stockMinimo: stockMinimo ? parseInt(stockMinimo, 10) : 0,
-        fechaVencimiento: fechaVencimiento || undefined,
-        quitarFechaVencimiento: !fechaVencimiento,
+        // Solo si se tocó: con varios lotes la fecha no se edita acá.
+        ...(cambioLaFecha
+          ? {
+              fechaVencimiento: fechaVencimiento || undefined,
+              quitarFechaVencimiento: !fechaVencimiento,
+            }
+          : {}),
       });
       onActualizado(actualizado);
       onCerrar();
@@ -297,17 +309,33 @@ function FormularioEditarProducto({
           />
         </div>
         <div className="col-span-2">
-          <label className="field-label" htmlFor={`editar-vencimiento-${producto.id}`}>
-            Fecha de vencimiento
-          </label>
-          <input
-            id={`editar-vencimiento-${producto.id}`}
-            type="date"
-            value={fechaVencimiento}
-            onChange={(e) => setFechaVencimiento(e.target.value)}
-            className="field font-ticket"
-          />
-          <p className="mt-1 text-xs text-tinta-suave">Dejá vacío para quitar la fecha.</p>
+          {variosLotes ? (
+            <>
+              <p className="field-label">Vencimiento</p>
+              <p className="text-sm text-tinta">{resumenDeLotes(producto)}</p>
+              <p className="mt-1 text-xs text-tinta-suave">
+                Tiene varias fechas: se corrigen en{' '}
+                <Link href="/inventario#lotes" className="font-medium text-tinta underline">
+                  Inventario → Lotes
+                </Link>
+                .
+              </p>
+            </>
+          ) : (
+            <>
+              <label className="field-label" htmlFor={`editar-vencimiento-${producto.id}`}>
+                Fecha de vencimiento
+              </label>
+              <input
+                id={`editar-vencimiento-${producto.id}`}
+                type="date"
+                value={fechaVencimiento}
+                onChange={(e) => setFechaVencimiento(e.target.value)}
+                className="field font-ticket"
+              />
+              <p className="mt-1 text-xs text-tinta-suave">Dejá vacío para quitar la fecha.</p>
+            </>
+          )}
         </div>
       </div>
 
@@ -376,10 +404,17 @@ function CeldaFechaVencimiento({
   const [editando, setEditando] = useState(false);
   const [valor, setValor] = useState(producto.fechaVencimiento ?? '');
   const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function guardar(nuevaFecha: string) {
     if (!token) return;
+    // Sin cambios: cerrar sin llamar al backend.
+    if (nuevaFecha === (producto.fechaVencimiento ?? '')) {
+      setEditando(false);
+      return;
+    }
     setGuardando(true);
+    setError(null);
     try {
       const actualizado = await actualizarProducto(token, producto.id, {
         fechaVencimiento: nuevaFecha || undefined,
@@ -387,29 +422,54 @@ function CeldaFechaVencimiento({
       });
       onActualizado(actualizado);
       setEditando(false);
-    } catch {
+    } catch (err) {
       // Si falla, dejamos el input abierto con el valor tal cual estaba
       // escrito para que la persona pueda reintentar sin perder lo tipeado.
+      setError(err instanceof ApiError ? err.message : 'No se pudo guardar la fecha');
     } finally {
       setGuardando(false);
     }
   }
 
+  // Varias fechas: no hay "una" fecha que editar acá.
+  if (tieneVariosLotes(producto)) {
+    const texto = `${producto.lotes!.length} fechas · próx. ${formatearFechaCorta(producto.fechaVencimiento!)}`;
+    return soloLectura ? (
+      <span className="font-ticket text-xs text-tinta-suave">{texto}</span>
+    ) : (
+      <Link
+        href="/inventario#lotes"
+        title={resumenDeLotes(producto)}
+        className="font-ticket text-xs text-tinta-suave underline decoration-dotted hover:text-tinta"
+      >
+        {texto}
+      </Link>
+    );
+  }
+
   if (editando) {
     return (
-      <input
-        type="date"
-        autoFocus
-        disabled={guardando}
-        value={valor}
-        onChange={(e) => setValor(e.target.value)}
-        onBlur={() => guardar(valor)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') guardar(valor);
-          if (e.key === 'Escape') setEditando(false);
-        }}
-        className="field font-ticket !py-1.5 !mb-0 text-right"
-      />
+      <span className="inline-flex flex-col items-end">
+        <input
+          type="date"
+          autoFocus
+          disabled={guardando}
+          value={valor}
+          onChange={(e) => setValor(e.target.value)}
+          onBlur={() => guardar(valor)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') guardar(valor);
+            if (e.key === 'Escape') setEditando(false);
+          }}
+          className="field font-ticket !py-1.5 !mb-0 text-right"
+          aria-invalid={!!error}
+        />
+        {error && (
+          <span role="alert" className="mt-1 max-w-56 text-right text-xs text-rojo-perdida">
+            {error}
+          </span>
+        )}
+      </span>
     );
   }
 
@@ -545,9 +605,7 @@ function TablaProductos({
                   </td>
                   <td className="px-4 py-3 text-right">
                     {stockBajo ? (
-                      <span className="status-pill status-pill-warning font-ticket">
-                        {p.stock}
-                      </span>
+                      <span className="status-pill status-pill-warning font-ticket">{p.stock}</span>
                     ) : (
                       <span className="font-ticket text-tinta">{p.stock}</span>
                     )}
@@ -807,9 +865,7 @@ function ContenidoProductos() {
 
   function manejarReactivado(producto: Producto) {
     setDadosDeBaja((prev) => prev?.filter((p) => p.id !== producto.id) ?? prev);
-    setProductos((prev) =>
-      [...prev, producto].sort((a, b) => a.nombre.localeCompare(b.nombre)),
-    );
+    setProductos((prev) => [...prev, producto].sort((a, b) => a.nombre.localeCompare(b.nombre)));
   }
 
   useEffect(() => {
@@ -857,7 +913,13 @@ function ContenidoProductos() {
           {cargando && <LoadingState label="Cargando catálogo…" />}
 
           {error && !cargando && (
-            <ErrorState action={<Button variant="secondary" onClick={cargar}>Reintentar</Button>}>
+            <ErrorState
+              action={
+                <Button variant="secondary" onClick={cargar}>
+                  Reintentar
+                </Button>
+              }
+            >
               {error}
             </ErrorState>
           )}
@@ -903,9 +965,7 @@ function ContenidoProductos() {
               productoEditandoId={productoEditandoId}
               onEditar={(id) => setProductoEditandoId(id)}
               onActualizado={(actualizado) =>
-                setProductos((prev) =>
-                  prev.map((p) => (p.id === actualizado.id ? actualizado : p)),
-                )
+                setProductos((prev) => prev.map((p) => (p.id === actualizado.id ? actualizado : p)))
               }
               onDadoDeBaja={manejarDadoDeBaja}
               onCerrarEdicion={() => setProductoEditandoId(null)}
