@@ -6,7 +6,8 @@ import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
 import { Button, ErrorState, LoadingState, SectionHeader } from '@/components/ui';
 import { Banda, Hoja, Pieza } from '@/components/banda';
-import { CartIcon } from '@/components/icons';
+import { CartIcon, CashIcon, MinusIcon, ReceiptIcon } from '@/components/icons';
+import { Ventana } from '@/components/ventana';
 import {
   FormularioAbrirCaja,
   FormularioCierre,
@@ -44,14 +45,14 @@ function TarjetaTurno({
   propio: boolean;
   onCambio: () => void;
 }) {
-  const [abierta, setAbierta] = useState(false);
+  const [viendo, setViendo] = useState(false);
   const [cerrando, setCerrando] = useState(false);
   const fecha = fechaLarga(fechaISO(new Date(turno.abiertoEn)));
   // Solo la primera letra: `capitalize` de CSS ponía "23 De Septiembre".
   const dia = fecha[0].toUpperCase() + fecha.slice(1);
 
   return (
-    <li className={`app-card p-4 ${cerrando ? 'lg:col-span-2' : ''}`}>
+    <li className="app-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="font-medium text-tinta">{turno.cajero}</p>
@@ -92,45 +93,52 @@ function TarjetaTurno({
         </div>
       </dl>
 
-      {cerrando ? (
-        <div className="mt-3">
-          <FormularioCierre
-            turnoId={turno.id}
-            titulo={`Cerrar la caja de ${turno.cajero}`}
-            onCerrado={() => {
-              setCerrando(false);
-              onCambio();
-            }}
-            onCancelar={() => setCerrando(false)}
-          />
-        </div>
-      ) : (
-        <div className="mt-3 flex flex-wrap gap-3">
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setViendo(true)}
+          className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10"
+        >
+          <ReceiptIcon className="h-3 w-3" />
+          Ver el detalle
+        </button>
+        {turno.estado === 'abierto' && !propio && (
           <button
             type="button"
-            onClick={() => setAbierta((v) => !v)}
-            aria-expanded={abierta}
-            className="text-xs font-medium text-tinta underline"
+            onClick={() => setCerrando(true)}
+            className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10"
           >
-            {abierta ? 'Ocultar el detalle' : 'Ver el detalle'}
+            <CashIcon className="h-3 w-3" />
+            Cerrar esta caja
           </button>
-          {turno.estado === 'abierto' && !propio && (
-            <button
-              type="button"
-              onClick={() => setCerrando(true)}
-              className="text-xs font-medium text-tinta underline"
-            >
-              Cerrar esta caja
-            </button>
-          )}
-        </div>
+        )}
+      </div>
+
+      {viendo && (
+        <Ventana
+          titulo={`Caja de ${turno.cajero}`}
+          descripcion={`${dia} · ${horaDe(turno.abiertoEn)}${
+            turno.cerradoEn ? ` a ${horaDe(turno.cerradoEn)}` : ' · abierta'
+          }`}
+          icono={<ReceiptIcon className="h-5 w-5" />}
+          onCerrar={() => setViendo(false)}
+        >
+          <div className="space-y-4 pb-5">
+            <ResultadoArqueo turno={turno} />
+            <ListaMovimientos movimientos={turno.movimientos} />
+          </div>
+        </Ventana>
       )}
 
-      {abierta && !cerrando && (
-        <div className="mt-3 space-y-3 border-t border-papel-linea pt-3">
-          <ResultadoArqueo turno={turno} />
-          <ListaMovimientos movimientos={turno.movimientos} />
-        </div>
+      {cerrando && (
+        <Ventana
+          titulo={`Cerrar la caja de ${turno.cajero}`}
+          descripcion="Contá todo el efectivo del cajón, incluido el cambio con el que abrió."
+          icono={<CashIcon className="h-5 w-5" />}
+          onCerrar={() => setCerrando(false)}
+        >
+          <FormularioCierre turnoId={turno.id} onCerrado={onCambio} />
+        </Ventana>
       )}
     </li>
   );
@@ -242,7 +250,6 @@ function ContenidoCaja() {
 
   function actualizar(t: TurnoCaja) {
     setTurno(t);
-    setAccion(null);
     setVersion((v) => v + 1);
   }
 
@@ -316,7 +323,7 @@ function ContenidoCaja() {
             />
           )}
 
-          {abierta && accion !== 'cerrar' && (
+          {abierta && (
             <>
               <div className="mosaico">
                 <Pieza
@@ -355,23 +362,15 @@ function ContenidoCaja() {
                   <h2 className="font-display text-base font-bold text-tinta">
                     Movimientos de efectivo
                   </h2>
-                  {accion !== 'movimiento' && (
-                    <Button variant="secondary" onClick={() => setAccion('movimiento')}>
-                      Sacar o poner efectivo
-                    </Button>
-                  )}
+                  <Button variant="secondary" onClick={() => setAccion('movimiento')}>
+                    Sacar o poner efectivo
+                  </Button>
                 </div>
-                {turno!.movimientos.length === 0 && accion !== 'movimiento' && (
+                {turno!.movimientos.length === 0 && (
                   <p className="mt-2 text-sm text-tinta-suave">
                     Si pagás algo con plata del cajón o traés más cambio, registralo acá para que la
                     caja cuadre.
                   </p>
-                )}
-                {accion === 'movimiento' && (
-                  <FormularioMovimiento
-                    onRegistrado={actualizar}
-                    onCancelar={() => setAccion(null)}
-                  />
                 )}
                 <div className="mt-2">
                   <ListaMovimientos movimientos={turno!.movimientos} />
@@ -386,18 +385,34 @@ function ContenidoCaja() {
             </>
           )}
 
-          {abierta && accion === 'cerrar' && (
-            <div className="mx-auto max-w-2xl">
+          {/* Afuera del bloque de la caja abierta: al cerrarla, la ventana
+              se va con su animación aunque la caja ya no esté abierta. */}
+          {accion === 'movimiento' && (
+            <Ventana
+              titulo="Sacar o poner efectivo"
+              descripcion="Queda registrado y se tiene en cuenta al cerrar la caja."
+              icono={<CashIcon className="h-5 w-5" />}
+              onCerrar={() => setAccion(null)}
+            >
+              <FormularioMovimiento onRegistrado={actualizar} />
+            </Ventana>
+          )}
+
+          {accion === 'cerrar' && (
+            <Ventana
+              titulo="Cerrar la caja"
+              descripcion="Contá todo el efectivo del cajón, incluido el cambio con el que abriste. Después de cerrar vas a ver si cuadra."
+              icono={<MinusIcon className="h-5 w-5" />}
+              onCerrar={() => setAccion(null)}
+            >
               <FormularioCierre
                 onCerrado={(t) => {
                   setCierre(t);
-                  setAccion(null);
                   setTurno(null);
                   setVersion((v) => v + 1);
                 }}
-                onCancelar={() => setAccion(null)}
               />
-            </div>
+            </Ventana>
           )}
 
           {esAdmin && usuario && <CajasDelEquipo usuarioId={usuario.sub} version={version} />}

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AvisoDeCampo, Boton, Etiqueta, Tarjeta, estilosCampo } from './ui';
 import { colores, espaciado, radios } from '../theme/colores';
+import { HojaPie, useHoja } from './hoja-modal';
+import { vibrar } from './movimiento';
 import { useAuth } from '../lib/auth-context';
 import { abrirCaja, cerrarCaja, registrarMovimientoCaja, ApiError } from '../lib/api';
 import { formatearCentavos } from '../lib/formato';
@@ -89,14 +91,9 @@ export function FormularioAbrirCaja({ onAbierta }: { onAbierta: (t: TurnoCaja) =
 
 // --- Retiros e ingresos ---
 
-export function FormularioMovimiento({
-  onRegistrado,
-  onCancelar,
-}: {
-  onRegistrado: (t: TurnoCaja) => void;
-  onCancelar: () => void;
-}) {
+export function FormularioMovimiento({ onRegistrado }: { onRegistrado: (t: TurnoCaja) => void }) {
   const { token } = useAuth();
+  const { cerrar: onCancelar } = useHoja();
   const [tipo, setTipo] = useState<TipoMovimientoCaja>('retiro');
   const [monto, setMonto] = useState('');
   const [motivo, setMotivo] = useState('');
@@ -110,6 +107,8 @@ export function FormularioMovimiento({
     setError(null);
     try {
       onRegistrado(await registrarMovimientoCaja(token, { tipo, montoCentavos, motivo: motivo.trim() }));
+      vibrar.exito();
+      onCancelar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo registrar');
       setEnviando(false);
@@ -117,7 +116,7 @@ export function FormularioMovimiento({
   }
 
   return (
-    <View style={styles.panel}>
+    <View>
       <View style={styles.chips}>
         <Chip texto="Sacar efectivo" activo={tipo === 'retiro'} onPress={() => setTipo('retiro')} />
         <Chip texto="Poner efectivo" activo={tipo === 'ingreso'} onPress={() => setTipo('ingreso')} />
@@ -141,7 +140,7 @@ export function FormularioMovimiento({
       {/* El botón queda gris hasta que alcance: acá se dice por qué. */}
       <AvisoDeCampo ayuda={problemaDelLargo(motivo, 3)} />
       {error && <Text style={styles.error}>{error}</Text>}
-      <View style={styles.fila}>
+      <HojaPie>
         <Boton
           onPress={registrar}
           cargando={enviando}
@@ -153,7 +152,7 @@ export function FormularioMovimiento({
         <Boton variante="ghost" onPress={onCancelar} style={{ flex: 1 }}>
           Cancelar
         </Boton>
-      </View>
+      </HojaPie>
     </View>
   );
 }
@@ -187,17 +186,14 @@ export function ListaMovimientos({ movimientos }: { movimientos: MovimientoCaja[
 
 export function FormularioCierre({
   turnoId,
-  titulo = 'Cerrar la caja',
   onCerrado,
-  onCancelar,
 }: {
   // Otro turno (el admin cierra el de un cajero). Sin id: el propio.
   turnoId?: string;
-  titulo?: string;
   onCerrado: (t: TurnoCaja) => void;
-  onCancelar?: () => void;
 }) {
   const { token } = useAuth();
+  const { cerrar: onCancelar } = useHoja();
   const [modo, setModo] = useState<'billetes' | 'total'>('billetes');
   const [conteo, setConteo] = useState<Record<number, number>>({});
   const [totalEscrito, setTotalEscrito] = useState('');
@@ -214,6 +210,8 @@ export function FormularioCierre({
       onCerrado(
         await cerrarCaja(token, { efectivoContadoCentavos: contado, nota: nota.trim() || undefined }, turnoId),
       );
+      vibrar.exito();
+      onCancelar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo cerrar la caja');
       setEnviando(false);
@@ -233,12 +231,7 @@ export function FormularioCierre({
   }
 
   return (
-    <Tarjeta>
-      <Text style={styles.titulo}>{titulo}</Text>
-      <Text style={styles.ayuda}>
-        Contá todo el efectivo del cajón, incluido el cambio con el que abriste. Después de cerrar
-        vas a ver si cuadra.
-      </Text>
+    <View>
       <View style={styles.chips}>
         <Chip texto="Por billetes y monedas" activo={modo === 'billetes'} onPress={() => setModo('billetes')} />
         <Chip texto="Escribir el total" activo={modo === 'total'} onPress={() => setModo('total')} />
@@ -292,17 +285,15 @@ export function FormularioCierre({
         placeholder="Ej: un cliente no esperó su vuelto"
       />
       {error && <Text style={styles.error}>{error}</Text>}
-      <View style={styles.fila}>
+      <HojaPie>
         <Boton onPress={confirmar} cargando={enviando} disabled={contado === null} style={{ flex: 1 }}>
           Cerrar caja
         </Boton>
-        {onCancelar && (
-          <Boton variante="ghost" onPress={onCancelar} style={{ flex: 1 }}>
-            Cancelar
-          </Boton>
-        )}
-      </View>
-    </Tarjeta>
+        <Boton variante="ghost" onPress={onCancelar} style={{ flex: 1 }}>
+          Cancelar
+        </Boton>
+      </HojaPie>
+    </View>
   );
 }
 
@@ -382,12 +373,6 @@ const styles = StyleSheet.create({
   chipTexto: { fontSize: 13, fontWeight: '700', color: colores.tinta },
   chipTextoActivo: { color: colores.papel },
   fila: { flexDirection: 'row', gap: espaciado.sm, marginTop: espaciado.xs },
-  panel: {
-    marginTop: espaciado.sm,
-    padding: espaciado.md,
-    borderRadius: radios.md,
-    backgroundColor: colores.papel,
-  },
   movimiento: {
     flexDirection: 'row',
     justifyContent: 'space-between',

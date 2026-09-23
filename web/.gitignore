@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# los genera `next dev` en cada arranque (instrucciones para agentes de IA)
+/AGENTS.md
+/CLAUDE.md

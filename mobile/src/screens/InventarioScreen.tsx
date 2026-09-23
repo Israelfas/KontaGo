@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -43,6 +43,8 @@ import {
   estilosCampo,
 } from '../components/ui';
 import { colores, espaciado, radios } from '../theme/colores';
+import { HojaModal, HojaPie, useHoja } from '../components/hoja-modal';
+import { vibrar } from '../components/movimiento';
 import { SelectorProducto } from '../components/selector-producto';
 import { Banda, Hoja, Mosaico, Pieza } from '../components/banda';
 import {
@@ -66,6 +68,7 @@ function FormularioAbastecimiento({
   productoInicialId?: string;
 }) {
   const { token } = useAuth();
+  const { cerrar } = useHoja();
   const [productoId, setProductoId] = useState(productoInicialId);
   const [cantidad, setCantidad] = useState('');
   const [costoUnitario, setCostoUnitario] = useState('');
@@ -93,12 +96,9 @@ function FormularioAbastecimiento({
         proveedor: proveedor || undefined,
         fechaVencimiento: fechaVencimiento || undefined,
       });
-      setProductoId('');
-      setCantidad('');
-      setCostoUnitario('');
-      setProveedor('');
-      setFechaVencimiento('');
+      vibrar.exito();
       onRegistrado();
+      cerrar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo registrar el abastecimiento');
     } finally {
@@ -107,12 +107,7 @@ function FormularioAbastecimiento({
   }
 
   return (
-    <View style={styles.formulario}>
-      <Text style={styles.formularioTitulo}>Abastecimiento</Text>
-      <Text style={styles.formularioSubtitulo}>
-        Suma stock y recalcula el costo promedio del producto.
-      </Text>
-
+    <View>
       <Etiqueta>Producto</Etiqueta>
       <SelectorProducto productos={productos} seleccionadoId={productoId} onSeleccionar={setProductoId} />
 
@@ -171,13 +166,19 @@ function FormularioAbastecimiento({
 
       {error && <Text style={styles.error}>{error}</Text>}
 
-      <Boton
-        onPress={manejarSubmit}
-        cargando={enviando}
-        disabled={!productoId || !cantidad || !costoUnitario || !fechaValida}
-      >
-        Registrar abastecimiento
-      </Boton>
+      <HojaPie>
+        <Boton
+          onPress={manejarSubmit}
+          cargando={enviando}
+          disabled={!productoId || !cantidad || !costoUnitario || !fechaValida}
+          style={{ flex: 1 }}
+        >
+          Registrar
+        </Boton>
+        <Boton variante="ghost" onPress={cerrar} style={{ flex: 1 }}>
+          Cancelar
+        </Boton>
+      </HojaPie>
     </View>
   );
 }
@@ -190,6 +191,7 @@ function FormularioMerma({
   onRegistrado: () => void;
 }) {
   const { token } = useAuth();
+  const { cerrar } = useHoja();
   const [productoId, setProductoId] = useState('');
   const [cantidad, setCantidad] = useState('');
   const [motivo, setMotivo] = useState<MotivoMerma>('vencido');
@@ -218,11 +220,9 @@ function FormularioMerma({
         motivo,
         loteId: loteId || undefined,
       });
-      setProductoId('');
-      setCantidad('');
-      setMotivo('vencido');
-      setLoteId('');
+      vibrar.exito();
       onRegistrado();
+      cerrar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo registrar la merma');
     } finally {
@@ -231,12 +231,7 @@ function FormularioMerma({
   }
 
   return (
-    <View style={styles.formulario}>
-      <Text style={styles.formularioTitulo}>Merma</Text>
-      <Text style={styles.formularioSubtitulo}>
-        Descuenta stock y valoriza la pérdida a costo, no a precio de venta.
-      </Text>
-
+    <View>
       <Etiqueta>Producto</Etiqueta>
       <SelectorProducto
         productos={productos}
@@ -298,9 +293,20 @@ function FormularioMerma({
 
       {error && <Text style={styles.error}>{error}</Text>}
 
-      <Boton variante="danger" onPress={manejarSubmit} cargando={enviando} disabled={!productoId || !cantidad || !!problemaCantidad}>
-        Registrar merma
-      </Boton>
+      <HojaPie>
+        <Boton
+          variante="danger"
+          onPress={manejarSubmit}
+          cargando={enviando}
+          disabled={!productoId || !cantidad || !!problemaCantidad}
+          style={{ flex: 1 }}
+        >
+          Registrar merma
+        </Boton>
+        <Boton variante="ghost" onPress={cerrar} style={{ flex: 1 }}>
+          Cancelar
+        </Boton>
+      </HojaPie>
     </View>
   );
 }
@@ -412,12 +418,11 @@ interface FilaEditable {
 function EditorLotes({
   producto,
   onGuardado,
-  onCancelar,
 }: {
   producto: Producto;
   onGuardado: () => void;
-  onCancelar: () => void;
 }) {
+  const { cerrar } = useHoja();
   const { token } = useAuth();
   const [filas, setFilas] = useState<FilaEditable[]>(() =>
     (producto.lotes ?? []).map((l) => ({
@@ -449,6 +454,7 @@ function EditorLotes({
       }));
       await corregirLotes(token, producto.id, lotes);
       onGuardado();
+      cerrar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudieron guardar los lotes');
       setEnviando(false);
@@ -504,7 +510,7 @@ function EditorLotes({
       {!fechasValidas && <Text style={styles.error}>Hay una fecha que no existe.</Text>}
       {error && <Text style={styles.error}>{error}</Text>}
 
-      <View style={{ flexDirection: 'row', gap: espaciado.sm }}>
+      <HojaPie>
         <Boton
           onPress={guardar}
           cargando={enviando}
@@ -513,16 +519,16 @@ function EditorLotes({
         >
           Guardar
         </Boton>
-        <Boton variante="ghost" onPress={onCancelar} style={{ flex: 1 }}>
+        <Boton variante="ghost" onPress={cerrar} style={{ flex: 1 }}>
           Cancelar
         </Boton>
-      </View>
+      </HojaPie>
     </View>
   );
 }
 
 function SeccionLotes({ productos, onCambio }: { productos: Producto[]; onCambio: () => void }) {
-  const [editando, setEditando] = useState<string | null>(null);
+  const [editando, setEditando] = useState<Producto | null>(null);
   const conLotes = productos.filter((p) => (p.lotes?.length ?? 0) > 0);
 
   return (
@@ -548,43 +554,83 @@ function SeccionLotes({ productos, onCambio }: { productos: Producto[]; onCambio
                     <Text style={styles.loteNombre}>{p.nombre}</Text>
                     <Text style={styles.alertaDetalle}>{unidades(p.stock)} en stock</Text>
                   </View>
-                  {editando !== p.id && (
-                    <Pressable onPress={() => setEditando(p.id)} hitSlop={8}>
-                      <Text style={styles.alertaAccion}>Corregir</Text>
-                    </Pressable>
-                  )}
+                  <Pressable
+                    onPress={() => setEditando(p)}
+                    hitSlop={8}
+                    style={({ pressed }) => [styles.pildoraAccion, pressed && { opacity: 0.7 }]}
+                  >
+                    <Ionicons name="pencil-outline" size={12} color={colores.tinta} />
+                    <Text style={styles.pildoraAccionTexto}>Corregir</Text>
+                  </Pressable>
                 </View>
-                {editando === p.id ? (
-                  <EditorLotes
-                    producto={p}
-                    onGuardado={() => {
-                      setEditando(null);
-                      onCambio();
-                    }}
-                    onCancelar={() => setEditando(null)}
-                  />
-                ) : (
-                  <View style={styles.lotePildoras}>
-                    {p.lotes!.map((l) => {
-                      const tono = vencidos.includes(l)
-                        ? styles.pildoraRoja
-                        : pronto.includes(l)
-                          ? styles.pildoraAmbar
-                          : null;
-                      return (
-                        <Text key={l.id} style={[styles.pildora, tono]}>
-                          {unidades(l.cantidad)} · {textoVencimiento(l)}
-                        </Text>
-                      );
-                    })}
-                  </View>
-                )}
+                <View style={styles.lotePildoras}>
+                  {p.lotes!.map((l) => {
+                    const tono = vencidos.includes(l)
+                      ? styles.pildoraRoja
+                      : pronto.includes(l)
+                        ? styles.pildoraAmbar
+                        : null;
+                    return (
+                      <Text key={l.id} style={[styles.pildora, tono]}>
+                        {unidades(l.cantidad)} · {textoVencimiento(l)}
+                      </Text>
+                    );
+                  })}
+                </View>
               </View>
             );
           })}
         </View>
       )}
+      {editando && (
+        <HojaModal
+          titulo={`Lotes de ${editando.nombre}`}
+          descripcion={`Cuántas de las ${unidades(editando.stock)} vencen en cada fecha, según la góndola.`}
+          icono="pencil-outline"
+          onCerrar={() => setEditando(null)}
+        >
+          <EditorLotes producto={editando} onGuardado={onCambio} />
+        </HojaModal>
+      )}
     </View>
+  );
+}
+
+/** Botón grande de acción: ícono, qué hace y para qué. */
+function AccionGrande({
+  icono,
+  tono,
+  titulo,
+  detalle,
+  onPress,
+}: {
+  icono: keyof typeof Ionicons.glyphMap;
+  tono: 'verde' | 'rojo';
+  titulo: string;
+  detalle: string;
+  onPress: () => void;
+}) {
+  const color = tono === 'verde' ? colores.verdeGanancia : colores.rojoPerdida;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.accionGrande, pressed && { transform: [{ scale: 0.98 }], opacity: 0.92 }]}
+    >
+      <View
+        style={[
+          styles.accionIcono,
+          { backgroundColor: tono === 'verde' ? 'rgba(47,111,79,0.12)' : 'rgba(182,70,47,0.1)' },
+        ]}
+      >
+        <Ionicons name={icono} size={20} color={color} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.accionTitulo}>{titulo}</Text>
+        <Text style={styles.accionDetalle}>{detalle}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colores.tintaSuave} />
+    </Pressable>
   );
 }
 
@@ -597,11 +643,10 @@ export function InventarioScreen() {
   const [alertas, setAlertas] = useState<AlertasProductos | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Producto elegido desde "Abastecer" en una alerta. `vez` fuerza a
-  // rearmar el formulario aunque se toque dos veces el mismo producto.
-  const [sugerido, setSugerido] = useState<{ id: string; vez: number } | null>(null);
-  const scrollRef = useRef<ScrollView>(null);
-  const formularioYRef = useRef(0);
+  // Qué hoja está abierta. Abastecer desde una alerta la abre con el
+  // producto ya elegido.
+  const [abasteciendo, setAbasteciendo] = useState<{ productoId?: string } | null>(null);
+  const [registrandoMerma, setRegistrandoMerma] = useState(false);
 
   function darDeBaja(producto: Producto, lote: Lote) {
     Alert.alert(
@@ -631,12 +676,6 @@ export function InventarioScreen() {
     );
   }
 
-  function abastecerDesdeAlerta(productoId: string) {
-    setSugerido({ id: productoId, vez: Date.now() });
-    requestAnimationFrame(() =>
-      scrollRef.current?.scrollTo({ y: formularioYRef.current, animated: true }),
-    );
-  }
 
   const cargarTodo = useCallback(async () => {
     if (!token) return;
@@ -666,7 +705,7 @@ export function InventarioScreen() {
 
   return (
     <SafeAreaView style={styles.contenedor} edges={[]}>
-      <ScrollView ref={scrollRef} contentContainerStyle={{ flexGrow: 1 }}>
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         <Banda
           eyebrow="Control de stock"
           titulo="Inventario"
@@ -735,14 +774,34 @@ export function InventarioScreen() {
           />
         )}
 
-        {/* Las alertas van antes que los formularios: es lo que más se
-            consulta, y quedaban al fondo de la pantalla. */}
+        {/* Las dos cosas que se hacen a diario, a un toque: cada una abre su
+            hoja en vez de ocupar media pantalla todo el tiempo. */}
+        {!cargando && !error && esAdmin && productos.length > 0 && (
+          <View style={{ gap: espaciado.sm }}>
+            <AccionGrande
+              icono="add"
+              tono="verde"
+              titulo="Registrar abastecimiento"
+              detalle="Llegó mercadería: suma stock y actualiza el costo."
+              onPress={() => setAbasteciendo({})}
+            />
+            <AccionGrande
+              icono="remove"
+              tono="rojo"
+              titulo="Registrar merma"
+              detalle="Se venció, se rompió o se perdió: sale del stock."
+              onPress={() => setRegistrandoMerma(true)}
+            />
+          </View>
+        )}
+
+        {/* Las alertas van antes que los lotes: es lo que más se consulta. */}
         {!cargando && !error && (
           <View>
             <Text style={styles.seccionTitulo}>Alertas</Text>
             <SeccionAlertas
               alertas={alertas}
-              onAbastecer={esAdmin ? abastecerDesdeAlerta : undefined}
+              onAbastecer={esAdmin ? (productoId) => setAbasteciendo({ productoId }) : undefined}
               onDarDeBaja={esAdmin ? darDeBaja : undefined}
             />
           </View>
@@ -750,25 +809,65 @@ export function InventarioScreen() {
 
         {!cargando && !error && esAdmin && productos.length > 0 && (
           <>
-            <View onLayout={(e) => (formularioYRef.current = e.nativeEvent.layout.y)}>
-              <FormularioAbastecimiento
-                key={sugerido?.vez ?? 'inicial'}
-                productos={productos}
-                onRegistrado={cargarTodo}
-                productoInicialId={sugerido?.id}
-              />
-            </View>
-            <FormularioMerma productos={productos} onRegistrado={cargarTodo} />
             <SeccionLotes productos={productos} onCambio={cargarTodo} />
           </>
         )}
         </Hoja>
       </ScrollView>
+      {abasteciendo && (
+        <HojaModal
+          titulo="Abastecimiento"
+          descripcion="Suma stock y recalcula el costo promedio del producto."
+          icono="add"
+          tono="verde"
+          onCerrar={() => setAbasteciendo(null)}
+        >
+          <FormularioAbastecimiento
+            productos={productos}
+            onRegistrado={cargarTodo}
+            productoInicialId={abasteciendo.productoId}
+          />
+        </HojaModal>
+      )}
+      {registrandoMerma && (
+        <HojaModal
+          titulo="Merma"
+          descripcion="Descuenta stock y valoriza la pérdida a costo, no a precio de venta."
+          icono="remove"
+          tono="rojo"
+          onCerrar={() => setRegistrandoMerma(false)}
+        >
+          <FormularioMerma productos={productos} onRegistrado={cargarTodo} />
+        </HojaModal>
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  accionGrande: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: espaciado.md,
+    padding: espaciado.md,
+    backgroundColor: colores.superficie,
+    borderRadius: radios.lg,
+    borderWidth: 1,
+    borderColor: colores.papelLinea,
+  },
+  accionIcono: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  accionTitulo: { fontSize: 15, fontWeight: '800', color: colores.tinta },
+  accionDetalle: { marginTop: 2, fontSize: 12, color: colores.tintaSuave },
+  pildoraAccion: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radios.full,
+    backgroundColor: 'rgba(28,43,58,0.06)',
+  },
+  pildoraAccionTexto: { fontSize: 12, fontWeight: '700', color: colores.tinta },
   botonHistorial: {
     flexDirection: 'row',
     alignItems: 'center',

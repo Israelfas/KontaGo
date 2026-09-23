@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { BarraQueCrece } from './movimiento';
 import { colores, espaciado } from '../theme/colores';
 import { formatearCentavos } from '../lib/formato';
 import { aFecha, fechaLarga } from '../lib/periodo';
@@ -49,7 +50,9 @@ export function GraficoIngreso({
   const etiquetas = datos.map((d) => textos(d, agrupadoPor, muchos));
   // Con muchos puntos, una etiqueta cada tanto: si no, se pisan.
   const salto = Math.ceil(datos.length / (agrupadoPor === 'dia' && !muchos ? 7 : 6));
-  const elegido = activo ?? indiceMaximo;
+  // La barra tocada puede no existir más si cambió el período (se tocó el
+  // día 25 de "Este mes" y se pasó a "Hoy"): entonces, la más alta.
+  const elegido = activo !== null && activo < datos.length ? activo : indiceMaximo;
 
   return (
     <View>
@@ -74,7 +77,9 @@ export function GraficoIngreso({
               accessibilityLabel={`${etiquetas[i].detalle}: ${formatearCentavos(d.centavos)}`}
             >
               {d.centavos > 0 && (
-                <View
+                // Crecen desde la base, una detrás de otra.
+                <BarraQueCrece
+                  orden={i}
                   style={[
                     styles.barra,
                     {
@@ -126,7 +131,7 @@ export function GraficoTopProductos({ datos }: { datos: ProductoVendido[] }) {
   const maximo = Math.max(...datos.map((d) => d.unidades));
   return (
     <View style={{ gap: espaciado.sm }}>
-      {datos.map((d) => (
+      {datos.map((d, i) => (
         <View
           key={d.nombre}
           accessible
@@ -138,7 +143,11 @@ export function GraficoTopProductos({ datos }: { datos: ProductoVendido[] }) {
             </Text>
             <Text style={styles.productoUnidades}>{d.unidades}</Text>
           </View>
-          <View style={[styles.productoBarra, { width: `${Math.max(2, (d.unidades / maximo) * 100)}%` }]} />
+          <BarraQueCrece
+            horizontal
+            orden={i}
+            style={[styles.productoBarra, { width: `${Math.max(2, (d.unidades / maximo) * 100)}%` }]}
+          />
         </View>
       ))}
     </View>

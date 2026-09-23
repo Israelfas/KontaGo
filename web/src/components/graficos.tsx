@@ -102,7 +102,9 @@ export function GraficoIngreso({
   datos: PuntoSerie[];
   agrupadoPor: 'hora' | 'dia';
 }) {
-  const [activo, setActivo] = useState<number | null>(null);
+  const [elegido, setActivo] = useState<number | null>(null);
+  // Si cambió el período, la barra elegida puede no existir más.
+  const activo = elegido !== null && elegido < datos.length ? elegido : null;
   const pantallaChica = usePantallaChica();
   const idTitulo = useId();
 
@@ -268,7 +270,9 @@ export function GraficoTopProductos({
   /** Para el lector de pantalla: "hoy", "en los últimos 7 días"… */
   cuando?: string;
 }) {
-  const [activo, setActivo] = useState<number | null>(null);
+  const [elegido, setActivo] = useState<number | null>(null);
+  // Si cambió el período, la barra elegida puede no existir más.
+  const activo = elegido !== null && elegido < datos.length ? elegido : null;
   const idTitulo = useId();
 
   if (datos.length === 0) {

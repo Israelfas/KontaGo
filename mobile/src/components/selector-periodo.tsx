@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Boton } from './ui';
+import { HojaModal, useHoja } from './hoja-modal';
 import { colores, espaciado, radios } from '../theme/colores';
 import {
   OPCIONES_PERIODO,
@@ -60,10 +61,8 @@ export function SelectorPeriodo({
         <CalendarioRango
           inicial={periodo}
           onCerrar={() => setEligiendo(false)}
-          onElegir={(p) => {
-            setEligiendo(false);
-            onCambiar(p);
-          }}
+          // La hoja se cierra sola (con su animación) después de elegir.
+          onElegir={onCambiar}
         />
       )}
     </>
@@ -155,19 +154,17 @@ function CalendarioRango({
       : 'Tocá el primer día';
 
   return (
-    <Modal transparent animationType="slide" onRequestClose={onCerrar}>
-      <Pressable style={styles.fondo} onPress={onCerrar} accessibilityLabel="Cerrar" />
-      <View style={styles.hojaModal}>
-        <View style={styles.cabeceraModal}>
-          <Text style={styles.tituloModal}>Elegir fechas</Text>
-          <Pressable onPress={onCerrar} hitSlop={10} accessibilityLabel="Cerrar">
-            <Ionicons name="close" size={24} color={colores.tinta} />
-          </Pressable>
-        </View>
-        <Text style={styles.ayuda}>
-          {desde && !hasta ? 'Ahora tocá el último día (o Ver, para un solo día).' : 'Tocá el primer día y después el último.'}
-        </Text>
-
+    <HojaModal
+      titulo="Elegir fechas"
+      descripcion={
+        desde && !hasta
+          ? 'Ahora tocá el último día (o Ver, para un solo día).'
+          : 'Tocá el primer día y después el último.'
+      }
+      icono="calendar-outline"
+      onCerrar={onCerrar}
+    >
+      <View style={{ gap: espaciado.sm }}>
         <View style={styles.navMes}>
           <Pressable
             onPress={() => setMes(new Date(mes.getFullYear(), mes.getMonth() - 1, 1))}
@@ -240,14 +237,28 @@ function CalendarioRango({
 
         <Text style={styles.resumen}>{resumen}</Text>
         {problema && <Text style={styles.problema}>{problema}</Text>}
-        <Boton
-          onPress={() => desde && fin && onElegir(periodoElegido(desde, fin))}
+        <BotonVer
           disabled={!desde || !!problema}
-        >
-          Ver
-        </Boton>
+          onVer={() => desde && fin && onElegir(periodoElegido(desde, fin))}
+        />
       </View>
-    </Modal>
+    </HojaModal>
+  );
+}
+
+/** Aplica el rango y cierra la hoja con su animación. */
+function BotonVer({ disabled, onVer }: { disabled: boolean; onVer: () => void }) {
+  const { cerrar } = useHoja();
+  return (
+    <Boton
+      onPress={() => {
+        onVer();
+        cerrar();
+      }}
+      disabled={disabled}
+    >
+      Ver
+    </Boton>
   );
 }
 
@@ -272,18 +283,6 @@ const styles = StyleSheet.create({
   chipTexto: { color: 'rgba(246,243,236,0.84)', fontSize: 13, fontWeight: '700' },
   chipTextoActivo: { color: colores.tinta },
 
-  fondo: { flex: 1, backgroundColor: 'rgba(28,43,58,0.45)' },
-  hojaModal: {
-    backgroundColor: colores.superficie,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: espaciado.lg,
-    paddingBottom: espaciado.xxl,
-    gap: espaciado.sm,
-  },
-  cabeceraModal: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  tituloModal: { fontSize: 18, fontWeight: '800', color: colores.tinta },
-  ayuda: { fontSize: 13, color: colores.tintaSuave },
   navMes: {
     flexDirection: 'row',
     alignItems: 'center',

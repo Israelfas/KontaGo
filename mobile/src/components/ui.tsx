@@ -1,8 +1,50 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { useRef } from 'react';
+import {
+  ActivityIndicator,
+  Animated,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type ViewStyle,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colores, espaciado, radios } from '../theme/colores';
 
 // --- Button ---
+
+// Lo que ubica al botón (va en el Pressable) y lo que lo dibuja (va en la
+// parte que se hunde al tocar).
+const CLAVES_DE_UBICACION = new Set([
+  'flex',
+  'flexGrow',
+  'flexShrink',
+  'flexBasis',
+  'alignSelf',
+  'position',
+  'top',
+  'right',
+  'bottom',
+  'left',
+  'zIndex',
+  'width',
+  'margin',
+  'marginTop',
+  'marginBottom',
+  'marginLeft',
+  'marginRight',
+  'marginHorizontal',
+  'marginVertical',
+]);
+
+function separarEstilo(style?: ViewStyle) {
+  const ubicacion: Record<string, unknown> = {};
+  const dibujo: Record<string, unknown> = {};
+  for (const [clave, valor] of Object.entries(StyleSheet.flatten(style) ?? {})) {
+    (CLAVES_DE_UBICACION.has(clave) ? ubicacion : dibujo)[clave] = valor;
+  }
+  return { ubicacion: ubicacion as ViewStyle, dibujo: dibujo as ViewStyle };
+}
 
 type BotonVariante = 'primary' | 'secondary' | 'success' | 'danger' | 'ghost';
 
@@ -32,27 +74,45 @@ export function Boton({
   const estilo = BOTON_ESTILOS[variante];
   const inactivo = disabled || cargando;
   const conSombra = variante === 'primary' || variante === 'success' || variante === 'danger';
+  const { ubicacion, dibujo } = separarEstilo(style);
+  // Se hunde al apoyar el dedo (no al soltar) y vuelve sin rebote.
+  const escala = useRef(new Animated.Value(1)).current;
+  const hundir = (valor: number, rapido: boolean) =>
+    Animated.timing(escala, {
+      toValue: valor,
+      duration: rapido ? 80 : 160,
+      useNativeDriver: true,
+    }).start();
 
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={() => hundir(0.97, true)}
+      onPressOut={() => hundir(1, false)}
       disabled={inactivo}
-      style={({ pressed }) => [
-        styles.boton,
-        {
-          backgroundColor: estilo.fondo,
-          borderColor: estilo.borde ?? 'transparent',
-          borderWidth: estilo.borde ? 1 : 0,
-          opacity: inactivo ? 0.5 : pressed ? 0.85 : 1,
-        },
-        conSombra && !inactivo ? styles.botonSombra : null,
-        style,
-      ]}
+      style={ubicacion}
     >
-      {cargando ? (
-        <ActivityIndicator color={estilo.texto} size="small" />
-      ) : (
-        <Text style={[styles.botonTexto, { color: estilo.texto }]}>{children}</Text>
+      {({ pressed }) => (
+        <Animated.View
+          style={[
+            styles.boton,
+            {
+              backgroundColor: estilo.fondo,
+              borderColor: estilo.borde ?? 'transparent',
+              borderWidth: estilo.borde ? 1 : 0,
+              opacity: inactivo ? 0.5 : pressed ? 0.9 : 1,
+              transform: [{ scale: escala }],
+            },
+            conSombra && !inactivo ? styles.botonSombra : null,
+            dibujo,
+          ]}
+        >
+          {cargando ? (
+            <ActivityIndicator color={estilo.texto} size="small" />
+          ) : (
+            <Text style={[styles.botonTexto, { color: estilo.texto }]}>{children}</Text>
+          )}
+        </Animated.View>
       )}
     </Pressable>
   );

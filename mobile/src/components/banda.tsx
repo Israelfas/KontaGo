@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
+import { Children, cloneElement, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { CifraAnimada, Entrada } from './movimiento';
 import { colores, espaciado, radios } from '../theme/colores';
 
 /**
@@ -32,16 +33,25 @@ export function Banda({
       <View pointerEvents="none" style={styles.resplandorAmbar} />
       <View pointerEvents="none" style={styles.resplandorVerde} />
 
+      {/* Lo que dice, el número y el detalle llegan escalonados. */}
       <View style={styles.cabecera}>
-        <View style={{ flex: 1 }}>
+        <Entrada style={{ flex: 1 }}>
           <Text style={styles.eyebrow}>{eyebrow}</Text>
           <Text style={styles.titulo}>{titulo}</Text>
-        </View>
+        </Entrada>
         {accion}
       </View>
 
-      {valor !== undefined && <Text style={styles.valor}>{valor}</Text>}
-      {detalle && <Text style={styles.detalle}>{detalle}</Text>}
+      {valor !== undefined && (
+        <Entrada orden={1}>
+          <CifraAnimada texto={valor} style={styles.valor} />
+        </Entrada>
+      )}
+      {detalle && (
+        <Entrada orden={2}>
+          <Text style={styles.detalle}>{detalle}</Text>
+        </Entrada>
+      )}
       {children}
     </View>
   );
@@ -63,7 +73,17 @@ export function LabioHoja() {
 
 /** Fila del mosaico: las piezas van de a dos. */
 export function Mosaico({ children }: { children: ReactNode }) {
-  return <View style={styles.mosaico}>{children}</View>;
+  // Cada pieza entra una detrás de otra.
+  let orden = 0;
+  return (
+    <View style={styles.mosaico}>
+      {Children.map(children, (hijo) =>
+        isValidElement(hijo) && hijo.type === Pieza
+          ? cloneElement(hijo as ReactElement<{ orden?: number }>, { orden: orden++ })
+          : hijo,
+      )}
+    </View>
+  );
 }
 
 export function Pieza({
@@ -72,6 +92,7 @@ export function Pieza({
   detalle,
   tono = 'neutro',
   ancho = 'mitad',
+  orden = 0,
   children,
 }: {
   etiqueta: string;
@@ -79,18 +100,20 @@ export function Pieza({
   detalle?: string;
   tono?: 'neutro' | 'verde' | 'rojo';
   ancho?: 'mitad' | 'completa';
+  /** Lugar en el mosaico, para entrar escalonada (lo pone Mosaico). */
+  orden?: number;
   children?: ReactNode;
 }) {
   const color =
     tono === 'verde' ? colores.verdeGanancia : tono === 'rojo' ? colores.rojoPerdida : colores.tinta;
 
   return (
-    <View style={[styles.pieza, ancho === 'completa' && styles.piezaCompleta]}>
+    <Entrada orden={orden + 1} style={[styles.pieza, ancho === 'completa' && styles.piezaCompleta]}>
       <Text style={styles.piezaEtiqueta}>{etiqueta}</Text>
-      {valor !== undefined && <Text style={[styles.piezaValor, { color }]}>{valor}</Text>}
+      {valor !== undefined && <CifraAnimada texto={valor} style={[styles.piezaValor, { color }]} />}
       {children}
       {detalle && <Text style={styles.piezaDetalle}>{detalle}</Text>}
-    </View>
+    </Entrada>
   );
 }
 

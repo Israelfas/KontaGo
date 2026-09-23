@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../lib/auth-context';
 import { listarTurnosCaja, obtenerCajaActual, ApiError } from '../lib/api';
@@ -17,6 +18,7 @@ import {
   ResultadoArqueo,
 } from '../components/caja';
 import { colores, espaciado, radios } from '../theme/colores';
+import { HojaModal } from '../components/hoja-modal';
 import type { TurnoCaja } from '../lib/tipos';
 
 const PERIODOS = [
@@ -40,24 +42,10 @@ function TarjetaTurno({
   propio: boolean;
   onCambio: () => void;
 }) {
-  const [detalle, setDetalle] = useState(false);
+  const [viendo, setViendo] = useState(false);
   const [cerrando, setCerrando] = useState(false);
   const fecha = fechaLarga(fechaISO(new Date(turno.abiertoEn)));
   const tono = turno.diferenciaCentavos !== undefined ? TONO[tonoDiferencia(turno.diferenciaCentavos)] : null;
-
-  if (cerrando) {
-    return (
-      <FormularioCierre
-        turnoId={turno.id}
-        titulo={`Cerrar la caja de ${turno.cajero}`}
-        onCerrado={() => {
-          setCerrando(false);
-          onCambio();
-        }}
-        onCancelar={() => setCerrando(false)}
-      />
-    );
-  }
 
   return (
     <Tarjeta>
@@ -93,20 +81,50 @@ function TarjetaTurno({
         </View>
       </View>
       <View style={styles.enlaces}>
-        <Pressable onPress={() => setDetalle((v) => !v)} hitSlop={8}>
-          <Text style={styles.enlace}>{detalle ? 'Ocultar el detalle' : 'Ver el detalle'}</Text>
+        <Pressable
+          onPress={() => setViendo(true)}
+          hitSlop={8}
+          style={({ pressed }) => [styles.pildoraAccion, pressed && { opacity: 0.7 }]}
+        >
+          <Ionicons name="receipt-outline" size={12} color={colores.tinta} />
+          <Text style={styles.pildoraAccionTexto}>Ver el detalle</Text>
         </Pressable>
         {turno.estado === 'abierto' && !propio && (
-          <Pressable onPress={() => setCerrando(true)} hitSlop={8}>
-            <Text style={styles.enlace}>Cerrar esta caja</Text>
+          <Pressable
+            onPress={() => setCerrando(true)}
+            hitSlop={8}
+            style={({ pressed }) => [styles.pildoraAccion, pressed && { opacity: 0.7 }]}
+          >
+            <Ionicons name="cash-outline" size={12} color={colores.tinta} />
+            <Text style={styles.pildoraAccionTexto}>Cerrar esta caja</Text>
           </Pressable>
         )}
       </View>
-      {detalle && (
-        <View style={styles.detalle}>
-          <ResultadoArqueo turno={turno} />
-          <ListaMovimientos movimientos={turno.movimientos} />
-        </View>
+
+      {viendo && (
+        <HojaModal
+          titulo={`Caja de ${turno.cajero}`}
+          descripcion={`${fecha[0].toUpperCase() + fecha.slice(1)} · ${horaDe(turno.abiertoEn)}${
+            turno.cerradoEn ? ` a ${horaDe(turno.cerradoEn)}` : ' · abierta'
+          }`}
+          icono="receipt-outline"
+          onCerrar={() => setViendo(false)}
+        >
+          <View style={{ gap: espaciado.md }}>
+            <ResultadoArqueo turno={turno} />
+            <ListaMovimientos movimientos={turno.movimientos} />
+          </View>
+        </HojaModal>
+      )}
+      {cerrando && (
+        <HojaModal
+          titulo={`Cerrar la caja de ${turno.cajero}`}
+          descripcion="Contá todo el efectivo del cajón, incluido el cambio con el que abrió."
+          icono="cash-outline"
+          onCerrar={() => setCerrando(false)}
+        >
+          <FormularioCierre turnoId={turno.id} onCerrado={onCambio} />
+        </HojaModal>
       )}
     </Tarjeta>
   );
@@ -197,7 +215,6 @@ export function CajaScreen() {
 
   function actualizar(t: TurnoCaja) {
     setTurno(t);
-    setAccion(null);
     setVersion((v) => v + 1);
   }
 
@@ -252,7 +269,7 @@ export function CajaScreen() {
             />
           )}
 
-          {abierta && accion !== 'cerrar' && (
+          {abierta && (
             <>
               <Mosaico>
                 <Pieza
@@ -284,45 +301,69 @@ export function CajaScreen() {
 
               <Tarjeta>
                 <Text style={styles.seccion}>Movimientos de efectivo</Text>
-                {turno!.movimientos.length === 0 && accion !== 'movimiento' && (
+                {turno!.movimientos.length === 0 && (
                   <Text style={styles.ayuda}>
                     Si pagás algo con plata del cajón o traés más cambio, registralo acá para que la caja cuadre.
                   </Text>
                 )}
                 <ListaMovimientos movimientos={turno!.movimientos} />
-                {accion === 'movimiento' ? (
-                  <FormularioMovimiento onRegistrado={actualizar} onCancelar={() => setAccion(null)} />
-                ) : (
-                  <Boton variante="secondary" onPress={() => setAccion('movimiento')} style={{ marginTop: espaciado.sm }}>
-                    Sacar o poner efectivo
-                  </Boton>
-                )}
+                <Boton variante="secondary" onPress={() => setAccion('movimiento')} style={{ marginTop: espaciado.sm }}>
+                  Sacar o poner efectivo
+                </Boton>
               </Tarjeta>
 
               <Boton onPress={() => setAccion('cerrar')}>Cerrar la caja</Boton>
             </>
           )}
 
-          {abierta && accion === 'cerrar' && (
-            <FormularioCierre
-              onCerrado={(t) => {
-                setCierre(t);
-                setAccion(null);
-                setTurno(null);
-                setVersion((v) => v + 1);
-              }}
-              onCancelar={() => setAccion(null)}
-            />
-          )}
 
           {esAdmin && usuario && <CajasDelEquipo usuarioId={usuario.sub} version={version} />}
         </Hoja>
       </ScrollView>
+
+      {/* Afuera del bloque de la caja abierta: al cerrarla, la hoja se va
+          con su animación aunque la caja ya no esté abierta. */}
+      {accion === 'movimiento' && (
+        <HojaModal
+          titulo="Sacar o poner efectivo"
+          descripcion="Queda registrado y se tiene en cuenta al cerrar la caja."
+          icono="cash-outline"
+          onCerrar={() => setAccion(null)}
+        >
+          <FormularioMovimiento onRegistrado={actualizar} />
+        </HojaModal>
+      )}
+      {accion === 'cerrar' && (
+        <HojaModal
+          titulo="Cerrar la caja"
+          descripcion="Contá todo el efectivo del cajón, incluido el cambio con el que abriste. Después de cerrar vas a ver si cuadra."
+          icono="lock-closed-outline"
+          onCerrar={() => setAccion(null)}
+        >
+          <FormularioCierre
+            onCerrado={(t) => {
+              setCierre(t);
+              setTurno(null);
+              setVersion((v) => v + 1);
+            }}
+          />
+        </HojaModal>
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  pildoraAccion: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(28,43,58,0.06)',
+  },
+  pildoraAccionTexto: { fontSize: 12, fontWeight: '700', color: colores.tinta },
   contenedor: { flex: 1, backgroundColor: colores.papel },
   hoja: { paddingHorizontal: espaciado.lg, paddingBottom: espaciado.xxl, gap: espaciado.md },
   seccion: { fontSize: 16, fontWeight: '800', color: colores.tinta },
@@ -359,5 +400,4 @@ const styles = StyleSheet.create({
   turnoValor: { fontSize: 14, fontWeight: '700', color: colores.tinta, fontVariant: ['tabular-nums'] },
   enlaces: { flexDirection: 'row', gap: espaciado.lg, marginTop: espaciado.md },
   enlace: { fontSize: 13, fontWeight: '600', color: colores.tinta, textDecorationLine: 'underline' },
-  detalle: { marginTop: espaciado.md, paddingTop: espaciado.md, borderTopWidth: 1, borderTopColor: colores.papelLinea },
 });

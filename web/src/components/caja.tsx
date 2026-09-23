@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { AvisoDeCampo, Button } from '@/components/ui';
+import { VentanaPie, useVentana } from '@/components/ventana';
 import { useAuth } from '@/lib/auth-context';
 import { abrirCaja, cerrarCaja, registrarMovimientoCaja, ApiError } from '@/lib/api';
 import { formatearCentavos } from '@/lib/formato';
@@ -102,14 +103,9 @@ export function FormularioAbrirCaja({ onAbierta }: { onAbierta: (t: TurnoCaja) =
 
 // --- Retiros e ingresos ---
 
-export function FormularioMovimiento({
-  onRegistrado,
-  onCancelar,
-}: {
-  onRegistrado: (t: TurnoCaja) => void;
-  onCancelar: () => void;
-}) {
+export function FormularioMovimiento({ onRegistrado }: { onRegistrado: (t: TurnoCaja) => void }) {
   const { token } = useAuth();
+  const { cerrar } = useVentana();
   const [tipo, setTipo] = useState<TipoMovimientoCaja>('retiro');
   const [monto, setMonto] = useState('');
   const [motivo, setMotivo] = useState('');
@@ -126,6 +122,7 @@ export function FormularioMovimiento({
     setError(null);
     try {
       onRegistrado(await registrarMovimientoCaja(token, { tipo, montoCentavos, motivo }));
+      cerrar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo registrar');
       setEnviando(false);
@@ -133,7 +130,7 @@ export function FormularioMovimiento({
   }
 
   return (
-    <form onSubmit={registrar} className="mt-3 space-y-3 rounded-xl bg-papel p-4">
+    <form onSubmit={registrar} className="space-y-3">
       <div className="flex gap-2" role="radiogroup" aria-label="Tipo de movimiento">
         {(
           [
@@ -198,7 +195,7 @@ export function FormularioMovimiento({
         </div>
       </div>
       {error && <MensajeError>{error}</MensajeError>}
-      <div className="flex gap-2">
+      <VentanaPie>
         <Button
           type="submit"
           variant="primary"
@@ -206,10 +203,10 @@ export function FormularioMovimiento({
         >
           {enviando ? 'Guardando…' : 'Registrar'}
         </Button>
-        <Button type="button" variant="ghost" onClick={onCancelar} disabled={enviando}>
+        <Button type="button" variant="ghost" onClick={cerrar} disabled={enviando}>
           Cancelar
         </Button>
-      </div>
+      </VentanaPie>
     </form>
   );
 }
@@ -247,17 +244,14 @@ export function ListaMovimientos({ movimientos }: { movimientos: MovimientoCaja[
  */
 export function FormularioCierre({
   turnoId,
-  titulo = 'Cerrar la caja',
   onCerrado,
-  onCancelar,
 }: {
   // Otro turno (el admin cierra el de un cajero). Sin id: el propio.
   turnoId?: string;
-  titulo?: string;
   onCerrado: (t: TurnoCaja) => void;
-  onCancelar?: () => void;
 }) {
   const { token } = useAuth();
+  const { cerrar: cerrarVentana } = useVentana();
   const [modo, setModo] = useState<'billetes' | 'total'>('billetes');
   const [conteo, setConteo] = useState<Record<number, number>>({});
   const [totalEscrito, setTotalEscrito] = useState('');
@@ -280,6 +274,7 @@ export function FormularioCierre({
           turnoId,
         ),
       );
+      cerrarVentana();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo cerrar la caja');
       setEnviando(false);
@@ -293,15 +288,8 @@ export function FormularioCierre({
         e.preventDefault();
         setConfirmando(true);
       }}
-      className="app-card p-5 sm:p-6"
     >
-      <h2 className="font-display text-lg font-bold text-tinta">{titulo}</h2>
-      <p className="mt-1 text-sm text-tinta-suave">
-        Contá todo el efectivo del cajón, incluido el cambio con el que abriste. Después de cerrar
-        vas a ver si cuadra.
-      </p>
-
-      <div className="mt-4 flex gap-2" role="radiogroup" aria-label="Cómo contar">
+      <div className="flex gap-2" role="radiogroup" aria-label="Cómo contar">
         {(
           [
             ['billetes', 'Por billetes y monedas'],
@@ -392,14 +380,17 @@ export function FormularioCierre({
 
       {error && <MensajeError>{error}</MensajeError>}
 
-      {confirmando ? (
-        <div className="mt-5 rounded-xl border border-tinta/15 p-4">
-          <p className="text-sm text-tinta">
-            ¿Cerrar la caja con{' '}
-            <strong className="font-ticket">{formatearCentavos(contado ?? 0)}</strong>? Después no
-            se puede cambiar el conteo.
-          </p>
-          <div className="mt-3 flex gap-2">
+      {confirmando && (
+        <p className="entra mt-4 rounded-xl border border-tinta/15 p-4 text-sm text-tinta">
+          ¿Cerrar la caja con{' '}
+          <strong className="font-ticket">{formatearCentavos(contado ?? 0)}</strong>? Después no se
+          puede cambiar el conteo.
+        </p>
+      )}
+
+      <VentanaPie>
+        {confirmando ? (
+          <>
             <Button type="button" variant="primary" onClick={cerrar} disabled={enviando}>
               {enviando ? 'Cerrando…' : 'Sí, cerrar'}
             </Button>
@@ -411,20 +402,18 @@ export function FormularioCierre({
             >
               Volver a contar
             </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="mt-5 flex gap-2">
-          <Button type="submit" variant="primary" disabled={contado === null}>
-            Cerrar caja
-          </Button>
-          {onCancelar && (
-            <Button type="button" variant="ghost" onClick={onCancelar}>
+          </>
+        ) : (
+          <>
+            <Button type="submit" variant="primary" disabled={contado === null}>
+              Cerrar caja
+            </Button>
+            <Button type="button" variant="ghost" onClick={cerrarVentana}>
               Cancelar
             </Button>
-          )}
-        </div>
-      )}
+          </>
+        )}
+      </VentanaPie>
     </form>
   );
 }

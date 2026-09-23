@@ -16,6 +16,7 @@ import {
   type Periodo,
 } from '../lib/periodo';
 import { SelectorPeriodo } from '../components/selector-periodo';
+import { BarraQueCrece } from '../components/movimiento';
 import { Banda, LabioHoja, Mosaico, Pieza } from '../components/banda';
 import { EstadoCargando, EstadoError, EstadoVacio } from '../components/ui';
 import { colores, espaciado, radios } from '../theme/colores';
@@ -50,7 +51,7 @@ function ListaConBarras({
   return (
     <Pieza etiqueta={titulo} ancho="completa">
       <View style={{ gap: espaciado.sm, marginTop: espaciado.sm }}>
-        {filas.map((f) => (
+        {filas.map((f, i) => (
           <View
             key={f.clave}
             accessible
@@ -63,7 +64,11 @@ function ListaConBarras({
               <Text style={styles.monto}>{formatearCentavos(f.centavos)}</Text>
             </View>
             <View style={styles.barraFondo}>
-              <View style={[styles.barra, { width: `${Math.max(2, (f.centavos / maximo) * 100)}%` }]} />
+              <BarraQueCrece
+                horizontal
+                orden={i}
+                style={[styles.barra, { width: `${Math.max(2, (f.centavos / maximo) * 100)}%` }]}
+              />
             </View>
           </View>
         ))}

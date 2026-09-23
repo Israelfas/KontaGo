@@ -5,7 +5,8 @@ import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
 import { AvisoDeCampo, Button, ErrorState, LoadingState } from '@/components/ui';
 import { Banda, Hoja } from '@/components/banda';
-import { PlusIcon } from '@/components/icons';
+import { PencilIcon, PlusIcon, UsersIcon } from '@/components/icons';
+import { Ventana, VentanaPie, useVentana } from '@/components/ventana';
 import { useAuth } from '@/lib/auth-context';
 import {
   listarEquipo,
@@ -36,14 +37,9 @@ const CLASE_ROL: Record<UsuarioEquipo['rol'], string> = {
   cajero: 'status-pill-neutral',
 };
 
-function FormularioNuevaPersona({
-  onCreado,
-  onCerrar,
-}: {
-  onCreado: (u: UsuarioEquipo) => void;
-  onCerrar: () => void;
-}) {
+function FormularioNuevaPersona({ onCreado }: { onCreado: (u: UsuarioEquipo) => void }) {
   const { token } = useAuth();
+  const { cerrar } = useVentana();
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -68,7 +64,7 @@ function FormularioNuevaPersona({
     setEnviando(true);
     try {
       onCreado(await crearUsuario(token, { nombre, email, password, rol }));
-      onCerrar();
+      cerrar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo crear la cuenta');
     } finally {
@@ -77,7 +73,7 @@ function FormularioNuevaPersona({
   }
 
   return (
-    <form onSubmit={manejarSubmit} className="app-card p-5 sm:p-6">
+    <form onSubmit={manejarSubmit}>
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2 sm:col-span-1">
           <label className="field-label" htmlFor="persona-nombre">
@@ -167,14 +163,14 @@ function FormularioNuevaPersona({
         </p>
       )}
 
-      <div className="mt-5 flex gap-2">
+      <VentanaPie>
         <Button type="submit" variant="primary" disabled={enviando}>
           {enviando ? 'Creando…' : 'Crear cuenta'}
         </Button>
-        <Button type="button" variant="ghost" onClick={onCerrar}>
+        <Button type="button" variant="ghost" onClick={cerrar}>
           Cancelar
         </Button>
-      </div>
+      </VentanaPie>
     </form>
   );
 }
@@ -182,13 +178,12 @@ function FormularioNuevaPersona({
 function FormularioCambiarPassword({
   persona,
   onListo,
-  onCerrar,
 }: {
   persona: UsuarioEquipo;
   onListo: () => void;
-  onCerrar: () => void;
 }) {
   const { token } = useAuth();
+  const { cerrar } = useVentana();
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -207,6 +202,7 @@ function FormularioCambiarPassword({
     try {
       await cambiarPasswordUsuario(token, persona.id, password);
       onListo();
+      cerrar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo cambiar la contraseña');
     } finally {
@@ -215,9 +211,12 @@ function FormularioCambiarPassword({
   }
 
   return (
-    <form onSubmit={manejarSubmit} className="app-card p-4 sm:p-5">
-      <p className="text-sm font-semibold text-tinta">Nueva contraseña para {persona.nombre}</p>
+    <form onSubmit={manejarSubmit}>
+      <label className="field-label" htmlFor={`password-${persona.id}`}>
+        Nueva contraseña
+      </label>
       <input
+        id={`password-${persona.id}`}
         required
         minLength={6}
         type="text"
@@ -228,9 +227,8 @@ function FormularioCambiarPassword({
         onBlur={() => setSalio(true)}
         aria-invalid={salio && !!problema}
         aria-describedby={`password-${persona.id}-aviso`}
-        className="field mt-3 font-ticket"
+        className="field font-ticket"
         placeholder="Mínimo 6 caracteres"
-        aria-label="Nueva contraseña"
       />
       <AvisoDeCampo
         id={`password-${persona.id}-aviso`}
@@ -242,14 +240,14 @@ function FormularioCambiarPassword({
           {error}
         </p>
       )}
-      <div className="mt-4 flex gap-2">
+      <VentanaPie>
         <Button type="submit" variant="primary" disabled={enviando}>
           {enviando ? 'Guardando…' : 'Guardar contraseña'}
         </Button>
-        <Button type="button" variant="ghost" onClick={onCerrar}>
+        <Button type="button" variant="ghost" onClick={cerrar}>
           Cancelar
         </Button>
-      </div>
+      </VentanaPie>
     </form>
   );
 }
@@ -262,8 +260,8 @@ function ContenidoEquipo() {
   const [error, setError] = useState<string | null>(null);
   const [errorAccion, setErrorAccion] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
-  const [formularioAbierto, setFormularioAbierto] = useState(false);
-  const [cambiandoPasswordId, setCambiandoPasswordId] = useState<string | null>(null);
+  const [agregando, setAgregando] = useState(false);
+  const [cambiandoPassword, setCambiandoPassword] = useState<UsuarioEquipo | null>(null);
   const [procesandoId, setProcesandoId] = useState<string | null>(null);
 
   function cargar() {
@@ -306,8 +304,6 @@ function ContenidoEquipo() {
     }
   }
 
-  const personaCambiandoPassword = equipo.find((u) => u.id === cambiandoPasswordId);
-
   return (
     <div>
       <Banda
@@ -320,22 +316,43 @@ function ContenidoEquipo() {
             : 'Las personas que usan KontaGo en tu tienda.'
         }
         accion={
-          !formularioAbierto ? (
-            <Button variant="claro" onClick={() => setFormularioAbierto(true)}>
-              <PlusIcon className="h-4 w-4" />
-              Agregar persona
-            </Button>
-          ) : undefined
+          <Button variant="claro" onClick={() => setAgregando(true)}>
+            <PlusIcon className="h-4 w-4" />
+            Agregar persona
+          </Button>
         }
       />
 
       <Hoja>
         <div className="mt-8 space-y-6">
-          {formularioAbierto && (
-            <FormularioNuevaPersona
-              onCreado={(u) => setEquipo((prev) => [...prev, u])}
-              onCerrar={() => setFormularioAbierto(false)}
-            />
+          {agregando && (
+            <Ventana
+              titulo="Agregar persona"
+              descripcion="Entra con su email y la contraseña que le pases."
+              icono={<UsersIcon className="h-5 w-5" />}
+              onCerrar={() => setAgregando(false)}
+            >
+              <FormularioNuevaPersona onCreado={(u) => setEquipo((prev) => [...prev, u])} />
+            </Ventana>
+          )}
+
+          {cambiandoPassword && (
+            <Ventana
+              titulo="Cambiar contraseña"
+              descripcion={
+                // Cambiarla cierra las sesiones de esa persona, también la propia.
+                cambiandoPassword.id === usuario?.sub
+                  ? 'Es la tuya: al guardarla se cierra tu sesión y entrás de nuevo con la nueva.'
+                  : `De ${cambiandoPassword.nombre}. Pasásela en persona: la vieja deja de servir y se cierran sus sesiones.`
+              }
+              icono={<PencilIcon className="h-5 w-5" />}
+              onCerrar={() => setCambiandoPassword(null)}
+            >
+              <FormularioCambiarPassword
+                persona={cambiandoPassword}
+                onListo={() => setAviso(`Contraseña de ${cambiandoPassword.nombre} actualizada.`)}
+              />
+            </Ventana>
           )}
 
           {cargando && <LoadingState label="Cargando equipo…" />}
@@ -393,10 +410,11 @@ function ContenidoEquipo() {
                         type="button"
                         onClick={() => {
                           setAviso(null);
-                          setCambiandoPasswordId(persona.id);
+                          setCambiandoPassword(persona);
                         }}
-                        className="text-xs font-medium text-tinta-suave underline hover:text-tinta"
+                        className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10 disabled:opacity-50"
                       >
+                        <PencilIcon className="h-3 w-3" />
                         Cambiar contraseña
                       </button>
                       {!esVos && (
@@ -404,7 +422,7 @@ function ContenidoEquipo() {
                           type="button"
                           disabled={procesandoId !== null}
                           onClick={() => alternarActivo(persona)}
-                          className="text-xs font-medium text-tinta-suave underline hover:text-tinta disabled:opacity-50"
+                          className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10 disabled:opacity-50"
                         >
                           {procesandoId === persona.id
                             ? 'Guardando…'
@@ -458,10 +476,11 @@ function ContenidoEquipo() {
                               type="button"
                               onClick={() => {
                                 setAviso(null);
-                                setCambiandoPasswordId(persona.id);
+                                setCambiandoPassword(persona);
                               }}
-                              className="text-xs font-medium text-tinta-suave underline hover:text-tinta"
+                              className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10 disabled:opacity-50"
                             >
+                              <PencilIcon className="h-3 w-3" />
                               Cambiar contraseña
                             </button>
                             {/* Uno no puede desactivarse a sí mismo: la tienda
@@ -471,7 +490,7 @@ function ContenidoEquipo() {
                                 type="button"
                                 disabled={procesandoId !== null}
                                 onClick={() => alternarActivo(persona)}
-                                className="text-xs font-medium text-tinta-suave underline hover:text-tinta disabled:opacity-50"
+                                className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10 disabled:opacity-50"
                               >
                                 {procesandoId === persona.id
                                   ? 'Guardando…'
@@ -488,17 +507,6 @@ function ContenidoEquipo() {
                 </tbody>
               </table>
             </div>
-          )}
-
-          {personaCambiandoPassword && (
-            <FormularioCambiarPassword
-              persona={personaCambiandoPassword}
-              onListo={() => {
-                setAviso(`Contraseña de ${personaCambiandoPassword.nombre} actualizada.`);
-                setCambiandoPasswordId(null);
-              }}
-              onCerrar={() => setCambiandoPasswordId(null)}
-            />
           )}
         </div>
       </Hoja>

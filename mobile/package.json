@@ -12,6 +12,7 @@
     "expo-auth-session": "~57.0.12",
     "expo-camera": "~57.0.4",
     "expo-constants": "~57.0.13",
+    "expo-haptics": "~57.0.3",
     "expo-linking": "~57.0.10",
     "expo-secure-store": "^57.0.1",
     "expo-status-bar": "~57.0.1",

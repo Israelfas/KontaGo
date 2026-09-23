@@ -40,6 +40,7 @@ import { FormularioAbrirCaja } from '../components/caja';
 import { colores, espaciado, radios } from '../theme/colores';
 import type { MetodoPago, Producto, TurnoCaja, Venta } from '../lib/tipos';
 import { EscanerCamara } from '../components/escaner-camara';
+import { CheckAnimado, CifraAnimada, Entrada, vibrar } from '../components/movimiento';
 import { Banda, LabioHoja } from '../components/banda';
 
 interface ItemCarrito {
@@ -269,6 +270,7 @@ export function VentaScreen() {
         ...(efectivo ? { montoRecibidoCentavos: montoRecibidoCentavos! } : {}),
       });
       setVentaConfirmada(venta);
+      vibrar.exito();
       setCarrito([]);
       setMontoRecibido('');
       setMetodoPago('efectivo');
@@ -288,17 +290,16 @@ export function VentaScreen() {
     return (
       <SafeAreaView style={styles.contenedor} edges={[]}>
         <View style={styles.confirmacionContenedor}>
-          <View style={styles.confirmacionIconoFondo}>
-            <Ionicons name="checkmark" size={32} color={colores.verdeGanancia} />
-          </View>
+          <CheckAnimado color={colores.verdeGanancia} />
           <Text style={styles.confirmacionEtiqueta}>
             VENTA REGISTRADA · TICKET {numeroDeTicket(ventaConfirmada.numero)}
           </Text>
-          <Text style={styles.confirmacionTotal}>
-            {formatearCentavos(ventaConfirmada.totalCentavos)}
-          </Text>
+          <CifraAnimada
+            texto={formatearCentavos(ventaConfirmada.totalCentavos)}
+            style={styles.confirmacionTotal}
+          />
 
-          <View style={styles.confirmacionTarjeta}>
+          <Entrada orden={3} style={styles.confirmacionTarjeta}>
             <View style={styles.confirmacionFila}>
               <Text style={styles.confirmacionLabel}>Subtotal</Text>
               <Text style={styles.confirmacionValor}>
@@ -328,26 +329,27 @@ export function VentaScreen() {
                   <Text style={[styles.confirmacionLabel, { fontWeight: '700', color: colores.tinta }]}>
                     Vuelto
                   </Text>
-                  <Text
+                  <CifraAnimada
+                    texto={formatearCentavos(ventaConfirmada.vueltoCentavos)}
                     style={[styles.confirmacionValor, { color: colores.ambar, fontSize: 19, fontWeight: '800' }]}
-                  >
-                    {formatearCentavos(ventaConfirmada.vueltoCentavos)}
-                  </Text>
+                  />
                 </View>
               </>
             )}
-          </View>
+          </Entrada>
 
-          <Boton onPress={() => setVentaConfirmada(null)} style={{ marginTop: espaciado.lg, width: '100%' }}>
-            Nueva venta
-          </Boton>
-          <Boton
-            variante="secondary"
-            onPress={() => token && compartirTicket(token, ventaConfirmada.id)}
-            style={{ marginTop: espaciado.sm, width: '100%' }}
-          >
-            Compartir ticket
-          </Boton>
+          <Entrada orden={5} style={{ width: '100%' }}>
+            <Boton onPress={() => setVentaConfirmada(null)} style={{ marginTop: espaciado.lg, width: '100%' }}>
+              Nueva venta
+            </Boton>
+            <Boton
+              variante="secondary"
+              onPress={() => token && compartirTicket(token, ventaConfirmada.id)}
+              style={{ marginTop: espaciado.sm, width: '100%' }}
+            >
+              Compartir ticket
+            </Boton>
+          </Entrada>
         </View>
       </SafeAreaView>
     );

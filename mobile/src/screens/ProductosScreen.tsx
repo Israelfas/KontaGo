@@ -32,6 +32,7 @@ import {
   estilosCampo,
 } from '../components/ui';
 import { colores, espaciado, radios } from '../theme/colores';
+import { HojaModal, HojaPie, useHoja } from '../components/hoja-modal';
 import { Banda, LabioHoja } from '../components/banda';
 import type { Producto } from '../lib/tipos';
 import {
@@ -160,7 +161,7 @@ function FilaProducto({
 }) {
   const stockBajo = producto.stock <= producto.stockMinimo && producto.stockMinimo > 0;
 
-  return (
+  const tarjeta = (
     <Tarjeta style={styles.filaTarjeta}>
       <View style={styles.filaIconoFondo}>
         <Ionicons name="cube-outline" size={18} color={colores.tintaSuave} />
@@ -185,21 +186,29 @@ function FilaProducto({
         </View>
       </View>
       {!soloLectura && (
-        <Pressable onPress={onEditar} style={styles.editarBoton} hitSlop={8}>
+        <View style={styles.editarBoton}>
           <Ionicons name="pencil-outline" size={16} color={colores.tintaSuave} />
-        </Pressable>
+        </View>
       )}
     </Tarjeta>
   );
+
+  if (soloLectura) return tarjeta;
+  // Toda la tarjeta abre la edición (la fecha se sigue editando en su lugar).
+  return (
+    <Pressable
+      onPress={onEditar}
+      accessibilityRole="button"
+      accessibilityLabel={`Editar ${producto.nombre}`}
+      style={({ pressed }) => pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] }}
+    >
+      {tarjeta}
+    </Pressable>
+  );
 }
 
-function FormularioNuevoProducto({
-  onCreado,
-  onCerrar,
-}: {
-  onCreado: (p: Producto) => void;
-  onCerrar: () => void;
-}) {
+function FormularioNuevoProducto({ onCreado }: { onCreado: (p: Producto) => void }) {
+  const { cerrar: onCerrar } = useHoja();
   const { token } = useAuth();
   const [codigoBarras, setCodigoBarras] = useState('');
   const [nombre, setNombre] = useState('');
@@ -242,12 +251,7 @@ function FormularioNuevoProducto({
   }
 
   return (
-    <Tarjeta style={styles.formulario}>
-      <View style={styles.formularioTituloFila}>
-        <Ionicons name="add-circle-outline" size={18} color={colores.tinta} />
-        <Text style={styles.formularioTitulo}>Nuevo producto</Text>
-      </View>
-
+    <View>
       <Etiqueta>Código de barras</Etiqueta>
       <TextInput
         value={codigoBarras}
@@ -314,7 +318,7 @@ function FormularioNuevoProducto({
 
       {error && <Text style={styles.error}>{error}</Text>}
 
-      <View style={{ flexDirection: 'row', gap: espaciado.sm }}>
+      <HojaPie>
         <Boton
           onPress={manejarSubmit}
           cargando={enviando}
@@ -326,8 +330,8 @@ function FormularioNuevoProducto({
         <Boton variante="ghost" onPress={onCerrar} style={{ flex: 1 }}>
           Cancelar
         </Boton>
-      </View>
-    </Tarjeta>
+      </HojaPie>
+    </View>
   );
 }
 
@@ -335,15 +339,14 @@ function FormularioEditarProducto({
   producto,
   onActualizado,
   onDadoDeBaja,
-  onCerrar,
 }: {
   producto: Producto;
   onActualizado: (p: Producto) => void;
   onDadoDeBaja: (p: Producto) => void;
-  onCerrar: () => void;
 }) {
+  const { cerrar: onCerrar } = useHoja();
   const { token } = useAuth();
-  const [precioVenta, setPrecioVenta] = useState((producto.precioVentaCentavos / 100).toString());
+  const [precioVenta, setPrecioVenta] = useState((producto.precioVentaCentavos / 100).toFixed(2));
   const [stockMinimo, setStockMinimo] = useState(producto.stockMinimo.toString());
   const [fechaVencimiento, setFechaVencimiento] = useState(producto.fechaVencimiento ?? '');
   const [error, setError] = useState<string | null>(null);
@@ -396,12 +399,27 @@ function FormularioEditarProducto({
   }
 
   return (
-    <Tarjeta style={styles.formulario}>
-      <View style={styles.formularioTituloFila}>
-        <Ionicons name="pencil-outline" size={18} color={colores.tinta} />
-        <Text style={styles.formularioTitulo} numberOfLines={1}>
-          Editando: {producto.nombre}
-        </Text>
+    <View>
+      {/* Qué se está tocando, a la vista mientras se edita. */}
+      <View style={styles.ficha}>
+        <View style={{ flex: 1.4 }}>
+          <Text style={styles.fichaEtiqueta}>CÓDIGO</Text>
+          <Text style={styles.fichaValor} numberOfLines={1}>
+            {producto.codigoBarras}
+          </Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.fichaEtiqueta}>STOCK</Text>
+          <Text style={styles.fichaValor}>{producto.stock}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.fichaEtiqueta}>COSTO</Text>
+          <Text style={styles.fichaValor}>
+            {producto.costoUnitarioCentavos > 0
+              ? formatearCentavos(producto.costoUnitarioCentavos)
+              : '—'}
+          </Text>
+        </View>
       </View>
 
       <Etiqueta>Precio de venta</Etiqueta>
@@ -448,20 +466,6 @@ function FormularioEditarProducto({
 
       {error && <Text style={styles.error}>{error}</Text>}
 
-      <View style={{ flexDirection: 'row', gap: espaciado.sm }}>
-        <Boton
-          onPress={manejarSubmit}
-          cargando={enviando}
-          disabled={!precioVenta || !fechaValida}
-          style={{ flex: 1 }}
-        >
-          Guardar cambios
-        </Boton>
-        <Boton variante="ghost" onPress={onCerrar} style={{ flex: 1 }}>
-          Cancelar
-        </Boton>
-      </View>
-
       {/* Confirmación en dos pasos: la baja saca el producto de la caja,
           no conviene que un toque perdido lo haga. */}
       {confirmandoBaja ? (
@@ -481,17 +485,32 @@ function FormularioEditarProducto({
           </View>
         </View>
       ) : (
-        <Pressable
-          onPress={() => setConfirmandoBaja(true)}
-          disabled={enviando}
-          hitSlop={8}
-          style={styles.botonBaja}
-        >
-          <Ionicons name="archive-outline" size={16} color={colores.rojoPerdida} />
-          <Text style={styles.botonBajaTexto}>Dar de baja</Text>
-        </Pressable>
+        <>
+          <HojaPie>
+            <Boton
+              onPress={manejarSubmit}
+              cargando={enviando}
+              disabled={!precioVenta || !fechaValida}
+              style={{ flex: 1 }}
+            >
+              Guardar cambios
+            </Boton>
+            <Boton variante="ghost" onPress={onCerrar} style={{ flex: 1 }}>
+              Cancelar
+            </Boton>
+          </HojaPie>
+          <Pressable
+            onPress={() => setConfirmandoBaja(true)}
+            disabled={enviando}
+            hitSlop={8}
+            style={styles.botonBaja}
+          >
+            <Ionicons name="archive-outline" size={16} color={colores.rojoPerdida} />
+            <Text style={styles.botonBajaTexto}>Dar de baja</Text>
+          </Pressable>
+        </>
       )}
-    </Tarjeta>
+    </View>
   );
 }
 
@@ -637,8 +656,10 @@ export function ProductosScreen() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [formularioAbierto, setFormularioAbierto] = useState(false);
-  const [productoEditandoId, setProductoEditandoId] = useState<string | null>(null);
+  const [nuevoAbierto, setNuevoAbierto] = useState(false);
+  // Una copia del producto (no su id): si se da de baja, la hoja puede irse
+  // con su animación aunque ya no esté en la lista.
+  const [editando, setEditando] = useState<Producto | null>(null);
   const [busqueda, setBusqueda] = useState('');
   const [filtro, setFiltro] = useState<FiltroProductos>('todos');
   const productosVisibles = filtrarProductos(productos, busqueda, filtro);
@@ -695,8 +716,8 @@ export function ProductosScreen() {
             : undefined
         }
         accion={
-          esAdmin && !formularioAbierto ? (
-            <Pressable onPress={() => setFormularioAbierto(true)} style={styles.botonNuevo} hitSlop={8}>
+          esAdmin ? (
+            <Pressable onPress={() => setNuevoAbierto(true)} style={styles.botonNuevo} hitSlop={8}>
               <Ionicons name="add" size={18} color={colores.tinta} />
               <Text style={styles.botonNuevoTexto}>Nuevo</Text>
             </Pressable>
@@ -708,40 +729,21 @@ export function ProductosScreen() {
       <FlatList
         data={productosVisibles}
         keyExtractor={(p) => p.id}
-        renderItem={({ item }) =>
-          productoEditandoId === item.id ? (
-            <FormularioEditarProducto
-              producto={item}
-              onActualizado={(actualizado) =>
-                setProductos((prev) => prev.map((p) => (p.id === actualizado.id ? actualizado : p)))
-              }
-              onDadoDeBaja={manejarDadoDeBaja}
-              onCerrar={() => setProductoEditandoId(null)}
-            />
-          ) : (
-            <FilaProducto
-              producto={item}
-              soloLectura={!esAdmin}
-              onEditar={() => setProductoEditandoId(item.id)}
-              onActualizado={(actualizado) =>
-                setProductos((prev) => prev.map((p) => (p.id === actualizado.id ? actualizado : p)))
-              }
-            />
-          )
-        }
+        renderItem={({ item }) => (
+          <FilaProducto
+            producto={item}
+            soloLectura={!esAdmin}
+            onEditar={() => setEditando(item)}
+            onActualizado={(actualizado) =>
+              setProductos((prev) => prev.map((p) => (p.id === actualizado.id ? actualizado : p)))
+            }
+          />
+        )}
         ItemSeparatorComponent={() => <View style={{ height: espaciado.sm }} />}
         contentContainerStyle={styles.listaContenido}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View>
-            {formularioAbierto && (
-              <View style={{ marginBottom: espaciado.md }}>
-                <FormularioNuevoProducto
-                  onCreado={(p) => setProductos((prev) => [p, ...prev])}
-                  onCerrar={() => setFormularioAbierto(false)}
-                />
-              </View>
-            )}
             {!cargando && !error && productos.length > 0 && (
               <BarraBusqueda
                 productos={productos}
@@ -782,11 +784,47 @@ export function ProductosScreen() {
 
       {cargando && <EstadoCargando texto="Cargando catálogo…" />}
       {error && !cargando && <EstadoError mensaje={error} onReintentar={cargar} />}
+      {nuevoAbierto && (
+        <HojaModal
+          titulo="Nuevo producto"
+          descripcion="Se suma al catálogo y ya se puede vender."
+          icono="add"
+          onCerrar={() => setNuevoAbierto(false)}
+        >
+          <FormularioNuevoProducto onCreado={(p) => setProductos((prev) => [p, ...prev])} />
+        </HojaModal>
+      )}
+      {editando && (
+        <HojaModal
+          titulo={editando.nombre}
+          descripcion="Precio, stock mínimo y vencimiento."
+          icono="pencil-outline"
+          onCerrar={() => setEditando(null)}
+        >
+          <FormularioEditarProducto
+            producto={editando}
+            onActualizado={(actualizado) =>
+              setProductos((prev) => prev.map((p) => (p.id === actualizado.id ? actualizado : p)))
+            }
+            onDadoDeBaja={manejarDadoDeBaja}
+          />
+        </HojaModal>
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  ficha: {
+    flexDirection: 'row',
+    gap: espaciado.sm,
+    backgroundColor: colores.papel,
+    borderRadius: radios.md,
+    padding: espaciado.md,
+    marginBottom: espaciado.md,
+  },
+  fichaEtiqueta: { fontSize: 10, fontWeight: '700', letterSpacing: 1, color: colores.tintaSuave },
+  fichaValor: { marginTop: 2, fontSize: 15, fontWeight: '700', color: colores.tinta, fontVariant: ['tabular-nums'] },
   notaLotes: { fontSize: 13, color: colores.tinta, lineHeight: 19, marginBottom: espaciado.md },
   contenedor: { flex: 1, backgroundColor: colores.papel },
   // Va sobre la franja oscura: borde claro en vez de fondo oscuro.
@@ -823,9 +861,6 @@ const styles = StyleSheet.create({
   chipTexto: { fontSize: 12, fontWeight: '600', color: colores.tintaSuave },
   chipTextoActivo: { color: colores.papel },
   listaContenido: { padding: espaciado.lg, paddingTop: 0, flexGrow: 1 },
-  formulario: { marginHorizontal: 0 },
-  formularioTituloFila: { flexDirection: 'row', alignItems: 'center', gap: espaciado.xs, marginBottom: espaciado.md },
-  formularioTitulo: { fontSize: 16, fontWeight: '700', color: colores.tinta },
   error: { color: colores.rojoPerdida, fontSize: 13, marginBottom: espaciado.sm },
   filaTarjeta: {
     flexDirection: 'row',

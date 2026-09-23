@@ -22,6 +22,8 @@ import {
   estilosCampo,
 } from '../components/ui';
 import { colores, espaciado, radios } from '../theme/colores';
+import { HojaModal, HojaPie, useHoja } from '../components/hoja-modal';
+import { vibrar } from '../components/movimiento';
 import type { UsuarioEquipo } from '../lib/tipos';
 import { Banda, LabioHoja } from '../components/banda';
 import { useCamposTocados } from '../lib/use-campos-tocados';
@@ -38,14 +40,9 @@ const ETIQUETA_ROL: Record<UsuarioEquipo['rol'], string> = {
   cajero: 'Cajero',
 };
 
-function FormularioNuevaPersona({
-  onCreado,
-  onCerrar,
-}: {
-  onCreado: (u: UsuarioEquipo) => void;
-  onCerrar: () => void;
-}) {
+function FormularioNuevaPersona({ onCreado }: { onCreado: (u: UsuarioEquipo) => void }) {
   const { token } = useAuth();
+  const { cerrar: onCerrar } = useHoja();
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -84,12 +81,7 @@ function FormularioNuevaPersona({
   }
 
   return (
-    <Tarjeta style={styles.formulario}>
-      <View style={styles.formularioTituloFila}>
-        <Ionicons name="person-add-outline" size={18} color={colores.tinta} />
-        <Text style={styles.formularioTitulo}>Agregar persona</Text>
-      </View>
-
+    <View>
       <Etiqueta>Nombre</Etiqueta>
       <TextInput
         value={nombre}
@@ -145,15 +137,15 @@ function FormularioNuevaPersona({
 
       {error && <Text style={styles.error}>{error}</Text>}
 
-      <View style={{ flexDirection: 'row', gap: espaciado.sm }}>
+      <HojaPie>
         <Boton onPress={manejarSubmit} cargando={enviando} disabled={!valido} style={{ flex: 1 }}>
           Crear cuenta
         </Boton>
         <Boton variante="ghost" onPress={onCerrar} style={{ flex: 1 }}>
           Cancelar
         </Boton>
-      </View>
-    </Tarjeta>
+      </HojaPie>
+    </View>
   );
 }
 
@@ -162,36 +154,14 @@ function FilaPersona({
   esVos,
   procesando,
   onAlternarActivo,
-  onPasswordCambiada,
+  onCambiarPassword,
 }: {
   persona: UsuarioEquipo;
   esVos: boolean;
   procesando: boolean;
   onAlternarActivo: () => void;
-  onPasswordCambiada: () => void;
+  onCambiarPassword: () => void;
 }) {
-  const { token } = useAuth();
-  const [cambiandoPassword, setCambiandoPassword] = useState(false);
-  const [password, setPassword] = useState('');
-  const [guardando, setGuardando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function guardarPassword() {
-    if (!token || password.length < 6) return;
-    setError(null);
-    setGuardando(true);
-    try {
-      await cambiarPasswordUsuario(token, persona.id, password);
-      setCambiandoPassword(false);
-      setPassword('');
-      onPasswordCambiada();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'No se pudo cambiar la contraseña');
-    } finally {
-      setGuardando(false);
-    }
-  }
-
   return (
     <Tarjeta style={[styles.filaTarjeta, !persona.activo && { opacity: 0.6 }]}>
       <View style={styles.filaCabecera}>
@@ -210,50 +180,94 @@ function FilaPersona({
         </View>
       </View>
 
-      {cambiandoPassword ? (
-        <View style={{ marginTop: espaciado.sm }}>
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            style={estilosCampo.input}
-            placeholder="Nueva contraseña (mínimo 6)"
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoFocus
-          />
-          <AvisoDeCampo ayuda={ayudaDeLaContrasena(password)} />
-          {error && <Text style={styles.error}>{error}</Text>}
-          <View style={{ flexDirection: 'row', gap: espaciado.sm }}>
-            <Boton
-              onPress={guardarPassword}
-              cargando={guardando}
-              disabled={password.length < 6}
-              style={{ flex: 1 }}
-            >
-              Guardar
-            </Boton>
-            <Boton variante="ghost" onPress={() => setCambiandoPassword(false)} style={{ flex: 1 }}>
-              Cancelar
-            </Boton>
-          </View>
-        </View>
-      ) : (
-        <View style={styles.acciones}>
-          <Pressable onPress={() => setCambiandoPassword(true)} hitSlop={8}>
-            <Text style={styles.accionTexto}>Cambiar contraseña</Text>
+      <View style={styles.acciones}>
+        <Pressable
+          onPress={onCambiarPassword}
+          hitSlop={8}
+          style={({ pressed }) => [styles.pildoraAccion, pressed && { opacity: 0.7 }]}
+        >
+          <Ionicons name="key-outline" size={12} color={colores.tinta} />
+          <Text style={styles.pildoraAccionTexto}>Cambiar contraseña</Text>
+        </Pressable>
+        {/* Uno no puede desactivarse a sí mismo: la tienda podría quedar
+            sin nadie que la administre. */}
+        {!esVos && (
+          <Pressable
+            onPress={onAlternarActivo}
+            disabled={procesando}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.pildoraAccion,
+              (pressed || procesando) && { opacity: 0.6 },
+            ]}
+          >
+            <Text style={styles.pildoraAccionTexto}>
+              {procesando ? 'Guardando…' : persona.activo ? 'Desactivar' : 'Reactivar'}
+            </Text>
           </Pressable>
-          {/* Uno no puede desactivarse a sí mismo: la tienda podría quedar
-              sin nadie que la administre. */}
-          {!esVos && (
-            <Pressable onPress={onAlternarActivo} disabled={procesando} hitSlop={8}>
-              <Text style={[styles.accionTexto, procesando && { opacity: 0.5 }]}>
-                {procesando ? 'Guardando…' : persona.activo ? 'Desactivar' : 'Reactivar'}
-              </Text>
-            </Pressable>
-          )}
-        </View>
-      )}
+        )}
+      </View>
     </Tarjeta>
+  );
+}
+
+function FormularioCambiarPassword({
+  persona,
+  onListo,
+}: {
+  persona: UsuarioEquipo;
+  onListo: () => void;
+}) {
+  const { token } = useAuth();
+  const { cerrar } = useHoja();
+  const [password, setPassword] = useState('');
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function guardarPassword() {
+    if (!token || password.length < 6) return;
+    setError(null);
+    setGuardando(true);
+    try {
+      await cambiarPasswordUsuario(token, persona.id, password);
+      vibrar.exito();
+      onListo();
+      cerrar();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo cambiar la contraseña');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <View>
+      <Etiqueta>Nueva contraseña</Etiqueta>
+      <TextInput
+        value={password}
+        onChangeText={setPassword}
+        style={estilosCampo.input}
+        placeholder="Mínimo 6 caracteres"
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoFocus
+      />
+      <AvisoDeCampo ayuda={ayudaDeLaContrasena(password)} />
+      {error && <Text style={styles.error}>{error}</Text>}
+      <HojaPie>
+        <Boton
+          onPress={guardarPassword}
+          cargando={guardando}
+          disabled={password.length < 6}
+          style={{ flex: 1 }}
+        >
+          Guardar
+        </Boton>
+        <Boton variante="ghost" onPress={cerrar} style={{ flex: 1 }}>
+          Cancelar
+        </Boton>
+      </HojaPie>
+    </View>
   );
 }
 
@@ -264,7 +278,8 @@ export function EquipoScreen() {
   const [error, setError] = useState<string | null>(null);
   const [errorAccion, setErrorAccion] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
-  const [formularioAbierto, setFormularioAbierto] = useState(false);
+  const [agregando, setAgregando] = useState(false);
+  const [cambiandoPassword, setCambiandoPassword] = useState<UsuarioEquipo | null>(null);
   const [procesandoId, setProcesandoId] = useState<string | null>(null);
 
   const cargar = useCallback(() => {
@@ -322,21 +337,17 @@ export function EquipoScreen() {
             esVos={item.id === usuario?.sub}
             procesando={procesandoId === item.id}
             onAlternarActivo={() => alternarActivo(item)}
-            onPasswordCambiada={() => setAviso(`Contraseña de ${item.nombre} actualizada.`)}
+            onCambiarPassword={() => {
+              setAviso(null);
+              setCambiandoPassword(item);
+            }}
           />
         )}
         ItemSeparatorComponent={() => <View style={{ height: espaciado.sm }} />}
         contentContainerStyle={styles.listaContenido}
         ListHeaderComponent={
           <View style={{ gap: espaciado.md, marginBottom: espaciado.md }}>
-            {formularioAbierto ? (
-              <FormularioNuevaPersona
-                onCreado={(u) => setEquipo((prev) => [...prev, u])}
-                onCerrar={() => setFormularioAbierto(false)}
-              />
-            ) : (
-              <Boton onPress={() => setFormularioAbierto(true)}>+ Agregar persona</Boton>
-            )}
+            <Boton onPress={() => setAgregando(true)}>+ Agregar persona</Boton>
             {errorAccion && <Text style={styles.error}>{errorAccion}</Text>}
             {aviso && <Text style={styles.aviso}>{aviso}</Text>}
           </View>
@@ -345,17 +356,53 @@ export function EquipoScreen() {
 
       {cargando && <EstadoCargando texto="Cargando equipo…" />}
       {error && !cargando && <EstadoError mensaje={error} onReintentar={cargar} />}
+
+      {agregando && (
+        <HojaModal
+          titulo="Agregar persona"
+          descripcion="Entra con su email y la contraseña que le pases."
+          icono="person-add-outline"
+          onCerrar={() => setAgregando(false)}
+        >
+          <FormularioNuevaPersona onCreado={(u) => setEquipo((prev) => [...prev, u])} />
+        </HojaModal>
+      )}
+      {cambiandoPassword && (
+        <HojaModal
+          titulo="Cambiar contraseña"
+          descripcion={
+            // Cambiarla cierra las sesiones de esa persona, también la propia.
+            cambiandoPassword.id === usuario?.sub
+              ? 'Es la tuya: al guardarla se cierra tu sesión y entrás de nuevo con la nueva.'
+              : `De ${cambiandoPassword.nombre}. Pasásela en persona: la vieja deja de servir y se cierran sus sesiones.`
+          }
+          icono="key-outline"
+          onCerrar={() => setCambiandoPassword(null)}
+        >
+          <FormularioCambiarPassword
+            persona={cambiandoPassword}
+            onListo={() => setAviso(`Contraseña de ${cambiandoPassword.nombre} actualizada.`)}
+          />
+        </HojaModal>
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  pildoraAccion: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radios.full,
+    backgroundColor: 'rgba(28,43,58,0.06)',
+  },
+  pildoraAccionTexto: { fontSize: 12, fontWeight: '700', color: colores.tinta },
   contenedor: { flex: 1, backgroundColor: colores.papel },
   listaContenido: { padding: espaciado.lg, flexGrow: 1 },
   descripcion: { fontSize: 13, color: colores.tintaSuave, lineHeight: 18 },
-  formulario: { marginHorizontal: 0 },
-  formularioTituloFila: { flexDirection: 'row', alignItems: 'center', gap: espaciado.xs, marginBottom: espaciado.md },
-  formularioTitulo: { fontSize: 16, fontWeight: '700', color: colores.tinta },
   error: { color: colores.rojoPerdida, fontSize: 13, marginBottom: espaciado.sm },
   aviso: { color: colores.verdeGanancia, fontSize: 13, fontWeight: '600' },
   ayuda: { fontSize: 12, color: colores.tintaSuave, marginBottom: espaciado.md },
@@ -384,6 +431,6 @@ const styles = StyleSheet.create({
     borderRadius: radios.full,
   },
   rolPillTexto: { fontSize: 11, fontWeight: '700', color: '#9a5b08', textTransform: 'uppercase' },
-  acciones: { flexDirection: 'row', gap: espaciado.lg, marginTop: espaciado.sm },
+  acciones: { flexDirection: 'row', gap: espaciado.sm, marginTop: espaciado.sm },
   accionTexto: { fontSize: 13, color: colores.tintaSuave, fontWeight: '600', textDecorationLine: 'underline' },
 });
