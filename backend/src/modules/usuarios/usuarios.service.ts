@@ -94,7 +94,11 @@ export class UsuariosService {
     }
     const usuario = await this.buscar(tenantId, id);
     usuario.activo = false;
-    return aPublico(await this.usuarioRepo.save(usuario));
+    const guardado = await this.usuarioRepo.save(usuario);
+    // JwtStrategy ya lo rechaza por inactivo; además se cierran sus
+    // sesiones, así reactivarlo no revive los tokens viejos.
+    await this.authService.revocarSesionesDe(id, 'usuario_desactivado');
+    return aPublico(guardado);
   }
 
   async reactivar(tenantId: string, id: string): Promise<UsuarioPublico> {
@@ -114,7 +118,11 @@ export class UsuariosService {
   ): Promise<UsuarioPublico> {
     const usuario = await this.buscar(tenantId, id);
     usuario.passwordHash = await this.authService.hashPassword(password);
-    return aPublico(await this.usuarioRepo.save(usuario));
+    const guardado = await this.usuarioRepo.save(usuario);
+    // Contraseña nueva = hay que volver a entrar en todos lados (si la
+    // cambiaron porque alguien la sabía, esa persona queda afuera).
+    await this.authService.revocarSesionesDe(id, 'password_cambiada');
+    return aPublico(guardado);
   }
 
   private async buscar(tenantId: string, id: string): Promise<Usuario> {

@@ -181,6 +181,16 @@ export function refrescarSesion(refreshToken: string): Promise<TokenPair> {
   });
 }
 
+// Cierra la sesión en el servidor: el refreshToken y el accessToken dejan
+// de servir (si alguien los copió, tampoco le sirven). Nunca falla del
+// lado del backend (204), pero sin conexión sí: el que llama lo ignora.
+export function cerrarSesionEnServidor(refreshToken: string): Promise<void> {
+  return apiFetch<void>('/auth/logout', {
+    method: 'POST',
+    body: JSON.stringify({ refreshToken }),
+  });
+}
+
 export interface RegistroInput {
   nombreTienda: string;
   nombreAdmin: string;

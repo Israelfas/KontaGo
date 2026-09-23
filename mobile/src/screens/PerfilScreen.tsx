@@ -9,6 +9,7 @@ import { obtenerPerfil, ApiError, type Perfil } from '../lib/api';
 import { Boton, EstadoCargando, EstadoError, Tarjeta } from '../components/ui';
 import { colores, espaciado, radios } from '../theme/colores';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import { HAY_SOPORTE, MOSTRAR_SUSCRIPCION } from '../lib/config-app';
 
 const ETIQUETAS_PLAN: Record<NonNullable<Perfil['plan']>, string> = {
   gratuito: 'Gratis',
@@ -104,12 +105,16 @@ export function PerfilScreen() {
                     titulo="Equipo"
                     onPress={() => navigation.navigate('Equipo')}
                   />
-                  <View style={styles.separador} />
-                  <FilaOpcion
-                    icono="card-outline"
-                    titulo={`Suscripción · Plan ${perfil.plan ? ETIQUETAS_PLAN[perfil.plan] : '—'}`}
-                    onPress={() => navigation.navigate('Suscripcion', { plan: perfil.plan })}
-                  />
+                  {MOSTRAR_SUSCRIPCION && (
+                    <>
+                      <View style={styles.separador} />
+                      <FilaOpcion
+                        icono="card-outline"
+                        titulo={`Suscripción · Plan ${perfil.plan ? ETIQUETAS_PLAN[perfil.plan] : '—'}`}
+                        onPress={() => navigation.navigate('Suscripcion', { plan: perfil.plan })}
+                      />
+                    </>
+                  )}
                 </Tarjeta>
               </>
             )}
@@ -121,12 +126,16 @@ export function PerfilScreen() {
                 titulo="Tutorial de la app"
                 onPress={() => navigation.navigate('Tutorial')}
               />
-              <View style={styles.separador} />
-              <FilaOpcion
-                icono="chatbubble-ellipses-outline"
-                titulo="Contacto y soporte"
-                onPress={() => navigation.navigate('Contacto')}
-              />
+              {HAY_SOPORTE && (
+                <>
+                  <View style={styles.separador} />
+                  <FilaOpcion
+                    icono="chatbubble-ellipses-outline"
+                    titulo="Contacto y soporte"
+                    onPress={() => navigation.navigate('Contacto')}
+                  />
+                </>
+              )}
               <View style={styles.separador} />
               <FilaOpcion
                 icono="document-text-outline"

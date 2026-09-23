@@ -9,8 +9,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { verifyToken } from '@clerk/backend';
 import { randomUUID } from 'crypto';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
 import { Usuario } from './entities/usuario.entity';
+import { Sesion } from './entities/sesion.entity';
 import { Tenant } from '../tenants/entities/tenant.entity';
 import { Rol } from '../../common/enums/rol.enum';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
@@ -23,6 +24,16 @@ interface TokenPair {
 }
 
 export type { TokenPair };
+
+// Si dos pestañas (o dos pedidos) renuevan casi a la vez con el mismo
+// refreshToken, la segunda llega con uno recién rotado. Dentro de esta
+// ventana se acepta; después, un token viejo es señal de que lo copiaron.
+const VENTANA_REUSO_MS = 60_000;
+
+const SESION_VENCIDA = 'Sesión vencida, iniciá sesión de nuevo';
+
+export type MotivoRevocacion =
+  'cierre' | 'reuso' | 'usuario_desactivado' | 'password_cambiada';
 
 @Injectable()
 export class AuthService {
@@ -237,35 +248,157 @@ export class AuthService {
   }
 
   /**
-   * Canjea un refreshToken por un par nuevo. Se relee el usuario de la
-   * base en vez de copiar el payload viejo: si lo desactivaron o le
-   * cambiaron el rol, el cambio se aplica en la próxima renovación.
+   * Canjea un refreshToken por un par nuevo (rotación: el refreshToken
+   * usado deja de servir). Se relee el usuario de la base en vez de
+   * copiar el payload viejo: si lo desactivaron o le cambiaron el rol,
+   * el cambio se aplica en la próxima renovación.
+   *
+   * Si llega un refreshToken que ya se rotó (fuera de la ventana de unos
+   * segundos para pedidos simultáneos), alguien más lo tiene: se revoca
+   * la sesión entera, así el que lo robó y el dueño quedan afuera, y el
+   * dueño vuelve a entrar con su contraseña.
    */
   async refrescar(refreshToken: string): Promise<TokenPair> {
-    let payload: JwtPayload;
-    try {
-      payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken, {
-        secret: this.configService.get<string>('jwt.refreshSecret'),
+    const payload = await this.verificarRefresh(refreshToken);
+    if (!payload?.sid || !payload.jti) {
+      throw new UnauthorizedException(SESION_VENCIDA);
+    }
+    const { sid, jti } = payload;
+
+    // Con 'reuso' la sesión se revoca y se confirma (hay que guardarlo
+    // aunque la respuesta sea un error), por eso el error sale después
+    // de la transacción.
+    let revocadaPorReuso = false;
+    const tokens = await this.dataSource.transaction(async (manager) => {
+      const sesionRepo = manager.getRepository(Sesion);
+      // Bloqueo: dos renovaciones simultáneas de la misma sesión se
+      // ordenan en vez de rotar las dos a partir del mismo estado.
+      const sesion = await sesionRepo.findOne({
+        where: { id: sid },
+        lock: { mode: 'pessimistic_write' },
       });
-    } catch {
-      throw new UnauthorizedException('Sesión vencida, iniciá sesión de nuevo');
-    }
+      if (!sesion || sesion.revocadaEn || sesion.expiraEn <= new Date()) {
+        return null;
+      }
 
-    const usuario = await this.usuarioRepo.findOne({
-      where: { id: payload.sub, tenantId: payload.tenantId, activo: true },
+      const esElActual = jti === sesion.jtiActual;
+      const recienRotado =
+        jti === sesion.jtiAnterior &&
+        sesion.rotadaEn !== null &&
+        Date.now() - sesion.rotadaEn.getTime() < VENTANA_REUSO_MS;
+      if (!esElActual && !recienRotado) {
+        sesion.revocadaEn = new Date();
+        sesion.motivoRevocacion = 'reuso';
+        await sesionRepo.save(sesion);
+        revocadaPorReuso = true;
+        return null;
+      }
+
+      const usuario = await manager.getRepository(Usuario).findOne({
+        where: {
+          id: sesion.usuarioId,
+          tenantId: sesion.tenantId,
+          activo: true,
+        },
+      });
+      if (!usuario) return null;
+
+      if (esElActual) {
+        sesion.jtiAnterior = sesion.jtiActual;
+        sesion.jtiActual = randomUUID();
+        sesion.rotadaEn = new Date();
+      }
+      // Recién rotado: se entrega el refreshToken vigente (mismo jti que
+      // recibió el otro pedido), así no quedan dos cadenas.
+      sesion.expiraEn = this.vencimientoDeSesion();
+      await sesionRepo.save(sesion);
+      return this.firmarTokens(usuario, sesion);
     });
-    if (!usuario) {
-      throw new UnauthorizedException('Sesión vencida, iniciá sesión de nuevo');
-    }
 
-    return this.emitirTokens(usuario);
+    if (!tokens) {
+      throw new UnauthorizedException(
+        revocadaPorReuso
+          ? 'Por seguridad cerramos tu sesión: iniciá sesión de nuevo'
+          : SESION_VENCIDA,
+      );
+    }
+    return tokens;
   }
 
-  private emitirTokens(usuario: Usuario): TokenPair {
+  /**
+   * Cierra la sesión del refreshToken (botón "Salir"). No falla nunca: si
+   * el token ya no sirve, la sesión ya estaba cerrada. Se acepta un token
+   * vencido: cerrar sesión tiene que funcionar igual.
+   */
+  async cerrarSesion(refreshToken: string): Promise<void> {
+    const payload = await this.verificarRefresh(refreshToken, true);
+    if (!payload?.sid) return;
+    await this.dataSource
+      .getRepository(Sesion)
+      .update(
+        { id: payload.sid, revocadaEn: IsNull() },
+        { revocadaEn: new Date(), motivoRevocacion: 'cierre' },
+      );
+  }
+
+  /**
+   * Corta todas las sesiones de un usuario (lo desactivaron, le cambiaron
+   * la contraseña). Sus tokens dejan de servir en el próximo pedido.
+   */
+  async revocarSesionesDe(
+    usuarioId: string,
+    motivo: MotivoRevocacion,
+    manager: EntityManager = this.dataSource.manager,
+  ): Promise<void> {
+    await manager
+      .getRepository(Sesion)
+      .update(
+        { usuarioId, revocadaEn: IsNull() },
+        { revocadaEn: new Date(), motivoRevocacion: motivo },
+      );
+  }
+
+  private async verificarRefresh(
+    token: string,
+    ignorarVencimiento = false,
+  ): Promise<JwtPayload | null> {
+    try {
+      return await this.jwtService.verifyAsync<JwtPayload>(token, {
+        secret: this.configService.get<string>('jwt.refreshSecret'),
+        ignoreExpiration: ignorarVencimiento,
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  private vencimientoDeSesion(): Date {
+    const segundos = this.configService.get<number>(
+      'jwt.refreshExpiresInSeconds',
+    )!;
+    return new Date(Date.now() + segundos * 1000);
+  }
+
+  /** Inicio de sesión: una sesión nueva y su primer par de tokens. */
+  private async emitirTokens(usuario: Usuario): Promise<TokenPair> {
+    const sesionRepo = this.dataSource.getRepository(Sesion);
+    const sesion = await sesionRepo.save(
+      sesionRepo.create({
+        usuarioId: usuario.id,
+        tenantId: usuario.tenantId,
+        jtiActual: randomUUID(),
+        expiraEn: this.vencimientoDeSesion(),
+      }),
+    );
+    return this.firmarTokens(usuario, sesion);
+  }
+
+  private firmarTokens(usuario: Usuario, sesion: Sesion): TokenPair {
     const payload: JwtPayload = {
       sub: usuario.id,
       tenantId: usuario.tenantId,
       rol: usuario.rol,
+      sid: sesion.id,
     };
 
     const accessToken = this.jwtService.sign(payload, {
@@ -276,6 +409,7 @@ export class AuthService {
     const refreshToken = this.jwtService.sign(payload, {
       secret: this.configService.get<string>('jwt.refreshSecret'),
       expiresIn: this.configService.get<number>('jwt.refreshExpiresInSeconds'),
+      jwtid: sesion.jtiActual,
     });
 
     return { accessToken, refreshToken };

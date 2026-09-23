@@ -141,6 +141,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // que la sesión de Clerk seguía viva: al tocar "Continuar con Google"
   // otra vez, entraba de una sin preguntar nada.
   async function cerrarSesion() {
+    // También en el servidor: si no, el refreshToken guardado seguiría
+    // sirviendo 7 días. Sin esperar: salir no depende de la conexión.
+    const refreshToken = localStorage.getItem(REFRESH_STORAGE_KEY);
+    if (refreshToken) api.cerrarSesionEnServidor(refreshToken).catch(() => {});
     limpiarSesion();
     try {
       await cerrarSesionDeClerk();

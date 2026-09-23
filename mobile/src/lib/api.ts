@@ -27,6 +27,11 @@ import type {
 // como respaldo manual para casos donde hostUri no está disponible
 // (ej. un build standalone con EAS, que no pasa por Metro).
 function resolverApiUrl(): string {
+  // En producción (build con EAS) la dirección del backend se fija con
+  // EXPO_PUBLIC_API_URL. Vacía en desarrollo: se detecta sola (abajo).
+  const deProduccion = process.env.EXPO_PUBLIC_API_URL?.trim();
+  if (deProduccion) return deProduccion.replace(/\/+$/, '');
+
   const hostUri = Constants.expoConfig?.hostUri;
   if (hostUri) {
     const host = hostUri.split(':')[0];
@@ -203,6 +208,16 @@ export function loginConClerk(clerkToken: string): Promise<TokenPair> {
 
 export function refrescarSesion(refreshToken: string): Promise<TokenPair> {
   return apiFetch<TokenPair>('/auth/refresh', {
+    method: 'POST',
+    body: JSON.stringify({ refreshToken }),
+  });
+}
+
+// Cierra la sesión en el servidor: el refreshToken y el accessToken dejan
+// de servir (si alguien los copió, tampoco le sirven). Nunca falla del
+// lado del backend (204), pero sin conexión sí: el que llama lo ignora.
+export function cerrarSesionEnServidor(refreshToken: string): Promise<void> {
+  return apiFetch<void>('/auth/logout', {
     method: 'POST',
     body: JSON.stringify({ refreshToken }),
   });

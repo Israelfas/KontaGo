@@ -4,6 +4,11 @@ export class InitSchema1786864028199 implements MigrationInterface {
   name = 'InitSchema1786864028199';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    // Todas las tablas usan uuid_generate_v4(). Faltaba crear la
+    // extensión: en una base nueva (producción, tests) la migración
+    // fallaba. Agregado después: las bases que ya corrieron esta
+    // migración ya la tenían.
+    await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
     await queryRunner.query(
       `CREATE TYPE "public"."tenants_plan_enum" AS ENUM('gratuito', 'pago', 'enterprise')`,
     );

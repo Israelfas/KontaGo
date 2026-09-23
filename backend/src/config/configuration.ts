@@ -53,16 +53,41 @@ function parseTrustProxy(valor: string | undefined): number | string | false {
   return limpio;
 }
 
+/**
+ * CORS_ORIGINS: desde qué páginas web se puede llamar a la API (la web
+ * de KontaGo, ej. "https://app.kontago.ec"), separadas por coma. La app
+ * móvil no manda Origin, así que no le afecta: esto frena a que otra
+ * página, abierta en el navegador de alguien con sesión, use la API.
+ *
+ * - En desarrollo, vacío = cualquier origen (la web local cambia de IP).
+ * - En producción es obligatorio: el backend no arranca sin él.
+ */
+function parseCorsOrigins(valor: string | undefined): string[] | true {
+  const origenes = (valor ?? '')
+    .split(',')
+    .map((o) => o.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+  if (origenes.length > 0) return origenes;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'Falta CORS_ORIGINS (obligatoria en producción): la dirección de la web, ej. CORS_ORIGINS=https://app.kontago.ec',
+    );
+  }
+  return true;
+}
+
 export default () => ({
   nodeEnv: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3000', 10),
   trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
+  corsOrigins: parseCorsOrigins(process.env.CORS_ORIGINS),
 
   database: {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '5432', 10),
     username: process.env.DB_USER || 'kontago',
-    password: process.env.DB_PASSWORD || 'kontago',
+    // La contraseña de ejemplo ('kontago') no puede llegar a producción.
+    password: secretoRequerido('DB_PASSWORD', 'kontago'),
     name: process.env.DB_NAME || 'kontago',
     // Nunca en true en producción: las migraciones son la única fuente de verdad del esquema.
     synchronize: process.env.DB_SYNCHRONIZE === 'true',

@@ -5,6 +5,11 @@ export interface JwtPayload {
   sub: string; // usuarioId
   tenantId: string;
   rol: Rol;
+  // Sesión a la que pertenece el token (ver Sesion). Los tokens de antes
+  // de las sesiones no lo traen: se rechazan.
+  sid?: string;
+  // Solo en el refreshToken: cuál de las rotaciones es (ver Sesion.jtiActual).
+  jti?: string;
 }
 
 // Lo que queda en request.user después de validar el JWT.

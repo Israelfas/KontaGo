@@ -3,12 +3,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Boton, Tarjeta } from '../components/ui';
 import { colores, espaciado, radios } from '../theme/colores';
+import { SOPORTE } from '../lib/config-app';
 
-// TODO(Isra): reemplazar por tus datos reales de contacto. Estos son
-// placeholders a propósito — no hay forma de que Claude conozca tu
-// correo, WhatsApp o dirección reales, así que no había que inventarlos.
-const CORREO_SOPORTE = 'soporte@kontago.example';
-const WHATSAPP_NUMERO = '+593000000000';
+// Los datos salen de EXPO_PUBLIC_SOPORTE_CORREO / _WHATSAPP (ver
+// .env.example). Sin ninguno, Perfil no muestra la opción que lleva acá.
 
 function FilaContacto({
   icono,
@@ -42,26 +40,30 @@ export function ContactoScreen() {
     <SafeAreaView style={styles.contenedor} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.avisoContenedor}>
-          <Ionicons name="information-circle-outline" size={18} color={colores.ambar} />
+          <Ionicons name="chatbubble-ellipses-outline" size={18} color={colores.ambar} />
           <Text style={styles.avisoTexto}>
-            Estos son datos de ejemplo — hay que reemplazarlos por el correo y WhatsApp
-            reales antes de publicar la app (buscá "CORREO_SOPORTE" y
-            "WHATSAPP_NUMERO" en ContactoScreen.tsx).
+            ¿Algo no funciona o tenés una duda? Escribinos y te respondemos lo antes posible.
           </Text>
         </View>
 
-        <FilaContacto
-          icono="mail-outline"
-          titulo="Correo de soporte"
-          valor={CORREO_SOPORTE}
-          onPress={() => Linking.openURL(`mailto:${CORREO_SOPORTE}`)}
-        />
-        <FilaContacto
-          icono="logo-whatsapp"
-          titulo="WhatsApp"
-          valor={WHATSAPP_NUMERO}
-          onPress={() => Linking.openURL(`https://wa.me/${WHATSAPP_NUMERO.replace(/\D/g, '')}`)}
-        />
+        {SOPORTE.correo && (
+          <FilaContacto
+            icono="mail-outline"
+            titulo="Correo de soporte"
+            valor={SOPORTE.correo}
+            onPress={() => Linking.openURL(`mailto:${SOPORTE.correo}`)}
+          />
+        )}
+        {SOPORTE.whatsapp && (
+          <FilaContacto
+            icono="logo-whatsapp"
+            titulo="WhatsApp"
+            valor={SOPORTE.whatsapp}
+            onPress={() =>
+              Linking.openURL(`https://wa.me/${SOPORTE.whatsapp!.replace(/\D/g, '')}`)
+            }
+          />
+        )}
       </ScrollView>
     </SafeAreaView>
   );

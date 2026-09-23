@@ -1,0 +1,35 @@
+import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { NestExpressApplication } from '@nestjs/platform-express';
+
+/**
+ * Todo lo que se configura sobre la app además de los módulos. Aparte de
+ * main.ts para que los tests e2e levanten la app EXACTAMENTE igual que
+ * en producción (validación, CORS), no una versión parecida.
+ */
+export function configurarApp(app: NestExpressApplication): void {
+  const config = app.get(ConfigService);
+
+  // Para que req.ip sea la IP real del cliente detrás de un proxy (la usa
+  // el límite de intentos de login). Ver TRUST_PROXY en configuration.ts.
+  app.set('trust proxy', config.get<number | string | false>('trustProxy'));
+
+  // Ver CORS_ORIGINS en configuration.ts. Sin cookies: la sesión viaja
+  // en el header Authorization, así que no hace falta `credentials`.
+  app.enableCors({
+    origin: config.get<string[] | true>('corsOrigins'),
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    maxAge: 600,
+  });
+  // No anunciar que el servidor es Express.
+  app.disable('x-powered-by');
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true, // descarta propiedades no declaradas en los DTOs
+      forbidNonWhitelisted: true,
+      transform: true, // permite usar class-transformer (@Type) en los DTOs
+    }),
+  );
+}

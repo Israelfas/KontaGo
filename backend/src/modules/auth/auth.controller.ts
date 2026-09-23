@@ -63,6 +63,18 @@ export class AuthController {
     return this.authService.refrescar(dto.refreshToken);
   }
 
+  /**
+   * Cierra la sesión del refreshToken: el accessToken y el refreshToken
+   * dejan de servir. Responde 204 siempre (un token que no sirve ya es
+   * una sesión cerrada).
+   */
+  @Post('logout')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async cerrarSesion(@Body() dto: RefreshDto) {
+    await this.authService.cerrarSesion(dto.refreshToken);
+  }
+
   @Get('perfil')
   @SkipThrottle()
   @UseGuards(JwtAuthGuard)
