@@ -75,6 +75,6 @@ export class MovimientoInventario {
   @Column({ type: 'enum', enum: MotivoMerma, nullable: true })
   motivo: MotivoMerma | null;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 }

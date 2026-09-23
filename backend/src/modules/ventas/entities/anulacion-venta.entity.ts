@@ -60,6 +60,6 @@ export class AnulacionVenta {
   @Column({ type: 'jsonb' })
   detalle: DetalleAnulacion[];
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 }

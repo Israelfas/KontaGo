@@ -59,6 +59,6 @@ export class Venta {
   @OneToMany(() => AnulacionVenta, (anulacion) => anulacion.venta)
   anulaciones: AnulacionVenta[];
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 }
