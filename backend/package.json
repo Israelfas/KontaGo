@@ -21,7 +21,8 @@
     "typeorm": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/database/data-source.ts",
     "migration:generate": "npm run typeorm -- migration:generate",
     "migration:run": "npm run typeorm -- migration:run",
-    "migration:revert": "npm run typeorm -- migration:revert"
+    "migration:revert": "npm run typeorm -- migration:revert",
+    "seed:demo": "node scripts/seed-demo.mjs"
   },
   "dependencies": {
     "@clerk/backend": "^3.17.2",

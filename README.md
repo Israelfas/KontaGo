@@ -39,6 +39,16 @@ kontago/
 
 La API queda disponible en `http://localhost:3000`. Health check: `GET /health`.
 
+5. (Opcional) Cargar una tienda de demostración con un mes de ventas
+   (30 días más hoy), alertas, anulaciones y equipo, para probar cada
+   pantalla, incluido el historial:
+   \`\`\`bash
+   npm run seed:demo
+   \`\`\`
+   Admin `demo@kontago.test` y cajero `cajero@kontago.test`, ambos con
+   clave `demo1234`. Se puede correr las veces que haga falta: rearma la
+   demo con ventas hasta el día en que se corre (tarda unos segundos).
+
 ## Roadmap
 
 Ver `docs/` para el spec completo del proyecto y el detalle de cada fase.

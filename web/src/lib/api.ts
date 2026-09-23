@@ -1,9 +1,11 @@
 import type {
   AlertasProductos,
   MotivoMerma,
+  PaginaDeVentas,
   Producto,
   ResumenDelDia,
   ResumenMovimientosDelDia,
+  ResumenPeriodo,
   TokenPair,
   UsuarioEquipo,
   Venta,
@@ -194,6 +196,19 @@ export function registrar(dto: RegistroInput): Promise<TokenPair> {
   });
 }
 
+// Datos de la cuenta que no viajan en el token: nombre, email, tienda y plan.
+export interface Perfil {
+  nombre: string;
+  email: string;
+  rol: 'admin' | 'cajero';
+  tienda: string | null;
+  plan: 'gratuito' | 'pago' | 'enterprise' | null;
+}
+
+export function obtenerPerfil(token: string): Promise<Perfil> {
+  return apiFetch<Perfil>('/auth/perfil', { token });
+}
+
 // --- Equipo (solo admin) ---
 
 export function listarEquipo(token: string): Promise<UsuarioEquipo[]> {
@@ -207,10 +222,7 @@ export interface CrearUsuarioInput {
   rol?: 'admin' | 'cajero';
 }
 
-export function crearUsuario(
-  token: string,
-  dto: CrearUsuarioInput,
-): Promise<UsuarioEquipo> {
+export function crearUsuario(token: string, dto: CrearUsuarioInput): Promise<UsuarioEquipo> {
   return apiFetch<UsuarioEquipo>('/usuarios', {
     method: 'POST',
     token,
@@ -257,10 +269,7 @@ export interface CrearProductoInput {
   ivaExento?: boolean;
 }
 
-export function crearProducto(
-  token: string,
-  dto: CrearProductoInput,
-): Promise<Producto> {
+export function crearProducto(token: string, dto: CrearProductoInput): Promise<Producto> {
   return apiFetch<Producto>('/productos', {
     method: 'POST',
     token,
@@ -316,10 +325,9 @@ export async function buscarPorCodigoBarras(
   codigoBarras: string,
 ): Promise<Producto | null> {
   try {
-    return await apiFetch<Producto>(
-      `/productos/escanear/${encodeURIComponent(codigoBarras)}`,
-      { token },
-    );
+    return await apiFetch<Producto>(`/productos/escanear/${encodeURIComponent(codigoBarras)}`, {
+      token,
+    });
   } catch (err) {
     if (err instanceof ApiError && err.statusCode === 404) return null;
     throw err;
@@ -367,6 +375,33 @@ export function obtenerResumenDelDia(token: string): Promise<ResumenDelDia> {
   return apiFetch<ResumenDelDia>('/ventas/resumen-dia', { token });
 }
 
+export interface RangoDeFechas {
+  desde: string; // AAAA-MM-DD, incluido
+  hasta: string; // AAAA-MM-DD, incluido
+}
+
+// Resumen de un período (hasta 92 días). Solo admin.
+export function obtenerResumen(token: string, rango: RangoDeFechas): Promise<ResumenPeriodo> {
+  const q = new URLSearchParams({ desde: rango.desde, hasta: rango.hasta });
+  return apiFetch<ResumenPeriodo>(`/ventas/resumen?${q}`, { token });
+}
+
+// Ventas de un período, de la más reciente a la más vieja, de a `limite`.
+export function listarVentas(
+  token: string,
+  rango: RangoDeFechas,
+  limite = 50,
+  desplazamiento = 0,
+): Promise<PaginaDeVentas> {
+  const q = new URLSearchParams({
+    desde: rango.desde,
+    hasta: rango.hasta,
+    limite: String(limite),
+    desplazamiento: String(desplazamiento),
+  });
+  return apiFetch<PaginaDeVentas>(`/ventas?${q}`, { token });
+}
+
 // --- Inventario ---
 
 export interface RegistrarAbastecimientoInput {
@@ -376,10 +411,7 @@ export interface RegistrarAbastecimientoInput {
   proveedor?: string;
 }
 
-export function registrarAbastecimiento(
-  token: string,
-  dto: RegistrarAbastecimientoInput,
-) {
+export function registrarAbastecimiento(token: string, dto: RegistrarAbastecimientoInput) {
   return apiFetch('/inventario/abastecimiento', {
     method: 'POST',
     token,
@@ -401,18 +433,13 @@ export function registrarMerma(token: string, dto: RegistrarMermaInput) {
   });
 }
 
-export function obtenerResumenInventarioDelDia(
-  token: string,
-): Promise<ResumenMovimientosDelDia> {
+export function obtenerResumenInventarioDelDia(token: string): Promise<ResumenMovimientosDelDia> {
   return apiFetch<ResumenMovimientosDelDia>('/inventario/resumen-dia', {
     token,
   });
 }
 
-export function obtenerAlertas(
-  token: string,
-  diasVencimiento?: number,
-): Promise<AlertasProductos> {
+export function obtenerAlertas(token: string, diasVencimiento?: number): Promise<AlertasProductos> {
   const query = diasVencimiento ? `?diasVencimiento=${diasVencimiento}` : '';
   return apiFetch<AlertasProductos>(`/productos/alertas${query}`, { token });
 }

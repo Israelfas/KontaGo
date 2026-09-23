@@ -5,7 +5,12 @@ import { Producto } from '../productos/entities/producto.entity';
 import { Venta } from './entities/venta.entity';
 import { VentaItem } from './entities/venta-item.entity';
 import { CrearVentaDto } from './dto/crear-venta.dto';
-import { ResumenDelDiaDto } from './dto/resumen-del-dia.dto';
+import {
+  ProductoVendido,
+  PuntoSerie,
+  ResumenPeriodoDto,
+} from './dto/resumen-del-dia.dto';
+import { rangoDeHoy, type RangoFechas } from './rango-fechas';
 import { AnularVentaDto } from './dto/anular-venta.dto';
 import { VentaDelHistorialDto } from './dto/venta-del-historial.dto';
 import {
@@ -209,61 +214,99 @@ export class VentasService {
   }
 
   /**
-   * Resumen del día actual para el dashboard simple del MVP (sección 3.2
-   * del spec: la ganancia del día es parte del MVP, no se pospone a Fase 3).
-   *
-   * Nota: usa el día calendario del servidor. Si más adelante se necesita
-   * que "el día" respete la zona horaria de cada tienda (relevante para
-   * negocios en distintos países), esto se ajusta guardando una zona
-   * horaria por tenant y filtrando con ella en vez de con medianoche UTC.
-   * Para el MVP de un solo país/zona horaria esto no hace falta.
-   *
-   * Las tendencias históricas (semana/mes) y comparativas SÍ quedan para
-   * la Fase 3, porque requieren tablas agregadas para no degradar el
-   * rendimiento con el volumen (ver riesgo #4 del spec) — este método hace
-   * el cálculo en vivo sobre un solo día, que es liviano.
+   * Resumen de un período: ingreso, ganancia real, IVA y anulado, más la
+   * serie para el gráfico (por hora si es un día, por día si es un rango)
+   * y los productos más vendidos.
    *
    * Todo descuenta lo anulado: una venta anulada por completo no cuenta
    * como venta, y las parciales cuentan solo por lo que quedó vendido.
+   *
+   * Se calcula en vivo sobre las ventas del período, reutilizando la misma
+   * fórmula de ganancia e IVA que el resto (una sola fuente de verdad).
+   * Para un minimarket, 92 días son unos pocos miles de ventas: liviano.
+   * Si el volumen crece mucho (cadenas, multi-sucursal), el paso siguiente
+   * es una tabla agregada por día (riesgo #4 del spec), no subir el tope.
    */
-  async obtenerResumenDelDia(tenantId: string): Promise<ResumenDelDiaDto> {
-    const inicio = inicioDelDia();
-
-    const ventaRepo = this.dataSource.getRepository(Venta);
-    const ventas = await ventaRepo
+  async obtenerResumen(
+    tenantId: string,
+    rango: RangoFechas,
+  ): Promise<ResumenPeriodoDto> {
+    const ventas = await this.dataSource
+      .getRepository(Venta)
       .createQueryBuilder('venta')
       .leftJoinAndSelect('venta.items', 'item')
+      .leftJoinAndSelect('item.producto', 'producto')
       .where('venta.tenantId = :tenantId', { tenantId })
-      .andWhere('venta.createdAt >= :inicio', { inicio })
+      .andWhere('venta.createdAt >= :inicio', { inicio: rango.inicio })
+      .andWhere('venta.createdAt < :fin', { fin: rango.finExclusivo })
       .getMany();
 
-    const ingresoBrutoCentavos = ventas.reduce(
-      (acc, venta) => acc + venta.totalCentavos - venta.totalAnuladoCentavos,
-      0,
-    );
-    const gananciaCentavos = ventas.reduce(
-      (acc, venta) => acc + this.calcularGananciaCentavos(venta),
-      0,
-    );
-    const ivaCentavos = ventas.reduce(
-      (acc, venta) => acc + this.calcularIvaCentavos(venta),
-      0,
-    );
-    const anuladoCentavos = ventas.reduce(
-      (acc, venta) => acc + venta.totalAnuladoCentavos,
-      0,
-    );
+    const neto = (venta: Venta) =>
+      venta.totalCentavos - venta.totalAnuladoCentavos;
+    const agrupadoPor = rango.dias === 1 ? 'hora' : 'dia';
 
     return {
-      fecha: fechaLocal(inicio),
-      cantidadVentas: ventas.filter(
-        (venta) => venta.totalCentavos > venta.totalAnuladoCentavos,
-      ).length,
-      ingresoBrutoCentavos,
-      gananciaCentavos,
-      ivaCentavos,
-      anuladoCentavos,
+      fecha: rango.desde,
+      desde: rango.desde,
+      hasta: rango.hasta,
+      dias: rango.dias,
+      cantidadVentas: ventas.filter((venta) => neto(venta) > 0).length,
+      ingresoBrutoCentavos: ventas.reduce((acc, venta) => acc + neto(venta), 0),
+      gananciaCentavos: ventas.reduce(
+        (acc, venta) => acc + this.calcularGananciaCentavos(venta),
+        0,
+      ),
+      ivaCentavos: ventas.reduce(
+        (acc, venta) => acc + this.calcularIvaCentavos(venta),
+        0,
+      ),
+      anuladoCentavos: ventas.reduce(
+        (acc, venta) => acc + venta.totalAnuladoCentavos,
+        0,
+      ),
+      agrupadoPor,
+      serie:
+        agrupadoPor === 'hora'
+          ? serieHoraria(ventas, neto)
+          : serieDiaria(ventas, neto, rango),
+      topProductos: masVendidos(ventas),
     };
+  }
+
+  /** Resumen de hoy (lo que usa /ventas/resumen-dia). */
+  async obtenerResumenDelDia(tenantId: string): Promise<ResumenPeriodoDto> {
+    return this.obtenerResumen(tenantId, rangoDeHoy());
+  }
+
+  /**
+   * Ventas de un período, de la más reciente a la más vieja, paginadas: un
+   * mes entero puede tener más de mil. Mismo formato que el historial del
+   * día (sin costos), para que la pantalla sea la misma.
+   */
+  async listarVentas(
+    tenantId: string,
+    rango: RangoFechas,
+    limite = 50,
+    desplazamiento = 0,
+  ): Promise<{ ventas: VentaDelHistorialDto[]; total: number }> {
+    const [ventas, total] = await this.dataSource
+      .getRepository(Venta)
+      .createQueryBuilder('venta')
+      .leftJoinAndSelect('venta.usuario', 'vendedor')
+      .leftJoinAndSelect('venta.items', 'item')
+      .leftJoinAndSelect('item.producto', 'producto')
+      .leftJoinAndSelect('venta.anulaciones', 'anulacion')
+      .leftJoinAndSelect('anulacion.usuario', 'anuladoPor')
+      .where('venta.tenantId = :tenantId', { tenantId })
+      .andWhere('venta.createdAt >= :inicio', { inicio: rango.inicio })
+      .andWhere('venta.createdAt < :fin', { fin: rango.finExclusivo })
+      .orderBy('venta.createdAt', 'DESC')
+      .addOrderBy('anulacion.createdAt', 'ASC')
+      .skip(desplazamiento)
+      .take(limite)
+      .getManyAndCount();
+
+    return { ventas: ventas.map(aVentaDelHistorial), total };
   }
 
   /**
@@ -438,6 +481,74 @@ export class VentasService {
     const historial = await this.obtenerHistorialDelDia(tenantId);
     return historial.find((venta) => venta.id === ventaId)!;
   }
+}
+
+/**
+ * Por hora, de la primera a la última hora con ventas. Las horas del medio
+ * sin ventas van con 0: un hueco es un dato (a esa hora no se vendió).
+ */
+function serieHoraria(
+  ventas: Venta[],
+  neto: (v: Venta) => number,
+): PuntoSerie[] {
+  if (ventas.length === 0) return [];
+  const porHora = new Map<number, number>();
+  for (const venta of ventas) {
+    const hora = venta.createdAt.getHours();
+    porHora.set(hora, (porHora.get(hora) ?? 0) + neto(venta));
+  }
+  const horas = [...porHora.keys()];
+  const desde = Math.min(...horas);
+  const hasta = Math.max(...horas);
+  return Array.from({ length: hasta - desde + 1 }, (_, i) => ({
+    etiqueta: String(desde + i),
+    centavos: porHora.get(desde + i) ?? 0,
+  }));
+}
+
+/** Por día, todos los días del rango (con 0 los que no tuvieron ventas). */
+function serieDiaria(
+  ventas: Venta[],
+  neto: (v: Venta) => number,
+  rango: RangoFechas,
+): PuntoSerie[] {
+  const porDia = new Map<string, number>();
+  for (const venta of ventas) {
+    const dia = fechaLocal(venta.createdAt);
+    porDia.set(dia, (porDia.get(dia) ?? 0) + neto(venta));
+  }
+  const serie: PuntoSerie[] = [];
+  for (
+    const d = new Date(rango.inicio);
+    d < rango.finExclusivo;
+    d.setDate(d.getDate() + 1)
+  ) {
+    const etiqueta = fechaLocal(d);
+    serie.push({ etiqueta, centavos: porDia.get(etiqueta) ?? 0 });
+  }
+  return serie;
+}
+
+/** Los 5 productos con más unidades vendidas (descontando lo anulado). */
+function masVendidos(ventas: Venta[]): ProductoVendido[] {
+  const porProducto = new Map<string, ProductoVendido>();
+  for (const venta of ventas) {
+    for (const item of venta.items) {
+      const unidades = item.cantidad - item.cantidadAnulada;
+      if (unidades <= 0) continue;
+      const previo = porProducto.get(item.productoId) ?? {
+        nombre: item.producto?.nombre ?? 'Producto',
+        unidades: 0,
+        centavos: 0,
+      };
+      previo.unidades += unidades;
+      previo.centavos += item.precioVentaCentavos * unidades;
+      porProducto.set(item.productoId, previo);
+    }
+  }
+  return [...porProducto.values()]
+    .sort((a, b) => b.unidades - a.unidades || b.centavos - a.centavos)
+    .slice(0, 5);
 }
 
 function inicioDelDia(): Date {

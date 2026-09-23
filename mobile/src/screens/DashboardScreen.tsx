@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -6,125 +6,213 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../lib/auth-context';
-import { obtenerResumenDelDia, ApiError } from '../lib/api';
+import { obtenerResumen, ApiError } from '../lib/api';
 import { formatearCentavos } from '../lib/formato';
-import { BarraProporcional, EncabezadoPantalla, EstadoCargando, EstadoError, Tarjeta, TarjetaMetrica } from '../components/ui';
+import { EstadoCargando, EstadoError } from '../components/ui';
+import { Banda, Hoja, Mosaico, Pieza } from '../components/banda';
+import { SelectorPeriodo } from '../components/selector-periodo';
+import { GraficoIngreso, GraficoTopProductos } from '../components/graficos';
 import { colores, espaciado, radios } from '../theme/colores';
-import type { ResumenDelDia } from '../lib/tipos';
+import {
+  esHoy,
+  nombreDelPeriodo,
+  periodoAnterior,
+  periodoDeHoy,
+  rangoLegible,
+  type Periodo,
+} from '../lib/periodo';
+import type { ResumenPeriodo } from '../lib/tipos';
 
-function TarjetaGanancia({ resumen }: { resumen: ResumenDelDia }) {
-  // No hay endpoint de costo total todavía, pero ganancia + "resto" (que
-  // incluye costo de mercadería) sí se puede visualizar contra el
-  // ingreso bruto sin inventar datos: ganancia real vs. lo que no fue
-  // ganancia de ese ingreso.
-  const restoCentavos = Math.max(resumen.ingresoBrutoCentavos - resumen.gananciaCentavos, 0);
+/** "de hoy", "de los últimos 7 días"… para completar frases. */
+function delPeriodo(p: Periodo): string {
+  switch (p.clave) {
+    case 'hoy':
+      return 'de hoy';
+    case 'ayer':
+      return 'de ayer';
+    case 'semana':
+      return 'de los últimos 7 días';
+    case 'mes':
+      return 'de este mes';
+    case 'mes-pasado':
+      return 'del mes pasado';
+    case 'elegido':
+      return 'del período';
+  }
+}
 
-  return (
-    <Tarjeta style={styles.heroTarjeta}>
-      <View style={styles.heroIconoFondo}>
-        <Ionicons name="trending-up" size={20} color={colores.verdeGanancia} />
-      </View>
-      <Text style={styles.heroEtiqueta}>GANANCIA REAL DE HOY</Text>
-      <Text style={styles.heroValor}>{formatearCentavos(resumen.gananciaCentavos)}</Text>
-
-      {resumen.ingresoBrutoCentavos > 0 && (
-        <View style={{ marginTop: espaciado.md, alignSelf: 'stretch' }}>
-          <BarraProporcional
-            etiquetaA="Ganancia"
-            valorA={resumen.gananciaCentavos}
-            colorA={colores.verdeGanancia}
-            etiquetaB="Resto"
-            valorB={restoCentavos}
-          />
-        </View>
-      )}
-
-      <View style={styles.heroDivisor} />
-      <Text style={styles.heroNota}>
-        Margen (venta − costo) de cada producto vendido, no el ingreso bruto.
-      </Text>
-    </Tarjeta>
+/** "↑ 12 % frente a los 7 días anteriores", o null si no hay con qué comparar. */
+function comparacion(actual: ResumenPeriodo, anterior: ResumenPeriodo | null): string | null {
+  if (!anterior || anterior.gananciaCentavos <= 0) return null;
+  const cambio = Math.round(
+    ((actual.gananciaCentavos - anterior.gananciaCentavos) / anterior.gananciaCentavos) * 100,
   );
+  const contra = actual.dias === 1 ? 'el día anterior' : `los ${actual.dias} días anteriores`;
+  if (cambio === 0) return `Igual que ${contra}.`;
+  // "frente a el" → "frente al"
+  return `${cambio > 0 ? '↑' : '↓'} ${Math.abs(cambio)} % frente a ${contra}.`.replace(' a el ', ' al ');
 }
 
 export function DashboardScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { token } = useAuth();
-  const [resumen, setResumen] = useState<ResumenDelDia | null>(null);
+  const [periodo, setPeriodo] = useState<Periodo>(periodoDeHoy);
+  const [resumen, setResumen] = useState<ResumenPeriodo | null>(null);
+  const [anterior, setAnterior] = useState<ResumenPeriodo | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Solo la última consulta pisa el estado: si se cambia de período antes
+  // de que llegue una respuesta, esa respuesta se descarta.
+  const ultimaConsulta = useRef(0);
 
   const cargar = useCallback(() => {
     if (!token) return;
+    const numero = ++ultimaConsulta.current;
     setCargando(true);
     setError(null);
-    obtenerResumenDelDia(token)
-      .then(setResumen)
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'No se pudo cargar el resumen'))
-      .finally(() => setCargando(false));
-  }, [token]);
+    Promise.all([
+      obtenerResumen(token, periodo),
+      // Hoy todavía no terminó: compararlo con un día completo engaña.
+      esHoy(periodo) ? Promise.resolve(null) : obtenerResumen(token, periodoAnterior(periodo)),
+    ])
+      .then(([actual, previo]) => {
+        if (numero !== ultimaConsulta.current) return;
+        setResumen(actual);
+        setAnterior(previo);
+      })
+      .catch((err) => {
+        if (numero === ultimaConsulta.current)
+          setError(err instanceof ApiError ? err.message : 'No se pudo cargar el resumen');
+      })
+      .finally(() => {
+        if (numero === ultimaConsulta.current) setCargando(false);
+      });
+  }, [token, periodo]);
 
   // Recarga cada vez que la pestaña gana foco (ej. después de vender),
-  // no solo al montar — el resumen del día cambia con cada venta.
+  // no solo al montar — el resumen cambia con cada venta. Como `cargar`
+  // cambia con el período, elegir otro período también recarga.
   useFocusEffect(
     useCallback(() => {
       cargar();
     }, [cargar]),
   );
 
+  const hoy = esHoy(periodo);
+  const margen =
+    resumen && resumen.ingresoBrutoCentavos > 0
+      ? Math.round((resumen.gananciaCentavos / resumen.ingresoBrutoCentavos) * 100)
+      : 0;
+  const ticketPromedio =
+    resumen && resumen.cantidadVentas > 0
+      ? Math.round(resumen.ingresoBrutoCentavos / resumen.cantidadVentas)
+      : 0;
+  // El promedio por día cuenta solo los días en que se vendió: un día
+  // cerrado (o antes de empezar a usar KontaGo) no es un día flojo.
+  const diasConVentas =
+    resumen?.agrupadoPor === 'dia' ? resumen.serie.filter((p) => p.centavos > 0).length : 1;
+  const frente = resumen ? comparacion(resumen, anterior) : null;
+
   return (
     <SafeAreaView style={styles.contenedor} edges={[]}>
-      <EncabezadoPantalla eyebrow="CIERRE DEL DÍA" titulo="Resumen" icono="bar-chart" />
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+        <Banda
+          eyebrow={hoy ? 'Cierre del día' : `Resumen · ${rangoLegible(periodo)}`}
+          titulo={hoy ? 'Resumen' : nombreDelPeriodo(periodo)}
+          valor={resumen ? formatearCentavos(resumen.gananciaCentavos) : undefined}
+          detalle={
+            resumen
+              ? resumen.cantidadVentas > 0
+                ? `Ganancia real ${delPeriodo(periodo)} · tu margen es el ${margen}% de lo vendido.${frente ? ` ${frente}` : ''}`
+                : hoy
+                  ? 'Ganancia real de hoy. Todavía no registraste ninguna venta.'
+                  : 'No hubo ventas en estas fechas.'
+              : undefined
+          }
+        >
+          <SelectorPeriodo periodo={periodo} onCambiar={setPeriodo} />
+        </Banda>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
-        {cargando && <EstadoCargando texto="Cargando resumen…" />}
-        {error && !cargando && <EstadoError mensaje={error} onReintentar={cargar} />}
+        <Hoja style={styles.hoja}>
+          {cargando && !resumen && <EstadoCargando texto="Cargando resumen…" />}
+          {error && !cargando && <EstadoError mensaje={error} onReintentar={cargar} />}
 
-        {resumen && !cargando && !error && (
-          <View style={{ gap: espaciado.md }}>
-            <TarjetaGanancia resumen={resumen} />
+          {resumen && !error && (
+            <View style={{ gap: espaciado.md, opacity: cargando ? 0.6 : 1 }}>
+              <Mosaico>
+                <Pieza
+                  etiqueta="Ingreso bruto"
+                  valor={formatearCentavos(resumen.ingresoBrutoCentavos)}
+                  detalle={
+                    diasConVentas > 1
+                      ? `${resumen.cantidadVentas} ventas · ${formatearCentavos(
+                          Math.round(resumen.ingresoBrutoCentavos / diasConVentas),
+                        )} por día`
+                      : `${resumen.cantidadVentas} venta${resumen.cantidadVentas === 1 ? '' : 's'}${hoy ? ' hoy' : ''}`
+                  }
+                />
+                <Pieza
+                  etiqueta="Ticket promedio"
+                  valor={formatearCentavos(ticketPromedio)}
+                  detalle="Por cliente"
+                />
+                <Pieza
+                  etiqueta="IVA incluido"
+                  valor={formatearCentavos(resumen.ivaCentavos)}
+                  detalle="Para el SRI"
+                />
+                <Pieza
+                  etiqueta={hoy ? 'Anulado hoy' : 'Anulado'}
+                  valor={formatearCentavos(resumen.anuladoCentavos)}
+                  tono={resumen.anuladoCentavos > 0 ? 'rojo' : 'neutro'}
+                  detalle={resumen.anuladoCentavos > 0 ? 'Ya descontado' : 'Sin anulaciones'}
+                />
 
-            <View style={{ flexDirection: 'row', gap: espaciado.md }}>
-              <TarjetaMetrica
-                etiqueta="Ventas de hoy"
-                valor={resumen.cantidadVentas}
-                icono="receipt-outline"
-              />
-              <TarjetaMetrica
-                etiqueta="Ingreso bruto"
-                valor={formatearCentavos(resumen.ingresoBrutoCentavos)}
-                icono="cash-outline"
-              />
-            </View>
+                <Pieza
+                  etiqueta={resumen.agrupadoPor === 'hora' ? '¿A qué hora vendés?' : 'Ingreso por día'}
+                  ancho="completa"
+                >
+                  <View style={{ marginTop: espaciado.sm }}>
+                    <GraficoIngreso datos={resumen.serie} agrupadoPor={resumen.agrupadoPor} />
+                  </View>
+                </Pieza>
 
-            {resumen.anuladoCentavos > 0 && (
-              <Text style={styles.anuladoTexto}>
-                Hoy se anularon {formatearCentavos(resumen.anuladoCentavos)} en ventas; ya están
-                descontados de estos números.
-              </Text>
-            )}
+                <Pieza etiqueta="Lo que más sale" ancho="completa">
+                  <View style={{ marginTop: espaciado.sm }}>
+                    <GraficoTopProductos datos={resumen.topProductos} />
+                  </View>
+                </Pieza>
+              </Mosaico>
 
-            <Pressable
-              onPress={() => navigation.navigate('VentasHoy')}
-              style={styles.enlaceVentas}
-              hitSlop={8}
-            >
-              <Ionicons name="receipt-outline" size={16} color={colores.tinta} />
-              <Text style={styles.enlaceVentasTexto}>Ver ventas de hoy</Text>
-              <Ionicons name="chevron-forward" size={16} color={colores.tintaSuave} />
-            </Pressable>
-
-            {resumen.cantidadVentas === 0 && (
-              <View style={styles.tipContenedor}>
-                <Ionicons name="bulb-outline" size={18} color={colores.ambar} />
-                <Text style={styles.tipTexto}>
-                  Todavía no registraste ninguna venta hoy. Andá a la pestaña{' '}
-                  <Text style={{ fontWeight: '700' }}>Vender</Text> para empezar.
+              <Pressable
+                onPress={() =>
+                  navigation.navigate(
+                    'VentasHoy',
+                    hoy ? undefined : { desde: periodo.desde, hasta: periodo.hasta },
+                  )
+                }
+                style={styles.enlaceVentas}
+                hitSlop={8}
+              >
+                <Ionicons name="receipt-outline" size={16} color={colores.tinta} />
+                <Text style={styles.enlaceVentasTexto}>
+                  {hoy ? 'Ver ventas de hoy' : `Ver las ventas (${rangoLegible(periodo)})`}
                 </Text>
-              </View>
-            )}
-          </View>
-        )}
+                <Ionicons name="chevron-forward" size={16} color={colores.tintaSuave} />
+              </Pressable>
+
+              {hoy && resumen.cantidadVentas === 0 && (
+                <View style={styles.tipContenedor}>
+                  <Ionicons name="bulb-outline" size={18} color={colores.ambar} />
+                  <Text style={styles.tipTexto}>
+                    Todavía no registraste ninguna venta hoy. Andá a la pestaña{' '}
+                    <Text style={{ fontWeight: '700' }}>Vender</Text> para empezar.
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+        </Hoja>
       </ScrollView>
     </SafeAreaView>
   );
@@ -135,6 +223,7 @@ const styles = StyleSheet.create({
   enlaceVentas: { flexDirection: 'row', alignItems: 'center', gap: espaciado.xs },
   enlaceVentasTexto: { flex: 1, fontSize: 14, fontWeight: '600', color: colores.tinta },
   contenedor: { flex: 1, backgroundColor: colores.papel },
+  hoja: { paddingHorizontal: espaciado.lg, paddingBottom: espaciado.xxl },
   scroll: { padding: espaciado.lg, paddingTop: 0, flexGrow: 1 },
   heroTarjeta: { alignItems: 'flex-start' },
   heroIconoFondo: {

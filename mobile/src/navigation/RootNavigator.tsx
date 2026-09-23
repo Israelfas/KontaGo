@@ -22,7 +22,8 @@ export type RootStackParamList = {
   Contacto: undefined;
   Suscripcion: { plan: Perfil['plan'] } | undefined;
   Equipo: undefined;
-  VentasHoy: undefined;
+  // Sin parámetros: hoy. El admin puede abrirla en un período (desde el resumen).
+  VentasHoy: { desde: string; hasta: string } | undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -56,7 +57,7 @@ export function RootNavigator() {
           <Stack.Screen name="Contacto" component={ContactoScreen} options={{ title: 'Contacto y soporte' }} />
           <Stack.Screen name="Suscripcion" component={SuscripcionScreen} options={{ title: 'Suscripción' }} />
           <Stack.Screen name="Equipo" component={EquipoScreen} options={{ title: 'Equipo' }} />
-          <Stack.Screen name="VentasHoy" component={VentasHoyScreen} options={{ title: 'Ventas de hoy' }} />
+          <Stack.Screen name="VentasHoy" component={VentasHoyScreen} options={{ title: 'Ventas' }} />
         </Stack.Navigator>
       ) : (
         <AuthNavigator />

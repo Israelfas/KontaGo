@@ -2,9 +2,11 @@ import Constants from 'expo-constants';
 import type {
   AlertasProductos,
   MotivoMerma,
+  PaginaDeVentas,
   Producto,
   ResumenDelDia,
   ResumenMovimientosDelDia,
+  ResumenPeriodo,
   TokenPair,
   UsuarioEquipo,
   Venta,
@@ -389,6 +391,36 @@ export function anularVenta(
 
 export function obtenerResumenDelDia(token: string): Promise<ResumenDelDia> {
   return apiFetch<ResumenDelDia>('/ventas/resumen-dia', { token });
+}
+
+export interface RangoDeFechas {
+  desde: string; // AAAA-MM-DD, incluido
+  hasta: string; // AAAA-MM-DD, incluido
+}
+
+// Query string a mano: el URLSearchParams de React Native está incompleto.
+function query(valores: Record<string, string | number>): string {
+  return Object.entries(valores)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+    .join('&');
+}
+
+// Resumen de un período (hasta 92 días). Solo admin.
+export function obtenerResumen(token: string, rango: RangoDeFechas): Promise<ResumenPeriodo> {
+  return apiFetch<ResumenPeriodo>(`/ventas/resumen?${query({ desde: rango.desde, hasta: rango.hasta })}`, {
+    token,
+  });
+}
+
+// Ventas de un período, de la más reciente a la más vieja, de a `limite`.
+export function listarVentas(
+  token: string,
+  rango: RangoDeFechas,
+  limite = 50,
+  desplazamiento = 0,
+): Promise<PaginaDeVentas> {
+  const q = query({ desde: rango.desde, hasta: rango.hasta, limite, desplazamiento });
+  return apiFetch<PaginaDeVentas>(`/ventas?${q}`, { token });
 }
 
 // --- Inventario ---

@@ -59,6 +59,34 @@ export interface ResumenDelDia {
   anuladoCentavos: number; // devuelto por anulaciones, ya descontado de lo anterior
 }
 
+/** Un punto del gráfico: una hora ('8'…'23') o un día ('AAAA-MM-DD'). */
+export interface PuntoSerie {
+  etiqueta: string;
+  centavos: number;
+}
+
+export interface ProductoVendido {
+  nombre: string;
+  unidades: number;
+  centavos: number;
+}
+
+// GET /ventas/resumen?desde&hasta (solo admin).
+export interface ResumenPeriodo extends ResumenDelDia {
+  desde: string;
+  hasta: string;
+  dias: number;
+  // Un día se grafica por hora; un rango, por día.
+  agrupadoPor: 'hora' | 'dia';
+  serie: PuntoSerie[];
+  topProductos: ProductoVendido[];
+}
+
+export interface PaginaDeVentas {
+  ventas: VentaDelHistorial[];
+  total: number;
+}
+
 // Venta tal como la devuelve GET /ventas/hoy (sin costos: la ve también
 // el cajero).
 export interface VentaDelHistorial {

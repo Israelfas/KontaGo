@@ -3,12 +3,27 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
-import { Button, EmptyState, ErrorState, LoadingState, PageHeader } from '@/components/ui';
+import { Button, EmptyState, ErrorState, LoadingState } from '@/components/ui';
+import { Banda, Hoja } from '@/components/banda';
 import { ReceiptIcon, RefreshIcon } from '@/components/icons';
+import { SelectorPeriodo, usePeriodoDeLaURL } from '@/components/selector-periodo';
 import { useAuth } from '@/lib/auth-context';
-import { obtenerVentasDeHoy, anularVenta, ApiError } from '@/lib/api';
+import { obtenerVentasDeHoy, anularVenta, listarVentas, obtenerResumen, ApiError } from '@/lib/api';
 import { formatearCentavos } from '@/lib/formato';
-import type { VentaDelHistorial } from '@/lib/tipos';
+import {
+  esHoy,
+  fechaISO,
+  fechaLarga,
+  hoyISO,
+  nombreDelPeriodo,
+  periodoDeHoy,
+  rangoLegible,
+  type Periodo,
+} from '@/lib/periodo';
+import type { PaginaDeVentas, ResumenPeriodo, VentaDelHistorial } from '@/lib/tipos';
+
+// De a cuántas ventas se traen en el historial (un mes pasa de mil).
+const POR_PAGINA = 50;
 
 const ESTADO: Record<VentaDelHistorial['estado'], { texto: string; clase: string }> = {
   completa: { texto: 'Completa', clase: 'status-pill-ok' },
@@ -91,7 +106,10 @@ function PanelAnulacion({
               max={item.pendiente}
               value={cantidades[item.id] ?? 0}
               onChange={(e) => {
-                const valor = Math.max(0, Math.min(item.pendiente, parseInt(e.target.value, 10) || 0));
+                const valor = Math.max(
+                  0,
+                  Math.min(item.pendiente, parseInt(e.target.value, 10) || 0),
+                );
                 setCantidades((prev) => ({ ...prev, [item.id]: valor }));
               }}
               className="field font-ticket !mb-0 w-20 !py-1.5 text-right"
@@ -115,7 +133,8 @@ function PanelAnulacion({
       />
 
       <p className="mt-2 text-sm text-tinta">
-        Devolver al cliente: <strong className="font-ticket">{formatearCentavos(aDevolverCentavos)}</strong>
+        Devolver al cliente:{' '}
+        <strong className="font-ticket">{formatearCentavos(aDevolverCentavos)}</strong>
         <span className="ml-1 text-xs text-tinta-suave">(el stock vuelve al inventario)</span>
       </p>
 
@@ -156,7 +175,7 @@ function TarjetaVenta({
   const netoCentavos = venta.totalCentavos - venta.totalAnuladoCentavos;
 
   return (
-    <div className="app-card p-4 sm:p-5">
+    <div className="app-card flex h-full flex-col p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="font-ticket text-sm text-tinta">
@@ -183,7 +202,11 @@ function TarjetaVenta({
               {item.cantidad} × {item.nombre}
               {item.cantidadAnulada > 0 && (
                 <span className="ml-1 text-xs text-rojo-perdida">
-                  ({item.cantidadAnulada === item.cantidad ? 'anulado' : `${item.cantidadAnulada} anulado${item.cantidadAnulada === 1 ? '' : 's'}`})
+                  (
+                  {item.cantidadAnulada === item.cantidad
+                    ? 'anulado'
+                    : `${item.cantidadAnulada} anulado${item.cantidadAnulada === 1 ? '' : 's'}`}
+                  )
                 </span>
               )}
             </span>
@@ -194,12 +217,18 @@ function TarjetaVenta({
         ))}
       </ul>
 
+      <p className="mt-2 font-ticket text-xs text-tinta-suave">
+        Recibido {formatearCentavos(venta.montoRecibidoCentavos)} · Vuelto{' '}
+        {formatearCentavos(venta.vueltoCentavos)}
+      </p>
+
       {venta.anulaciones.length > 0 && (
         <ul className="mt-3 space-y-1 border-t border-papel-linea pt-3 text-xs text-tinta-suave">
           {venta.anulaciones.map((a) => (
             <li key={a.id}>
               {hora(a.createdAt)} · {a.anuladoPor} anuló{' '}
-              <span className="font-ticket">{formatearCentavos(a.montoDevueltoCentavos)}</span>: “{a.motivo}”
+              <span className="font-ticket">{formatearCentavos(a.montoDevueltoCentavos)}</span>: “
+              {a.motivo}”
             </li>
           ))}
         </ul>
@@ -209,7 +238,7 @@ function TarjetaVenta({
         <button
           type="button"
           onClick={onAnular}
-          className="mt-3 text-xs font-medium text-rojo-perdida underline"
+          className="mt-auto self-start rounded-lg border border-papel-linea px-3 py-1.5 pt-1.5 text-xs font-medium text-tinta-suave transition-colors hover:border-rojo-perdida/40 hover:text-rojo-perdida"
         >
           Anular…
         </button>
@@ -222,56 +251,172 @@ function TarjetaVenta({
   );
 }
 
+/** Día local de una venta, 'AAAA-MM-DD'. */
+function diaDe(venta: VentaDelHistorial): string {
+  return fechaISO(new Date(venta.createdAt));
+}
+
+/** Agrupa por día manteniendo el orden (de la más reciente a la más vieja). */
+function agruparPorDia(
+  ventas: VentaDelHistorial[],
+): { dia: string; ventas: VentaDelHistorial[] }[] {
+  const grupos: { dia: string; ventas: VentaDelHistorial[] }[] = [];
+  for (const venta of ventas) {
+    const dia = diaDe(venta);
+    const ultimo = grupos.at(-1);
+    if (ultimo?.dia === dia) ultimo.ventas.push(venta);
+    else grupos.push({ dia, ventas: [venta] });
+  }
+  return grupos;
+}
+
 function ContenidoVentas() {
   const { token, usuario } = useAuth();
   const esAdmin = usuario?.rol === 'admin';
+  const [periodoDeLaURL, setPeriodo] = usePeriodoDeLaURL();
+  // El cajero ve solo las de hoy (para encontrar una a anular): el
+  // historial y los totales de otros días son información del dueño.
+  const periodo: Periodo | null = esAdmin ? periodoDeLaURL : periodoDeLaURL && periodoDeHoy();
   const [ventas, setVentas] = useState<VentaDelHistorial[]>([]);
+  const [total, setTotal] = useState(0);
+  const [resumen, setResumen] = useState<ResumenPeriodo | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [cargandoMas, setCargandoMas] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [anulandoId, setAnulandoId] = useState<string | null>(null);
-
-  function cargar() {
-    if (!token) return;
-    setCargando(true);
-    setError(null);
-    obtenerVentasDeHoy(token)
-      .then(setVentas)
-      .catch((err) =>
-        setError(err instanceof ApiError ? err.message : 'No se pudieron cargar las ventas'),
-      )
-      .finally(() => setCargando(false));
-  }
+  const [intento, setIntento] = useState(0);
 
   useEffect(() => {
+    if (!token || !periodo) return;
+    // Una respuesta de un período que ya no está elegido no pisa a la nueva.
+    let vigente = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    cargar();
+    setCargando(true);
+    setError(null);
+    setAnulandoId(null);
+    const pedido: Promise<[PaginaDeVentas, ResumenPeriodo | null]> = esAdmin
+      ? Promise.all([listarVentas(token, periodo, POR_PAGINA), obtenerResumen(token, periodo)])
+      : obtenerVentasDeHoy(token).then((deHoy) => [{ ventas: deHoy, total: deHoy.length }, null]);
+    pedido
+      .then(([pagina, resumenResp]) => {
+        if (!vigente) return;
+        setVentas(pagina.ventas);
+        setTotal(pagina.total);
+        setResumen(resumenResp);
+      })
+      .catch((err) => {
+        if (vigente)
+          setError(err instanceof ApiError ? err.message : 'No se pudieron cargar las ventas');
+      })
+      .finally(() => {
+        if (vigente) setCargando(false);
+      });
+    return () => {
+      vigente = false;
+    };
+    // periodo se arma en cada render: se compara por sus fechas.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, esAdmin, periodo?.desde, periodo?.hasta, intento]);
+
+  async function cargarMas() {
+    if (!token || !periodo) return;
+    setCargandoMas(true);
+    try {
+      const pagina = await listarVentas(token, periodo, POR_PAGINA, ventas.length);
+      // Si entró una venta nueva mientras tanto, el corte se corre uno:
+      // se evita mostrar dos veces la misma.
+      setVentas((previas) => {
+        const vistas = new Set(previas.map((v) => v.id));
+        return [...previas, ...pagina.ventas.filter((v) => !vistas.has(v.id))];
+      });
+      setTotal(pagina.total);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudieron cargar más ventas');
+    } finally {
+      setCargandoMas(false);
+    }
+  }
+
+  function alAnular(actualizada: VentaDelHistorial) {
+    setVentas((prev) => prev.map((v) => (v.id === actualizada.id ? actualizada : v)));
+    // Los totales de la franja salen del resumen: se vuelven a pedir.
+    if (esAdmin && token && periodo)
+      obtenerResumen(token, periodo)
+        .then(setResumen)
+        .catch(() => {});
+  }
+
+  const hoy = periodo ? esHoy(periodo) : true;
+  const deHoy = hoyISO();
+  // Admin: totales del período entero (la lista viene por partes).
+  // Cajero: salen de las ventas de hoy, que llegan todas.
+  const cobradoCentavos =
+    resumen?.ingresoBrutoCentavos ??
+    ventas.reduce((acc, v) => acc + v.totalCentavos - v.totalAnuladoCentavos, 0);
+  const cantidadCobradas =
+    resumen?.cantidadVentas ?? ventas.filter((v) => v.estado !== 'anulada').length;
+  const anuladoCentavos =
+    resumen?.anuladoCentavos ?? ventas.reduce((acc, v) => acc + v.totalAnuladoCentavos, 0);
+  const porDia = new Map(
+    resumen?.agrupadoPor === 'dia' ? resumen.serie.map((p) => [p.etiqueta, p.centavos]) : [],
+  );
+  const grupos = periodo && !hoy && periodo.desde !== periodo.hasta ? agruparPorDia(ventas) : null;
+
+  function tarjeta(venta: VentaDelHistorial) {
+    return (
+      <div key={venta.id} className={anulandoId === venta.id ? 'lg:col-span-2' : ''}>
+        <TarjetaVenta
+          venta={venta}
+          // Solo el mismo día: una venta de otro día ya está en los números
+          // cerrados de ese día.
+          puedeAnular={esAdmin && diaDe(venta) === deHoy}
+          anulando={anulandoId === venta.id}
+          onAnular={() => setAnulandoId(venta.id)}
+          onAnulada={alAnular}
+          onCerrarAnulacion={() => setAnulandoId(null)}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="app-page">
-      <div className="app-container">
-        <PageHeader
-          eyebrow="Caja"
-          title="Ventas de hoy"
-          description={
-            esAdmin
-              ? 'Todas las ventas del día. Podés anular una venta completa o solo algunos productos; el stock vuelve al inventario.'
-              : 'Todas las ventas del día. Si hay que anular una, avisale al administrador.'
-          }
-          action={
-            <Button variant="secondary" onClick={cargar} disabled={cargando}>
-              <RefreshIcon className="h-4 w-4" />
-              Actualizar
-            </Button>
-          }
-        />
+    <div>
+      <Banda
+        eyebrow={!periodo || hoy ? 'Caja · hoy' : `Ventas · ${rangoLegible(periodo)}`}
+        titulo={!periodo || hoy ? 'Ventas del día' : nombreDelPeriodo(periodo)}
+        valor={formatearCentavos(cobradoCentavos)}
+        detalle={
+          <>
+            Cobrado en {cantidadCobradas} venta{cantidadCobradas === 1 ? '' : 's'}
+            {anuladoCentavos > 0 && ` · ${formatearCentavos(anuladoCentavos)} anulados`}.{' '}
+            {!esAdmin
+              ? 'Si hay que anular una venta, avisale al administrador.'
+              : hoy
+                ? 'Podés anular una venta completa o solo algunos productos; el stock vuelve al inventario.'
+                : 'Las ventas se pueden anular solo el mismo día en que se hicieron.'}
+          </>
+        }
+        accion={
+          <Button variant="claro" onClick={() => setIntento((n) => n + 1)} disabled={cargando}>
+            <RefreshIcon className="h-4 w-4" />
+            Actualizar
+          </Button>
+        }
+        extra={esAdmin && periodo && <SelectorPeriodo periodo={periodo} onCambiar={setPeriodo} />}
+      />
 
-        <div className="mt-8 space-y-4">
+      <Hoja>
+        <div className="mt-4 space-y-4">
           {cargando && <LoadingState label="Cargando ventas…" />}
 
           {error && !cargando && (
-            <ErrorState action={<Button variant="secondary" onClick={cargar}>Reintentar</Button>}>
+            <ErrorState
+              action={
+                <Button variant="secondary" onClick={() => setIntento((n) => n + 1)}>
+                  Reintentar
+                </Button>
+              }
+            >
               {error}
             </ErrorState>
           )}
@@ -279,28 +424,56 @@ function ContenidoVentas() {
           {!cargando && !error && ventas.length === 0 && (
             <EmptyState
               icon={<ReceiptIcon className="h-6 w-6" />}
-              title="Todavía no hay ventas hoy"
-              description="Las ventas que se registren en la caja van a aparecer acá."
+              title={hoy ? 'Todavía no hay ventas hoy' : 'No hubo ventas en este período'}
+              description={
+                hoy
+                  ? 'Las ventas que se registren en la caja van a aparecer acá.'
+                  : 'Probá con otras fechas.'
+              }
             />
           )}
 
+          {/* Dos columnas en pantallas anchas: cada venta tiene poco
+              contenido y a todo el ancho quedaba una lista muy aireada.
+              La que se está anulando ocupa el ancho completo, porque el
+              panel de anulación necesita espacio. */}
+          {!cargando && !error && !grupos && (
+            <div className="grid gap-4 lg:grid-cols-2">{ventas.map(tarjeta)}</div>
+          )}
+
+          {/* Varios días: cada uno con su título y lo cobrado ese día. */}
           {!cargando &&
             !error &&
-            ventas.map((venta) => (
-              <TarjetaVenta
-                key={venta.id}
-                venta={venta}
-                puedeAnular={esAdmin}
-                anulando={anulandoId === venta.id}
-                onAnular={() => setAnulandoId(venta.id)}
-                onAnulada={(actualizada) =>
-                  setVentas((prev) => prev.map((v) => (v.id === actualizada.id ? actualizada : v)))
-                }
-                onCerrarAnulacion={() => setAnulandoId(null)}
-              />
+            grupos?.map((grupo) => (
+              <section key={grupo.dia} aria-label={fechaLarga(grupo.dia)} className="pt-2">
+                <h2 className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 border-b border-papel-linea pb-2">
+                  <span className="font-display text-base font-semibold capitalize text-tinta">
+                    {grupo.dia === deHoy ? 'Hoy' : fechaLarga(grupo.dia)}
+                  </span>
+                  {porDia.has(grupo.dia) && (
+                    <span className="font-ticket text-sm text-tinta-suave">
+                      {formatearCentavos(porDia.get(grupo.dia)!)} cobrado
+                    </span>
+                  )}
+                </h2>
+                <div className="grid gap-4 lg:grid-cols-2">{grupo.ventas.map(tarjeta)}</div>
+              </section>
             ))}
+
+          {!cargando && !error && ventas.length < total && (
+            <div className="flex flex-col items-center gap-2 pt-2">
+              <p className="text-xs text-tinta-suave">
+                Mostrando {ventas.length} de {total} ventas
+              </p>
+              <Button variant="secondary" onClick={cargarMas} disabled={cargandoMas}>
+                {cargandoMas
+                  ? 'Cargando…'
+                  : `Ver ${Math.min(POR_PAGINA, total - ventas.length)} más`}
+              </Button>
+            </div>
+          )}
         </div>
-      </div>
+      </Hoja>
     </div>
   );
 }

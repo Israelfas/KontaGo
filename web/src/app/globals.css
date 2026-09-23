@@ -96,6 +96,14 @@ select:focus-visible {
   padding: 2rem 0 3.5rem;
 }
 
+/* Debajo de md aparece la barra de navegación inferior fija (nav.tsx):
+   espacio extra para que no tape el final de la página. */
+@media (max-width: 767px) {
+  .app-page {
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+  }
+}
+
 .app-container {
   width: min(100% - 2rem, 74rem);
   margin: 0 auto;
@@ -280,21 +288,23 @@ select:focus-visible {
 
 .metric-card {
   position: relative;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
-  min-height: 10.2rem;
+  min-height: 7.4rem;
   border: 1px solid var(--papel-linea);
   border-radius: 1rem;
   background: color-mix(in srgb, var(--superficie) 92%, transparent);
-  padding: 1.2rem;
+  padding: 1.05rem 1.15rem;
   box-shadow: var(--sombra);
 }
 
 .metric-card::after {
   position: absolute;
-  right: -2rem;
-  bottom: -3rem;
-  width: 8rem;
-  height: 8rem;
+  right: -1.6rem;
+  bottom: -2.4rem;
+  width: 6rem;
+  height: 6rem;
   border-radius: 999px;
   background: rgba(28, 43, 58, 0.045);
   content: '';
@@ -475,6 +485,10 @@ select:focus-visible {
 .metric-detail {
   position: relative;
   z-index: 1;
+  /* Sin flex-shrink el texto de dos líneas se recortaba contra el
+     min-height de la tarjeta (que tiene overflow: hidden por el círculo
+     decorativo), por ejemplo en las tarjetas angostas del celular. */
+  flex-shrink: 0;
   color: var(--tinta-suave);
   font-size: 0.76rem;
   line-height: 1.45;
@@ -489,7 +503,8 @@ select:focus-visible {
 .metric-value {
   position: relative;
   z-index: 1;
-  margin-top: 1.25rem;
+  flex-shrink: 0;
+  margin-top: 0.55rem;
   font-family: var(--font-ticket);
   font-size: clamp(1.45rem, 3vw, 2rem);
   font-weight: 600;
@@ -618,6 +633,11 @@ select:focus-visible {
   color: var(--rojo-perdida);
 }
 
+.status-pill-neutral {
+  background: rgba(28, 43, 58, 0.07);
+  color: var(--tinta-suave);
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -626,8 +646,9 @@ select:focus-visible {
 
 @media (max-width: 640px) {
   .app-page {
-    min-height: calc(100vh - 119px);
-    padding: 1.45rem 0 2.5rem;
+    min-height: calc(100vh - 73px);
+    /* 2.5rem + alto de la barra de navegación inferior (ver nav.tsx) */
+    padding: 1.45rem 0 calc(6rem + env(safe-area-inset-bottom));
   }
 
   .app-container {
@@ -671,4 +692,272 @@ select:focus-visible {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+
+/* ===================================================================
+   Encabezado inmersivo + mosaico
+   La app era una pila de tarjetas beige todas iguales: nada pesaba más
+   que lo demás y en el celular había que scrollear mucho. Ahora cada
+   pantalla arranca con una franja oscura que lleva EL número, el
+   contenido sube como una hoja que la tapa, y los datos van en piezas
+   de distinto tamaño (dos por fila en celular).
+   =================================================================== */
+
+.banda {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 86% -20%, rgba(217, 140, 43, 0.32), transparent 15rem),
+    radial-gradient(circle at 4% 130%, rgba(47, 111, 79, 0.22), transparent 17rem),
+    linear-gradient(140deg, #22384b 0%, #16232f 100%);
+  color: var(--papel);
+  padding: 1.4rem 0 3.6rem;
+}
+
+/* Trama muy tenue, para que el fondo no sea un plano muerto. */
+.banda::after {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 34px 34px;
+  content: '';
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.banda > * {
+  position: relative;
+  z-index: 1;
+}
+
+.banda-eyebrow {
+  color: rgba(246, 243, 236, 0.62);
+  font-family: var(--font-ticket);
+  font-size: 0.67rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.banda-titulo {
+  margin-top: 0.15rem;
+  font-family: var(--font-display);
+  font-size: clamp(1.45rem, 4.5vw, 1.9rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+/* El número que la pantalla viene a contar. Grande de verdad. */
+.banda-valor {
+  margin-top: 0.9rem;
+  font-family: var(--font-ticket);
+  font-size: clamp(2.6rem, 11vw, 3.6rem);
+  font-weight: 600;
+  letter-spacing: -0.06em;
+  line-height: 0.95;
+}
+
+.banda-detalle {
+  margin-top: 0.5rem;
+  max-width: 34rem;
+  color: rgba(246, 243, 236, 0.76);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+/* La hoja de papel que sube por encima de la franja. */
+.hoja {
+  position: relative;
+  z-index: 2;
+  margin-top: -2.2rem;
+  border-radius: 1.5rem 1.5rem 0 0;
+  background: var(--papel);
+  padding: 1.5rem 0 3.5rem;
+}
+
+@media (max-width: 767px) {
+  .hoja {
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+  }
+}
+
+/* Mosaico: dos por fila en celular, cuatro en escritorio. Las piezas
+   anchas ocupan la fila entera. */
+.mosaico {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+@media (min-width: 768px) {
+  .mosaico {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+  }
+}
+
+.pieza {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--papel-linea);
+  border-radius: 1.15rem;
+  background: var(--superficie);
+  padding: 0.95rem 1rem;
+  box-shadow: 0 10px 26px rgba(28, 43, 58, 0.06);
+}
+
+/* Por defecto cada pieza ocupa una columna: dos por fila en celular,
+   cuatro en escritorio. */
+
+/* Media: fila entera en celular, mitad en escritorio (los gráficos). */
+.pieza-mitad {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 768px) {
+  .pieza-mitad {
+    grid-column: span 2;
+  }
+}
+
+.pieza-completa {
+  grid-column: 1 / -1;
+}
+
+.pieza-etiqueta {
+  color: var(--tinta-suave);
+  font-size: 0.67rem;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Los montos tienen que pesar: eran de 14px entre tanto texto igual. */
+.pieza-valor {
+  margin-top: 0.45rem;
+  font-family: var(--font-ticket);
+  font-size: clamp(1.35rem, 5.5vw, 1.75rem);
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  color: var(--tinta);
+}
+
+.pieza-detalle {
+  margin-top: auto;
+  padding-top: 0.5rem;
+  color: var(--tinta-suave);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.pieza-acento-verde .pieza-valor {
+  color: var(--verde-ganancia);
+}
+
+.pieza-acento-rojo .pieza-valor {
+  color: var(--rojo-perdida);
+}
+
+/* Botón para usar sobre la franja oscura: el primario es tinta sobre
+   tinta y ahí no se ve. */
+.button-claro {
+  background: var(--papel);
+  color: var(--tinta);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+}
+
+.button-claro:hover:not(:disabled) {
+  background: #fff;
+}
+
+/* Selector de período, sobre la franja oscura. En el celular es una fila
+   que se desliza de costado (llega hasta el borde de la pantalla); en
+   pantallas anchas, los botones se acomodan en varias líneas. */
+.periodo {
+  display: flex;
+  gap: 0.4rem;
+  margin: 1.1rem -1rem 0;
+  padding: 0 1rem 0.15rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.periodo::-webkit-scrollbar {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .periodo {
+    flex-wrap: wrap;
+    margin-inline: 0;
+    padding-inline: 0;
+    overflow: visible;
+  }
+}
+
+.chip-periodo {
+  flex-shrink: 0;
+  min-height: 2.25rem;
+  border: 1px solid rgba(246, 243, 236, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(246, 243, 236, 0.84);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.4rem 0.9rem;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+
+.chip-periodo:hover {
+  border-color: rgba(246, 243, 236, 0.5);
+  color: var(--papel);
+}
+
+.chip-periodo[aria-pressed='true'] {
+  border-color: var(--papel);
+  background: var(--papel);
+  color: var(--tinta);
+}
+
+.periodo-rango {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6rem;
+  margin-top: 0.8rem;
+}
+
+.periodo-rango label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: rgba(246, 243, 236, 0.72);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.periodo-rango input[type='date'] {
+  min-height: 2.5rem;
+  border: 1px solid rgba(246, 243, 236, 0.28);
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--papel);
+  color-scheme: dark;
+  font-family: var(--font-ticket);
+  font-size: 0.85rem;
+  padding: 0.4rem 0.6rem;
+}
+
+.periodo-error {
+  margin-top: 0.5rem;
+  color: #f3b6a6;
+  font-size: 0.8rem;
 }
