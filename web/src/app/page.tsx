@@ -2,22 +2,15 @@ import type { CSSProperties, ReactNode } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { AppLogo } from '@/components/ui';
-import {
-  ActivityIcon,
-  AlertIcon,
-  ArrowRightIcon,
-  CameraIcon,
-  CheckIcon,
-  LockIcon,
-  ReceiptIcon,
-  SparklesIcon,
-} from '@/components/icons';
+import { ArrowRightIcon, CheckIcon, SparklesIcon } from '@/components/icons';
 import { CORREO_SOPORTE } from '@/components/documento-legal';
 import { Encabezado } from '@/components/landing/encabezado';
 import { Revelar } from '@/components/landing/revelar';
 import { AvisosEnVivo } from '@/components/landing/avisos-en-vivo';
 import { Carrusel, type Diapositiva } from '@/components/landing/carrusel';
+import { ComoFunciona } from '@/components/landing/como-funciona';
 import { Descarga } from '@/components/landing/descarga';
+import { Detalles } from '@/components/landing/detalles';
 import {
   MarcoCelular,
   MarcoNavegador,
@@ -203,41 +196,6 @@ const DIAPOSITIVAS: Diapositiva[] = [
   },
 ];
 
-// --- Detalles (mosaico) ---
-
-const DETALLES = [
-  {
-    icono: CameraIcon,
-    titulo: 'El celular es el escáner',
-    texto: 'Sin lector ni equipos caros: la cámara lee el código de barras.',
-    clase: 'lg:col-span-2',
-  },
-  {
-    icono: AlertIcon,
-    titulo: 'Avisos a tiempo',
-    texto: 'Stock bajo y vencimientos antes de que sean un problema.',
-    clase: '',
-  },
-  {
-    icono: ReceiptIcon,
-    titulo: 'Ticket con tus datos',
-    texto: 'RUC, razón social y dirección de tu tienda, numerado.',
-    clase: '',
-  },
-  {
-    icono: LockIcon,
-    titulo: 'Cuentas protegidas',
-    texto: 'Contraseñas seguras, bloqueo por intentos y recuperación por email.',
-    clase: '',
-  },
-  {
-    icono: ActivityIcon,
-    titulo: 'En la compu y en el celular',
-    texto: 'Lo mismo en los dos, al instante: vendés en uno y lo ves en el otro.',
-    clase: 'lg:col-span-2',
-  },
-];
-
 // --- Preguntas ---
 
 const PREGUNTAS = [
@@ -341,68 +299,19 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* Cómo funciona */}
-        <section id="como-funciona" className="landing-seccion">
-          <div className="app-container">
-            <Revelar className="landing-cabecera">
-              <p className="eyebrow">Cómo funciona</p>
-              <h2 className="landing-titulo">Empezás hoy, en tres pasos.</h2>
-            </Revelar>
-            <ol className="pasos">
-              {[
-                {
-                  titulo: 'Creá tu tienda',
-                  texto: 'Con tu email o tu cuenta de Google, en un minuto.',
-                },
-                {
-                  titulo: 'Cargá tus productos',
-                  texto: 'Escaneá el código, poné precio y costo, y registrá lo que tenés.',
-                },
-                {
-                  titulo: 'Vendé y mirá tu ganancia',
-                  texto: 'Desde la caja o el celular. Al cerrar el día, sabés cuánto te quedó.',
-                },
-              ].map((paso, i) => (
-                <li key={paso.titulo}>
-                  <Revelar retraso={i * 110} className="paso">
-                    <span className="paso-numero">{String(i + 1).padStart(2, '0')}</span>
-                    <span className="paso-linea" aria-hidden="true" />
-                    <h3 className="mt-5 font-display text-xl font-bold tracking-[-0.035em] text-tinta">
-                      {paso.titulo}
-                    </h3>
-                    <p className="mt-2 text-sm leading-6 text-tinta-suave">{paso.texto}</p>
-                  </Revelar>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </section>
+        <ComoFunciona />
 
         {/* Detalles */}
-        <section className="landing-seccion pt-0">
+        <section className="landing-seccion">
           <div className="app-container">
             <Revelar className="landing-cabecera">
               <p className="eyebrow">Los detalles</p>
               <h2 className="landing-titulo">Pensado para el mostrador.</h2>
+              <p className="landing-bajada">
+                Lo que hace que la caja ande rápido y sin errores, todos los días.
+              </p>
             </Revelar>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {DETALLES.map((d, i) => {
-                const Icono = d.icono;
-                return (
-                  <Revelar key={d.titulo} retraso={i * 70} className={d.clase}>
-                    <div className="detalle">
-                      <span className="detalle-icono">
-                        <Icono className="h-5 w-5" />
-                      </span>
-                      <h3 className="mt-5 font-display text-lg font-bold tracking-[-0.03em] text-tinta">
-                        {d.titulo}
-                      </h3>
-                      <p className="mt-1.5 text-sm leading-6 text-tinta-suave">{d.texto}</p>
-                    </div>
-                  </Revelar>
-                );
-              })}
-            </div>
+            <Detalles />
           </div>
         </section>
 

@@ -580,11 +580,60 @@
   animation-play-state: paused;
 }
 
-/* --- Cómo funciona -------------------------------------------------------- */
+/* --- Cómo funciona (como-funciona.tsx) ----------------------------------------- */
+
+/* Franja oscura de borde a borde: corta el ritmo claro de la página. */
+.pasos-banda {
+  position: relative;
+  overflow: hidden;
+  background: var(--tinta);
+  padding: 5rem 0 5.5rem;
+}
+
+@media (min-width: 1024px) {
+  .pasos-banda {
+    padding: 7rem 0;
+  }
+}
+
+.pasos-brillo {
+  position: absolute;
+  height: 26rem;
+  width: 26rem;
+  border-radius: 50%;
+  filter: blur(80px);
+}
+
+.pasos-brillo-ambar {
+  top: -12rem;
+  left: 20%;
+  background: rgba(217, 140, 43, 0.22);
+}
+
+.pasos-brillo-verde {
+  right: -8rem;
+  bottom: -14rem;
+  background: rgba(47, 111, 79, 0.3);
+}
+
+.pasos-cta {
+  min-height: 3.1rem;
+  border-radius: 0.9rem;
+  background: var(--ambar);
+  padding: 0 1.3rem;
+  color: var(--tinta);
+  font-size: 0.95rem;
+  box-shadow: 0 10px 26px rgba(217, 140, 43, 0.3);
+}
+
+.pasos-cta:hover {
+  background: #e49a3d;
+}
 
 .pasos {
+  position: relative;
   display: grid;
-  gap: 2rem;
+  gap: 2.5rem;
 }
 
 @media (min-width: 768px) {
@@ -594,41 +643,230 @@
   }
 }
 
+/* La línea que une los números: vertical en el celular, horizontal en la
+   compu. Se dibuja al aparecer, y cada número se enciende al alcanzarlo. */
+.pasos::before {
+  position: absolute;
+  top: 1.4rem;
+  bottom: 1.4rem;
+  left: 1.4rem;
+  width: 2px;
+  background: linear-gradient(var(--ambar), rgba(217, 140, 43, 0.25));
+  content: '';
+  transform: scaleY(0);
+  transform-origin: top;
+}
+
+@media (min-width: 768px) {
+  .pasos::before {
+    top: 1.4rem;
+    right: calc(33.333% - 1rem);
+    bottom: auto;
+    left: 1.4rem;
+    height: 2px;
+    width: auto;
+    background: linear-gradient(90deg, var(--ambar), rgba(217, 140, 43, 0.25));
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+}
+
+.revelar[data-visible='true'] .pasos::before {
+  transform: none;
+  transition: transform 1500ms var(--ease-deslizar) 200ms;
+}
+
+.paso {
+  position: relative;
+}
+
 .paso-numero {
-  color: var(--ambar);
+  position: relative;
+  z-index: 1;
+  display: flex;
+  height: 2.8rem;
+  width: 2.8rem;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(246, 243, 236, 0.18);
+  border-radius: 999px;
+  background: #22364a;
+  color: rgba(246, 243, 236, 0.7);
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.revelar[data-visible='true'] .paso-numero {
+  animation: encender 500ms var(--ease-salida) both;
+  animation-delay: calc(var(--i, 0) * 550ms + 250ms);
+}
+
+@keyframes encender {
+  to {
+    border-color: var(--ambar);
+    background: var(--ambar);
+    box-shadow: 0 0 0 6px rgba(217, 140, 43, 0.18);
+    color: var(--tinta);
+  }
+}
+
+.paso-cuando {
+  border-radius: 999px;
+  background: rgba(246, 243, 236, 0.08);
+  padding: 0.25rem 0.7rem;
+  color: rgba(246, 243, 236, 0.7);
   font-family: var(--font-ticket);
-  font-size: 0.85rem;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+/* Cada paso, en una tarjeta de vidrio sobre la franja oscura. */
+.paso-tarjeta {
+  margin-top: 1.25rem;
+  border: 1px solid rgba(246, 243, 236, 0.12);
+  border-radius: 1.5rem;
+  background: rgba(246, 243, 236, 0.05);
+  padding: 0.75rem 0.75rem 1.6rem;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+@media (max-width: 767px) {
+  .paso-tarjeta {
+    margin-left: 3.8rem;
+  }
+}
+
+.paso-tarjeta > h3,
+.paso-tarjeta > p {
+  padding: 0 0.85rem;
+}
+
+.revelar[data-visible='true'] .paso-tarjeta {
+  animation: entrar 700ms var(--ease-salida) both;
+  animation-delay: calc(var(--i, 0) * 550ms + 350ms);
+}
+
+.paso-escena {
+  display: flex;
+  height: 9.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(217, 140, 43, 0.25), transparent 60%),
+    rgba(246, 243, 236, 0.06);
+  padding: 1rem;
+}
+
+.paso-escena-tarjeta {
+  width: 100%;
+  max-width: 15rem;
+  border-radius: 0.9rem;
+  background: var(--superficie);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.25);
+  padding: 0.8rem 0.9rem;
+}
+
+.paso-campo {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+  border: 1px solid var(--ambar);
+  border-radius: 0.55rem;
+  box-shadow: 0 0 0 3px rgba(217, 140, 43, 0.15);
+  padding: 0.45rem 0.6rem;
+  color: var(--tinta);
+  font-size: 0.78rem;
   font-weight: 600;
 }
 
-/* La línea se dibuja después de que aparece el paso. */
-.paso-linea {
-  display: block;
-  height: 1px;
-  margin-top: 0.9rem;
-  background: linear-gradient(90deg, var(--tinta), var(--papel-linea));
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 1100ms var(--ease-salida);
-  transition-delay: calc(var(--retraso, 0ms) + 250ms);
+.paso-cursor {
+  height: 0.9rem;
+  width: 1.5px;
+  background: var(--tinta);
+  animation: parpadear 1s steps(1) infinite;
 }
 
-.revelar[data-visible='true'] .paso-linea {
-  transform: none;
+@keyframes parpadear {
+  50% {
+    opacity: 0;
+  }
 }
 
-/* --- Detalles --------------------------------------------------------------- */
+.paso-boton {
+  border-radius: 0.45rem;
+  background: var(--tinta);
+  padding: 0.25rem 0.65rem;
+  color: var(--papel);
+  font-weight: 650;
+}
+
+.paso-dato {
+  border-radius: 0.5rem;
+  background: var(--superficie-suave);
+  padding: 0.35rem 0.2rem;
+}
+
+/* --- Detalles (detalles.tsx) -------------------------------------------------- */
+
+/* Mosaico que cierra en todos los anchos (ver el dibujo en detalles.tsx). */
+.detalles {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .detalles {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .detalles-escaner,
+  .detalles-avisos {
+    grid-column: span 2;
+  }
+}
+
+@media (min-width: 1024px) {
+  .detalles {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .detalles-escaner {
+    grid-column: span 2;
+  }
+
+  .detalles-avisos {
+    grid-column: 3;
+    grid-row: span 2;
+  }
+}
+
+.detalles > .revelar {
+  display: flex;
+}
 
 .detalle {
-  height: 100%;
+  display: flex;
+  width: 100%;
+  flex-direction: column;
   border: 1px solid var(--papel-linea);
-  border-radius: 1.4rem;
-  background: color-mix(in srgb, var(--superficie) 88%, transparent);
-  padding: 1.5rem;
+  border-radius: 1.6rem;
+  background: color-mix(in srgb, var(--superficie) 90%, transparent);
+  padding: 0.75rem 0.75rem 1.6rem;
   transition:
-    transform 260ms var(--ease-salida),
-    box-shadow 260ms var(--ease-salida),
+    transform 280ms var(--ease-salida),
+    box-shadow 280ms var(--ease-salida),
     border-color 200ms ease;
+}
+
+.detalle > h3,
+.detalle > p {
+  padding: 0 0.85rem;
 }
 
 .detalle:hover {
@@ -637,15 +875,173 @@
   box-shadow: var(--sombra);
 }
 
-.detalle-icono {
+/* La escena de cada tarjeta: mismo fondo que las del carrusel. */
+.detalle-escena {
+  position: relative;
   display: flex;
-  height: 2.6rem;
-  width: 2.6rem;
+  height: 12.5rem;
+  overflow: hidden;
+  border: 1px solid var(--papel-linea);
+  border-radius: 1.1rem;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(217, 140, 43, 0.14), transparent 55%),
+    radial-gradient(circle at 90% 95%, rgba(47, 111, 79, 0.1), transparent 55%),
+    var(--superficie-suave);
+}
+
+/* La de los avisos mide lo que su lista (no la corta) y, en la compu,
+   crece con la tarjeta, que ocupa dos filas. */
+.detalles-avisos .detalle-escena {
+  height: auto;
+  min-height: 12.5rem;
+}
+
+@media (min-width: 1024px) {
+  .detalles-avisos .detalle-escena {
+    flex: 1;
+  }
+}
+
+/* Punto que late: hay avisos nuevos. */
+.punto-vivo {
+  position: relative;
+  height: 0.5rem;
+  width: 0.5rem;
+  border-radius: 999px;
+  background: var(--ambar);
+}
+
+.punto-vivo::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: inherit;
+  content: '';
+  animation: onda 2.2s var(--ease-salida) infinite;
+}
+
+@keyframes onda {
+  to {
+    opacity: 0;
+    transform: scale(3);
+  }
+}
+
+/* Visor de cámara: esquinas, código y la línea que lo recorre. */
+.visor {
+  position: relative;
+  display: flex;
+  height: 8.5rem;
+  width: 12.5rem;
+  flex: none;
   align-items: center;
   justify-content: center;
-  border-radius: 0.85rem;
-  background: var(--tinta);
-  color: var(--ambar);
+  border-radius: 1rem;
+  background: #1c2b3a;
+  box-shadow: 0 18px 36px rgba(28, 43, 58, 0.25);
+}
+
+.visor-esquinas {
+  position: absolute;
+  inset: 0.9rem;
+  background:
+    linear-gradient(var(--ambar), var(--ambar)) top left / 1.1rem 2px,
+    linear-gradient(var(--ambar), var(--ambar)) top left / 2px 1.1rem,
+    linear-gradient(var(--ambar), var(--ambar)) top right / 1.1rem 2px,
+    linear-gradient(var(--ambar), var(--ambar)) top right / 2px 1.1rem,
+    linear-gradient(var(--ambar), var(--ambar)) bottom left / 1.1rem 2px,
+    linear-gradient(var(--ambar), var(--ambar)) bottom left / 2px 1.1rem,
+    linear-gradient(var(--ambar), var(--ambar)) bottom right / 1.1rem 2px,
+    linear-gradient(var(--ambar), var(--ambar)) bottom right / 2px 1.1rem;
+  background-repeat: no-repeat;
+}
+
+.visor-codigo {
+  height: 3rem;
+  max-width: 8.5rem;
+}
+
+.visor-linea {
+  position: absolute;
+  top: 1.4rem;
+  bottom: 1.4rem;
+  left: 1.6rem;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--ambar);
+  box-shadow: 0 0 12px 2px rgba(217, 140, 43, 0.7);
+  animation: visor-recorrer 2.4s var(--ease-deslizar) infinite alternate;
+}
+
+@keyframes visor-recorrer {
+  to {
+    left: calc(100% - 1.6rem);
+  }
+}
+
+.aviso-detalle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border: 1px solid var(--papel-linea);
+  border-radius: 0.9rem;
+  background: var(--superficie);
+  box-shadow: 0 8px 20px rgba(28, 43, 58, 0.06);
+  padding: 0.5rem 0.75rem 0.5rem 0.5rem;
+}
+
+/* El ticket asoma desde abajo, como recién impreso, con el borde dentado. */
+.ticket-mini {
+  width: 12.5rem;
+  margin-bottom: -0.2rem;
+  background: white;
+  box-shadow: 0 -6px 24px rgba(28, 43, 58, 0.1);
+  padding: 0.85rem 0.9rem 1.1rem;
+  color: var(--tinta-suave);
+  font-family: var(--font-ticket);
+  font-size: 0.62rem;
+  line-height: 1.7;
+  /* Borde dentado: triángulos abajo y el resto macizo. */
+  --dientes:
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 90deg, #0000 91deg) bottom / 0.6rem
+      0.4rem repeat-x,
+    linear-gradient(#000 0 0) top / 100% calc(100% - 0.35rem) no-repeat;
+  -webkit-mask: var(--dientes);
+  mask: var(--dientes);
+}
+
+.revelar[data-visible='true'] .ticket-mini {
+  animation: imprimir 1100ms var(--ease-deslizar) 250ms both;
+}
+
+@keyframes imprimir {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+.clave-campo {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border: 1px solid var(--papel-linea);
+  border-radius: 0.8rem;
+  background: var(--superficie);
+  padding: 0.65rem 0.8rem;
+}
+
+.clave-barra {
+  display: block;
+  height: 0.3rem;
+  flex: 1;
+  border-radius: 999px;
+  background: var(--verde-ganancia);
+  transform-origin: left;
+}
+
+.revelar[data-visible='true'] .clave-barra {
+  animation: crecer-horizontal 500ms var(--ease-salida) both;
+  animation-delay: calc(var(--i, 0) * 110ms + 350ms);
 }
 
 /* --- Descargar ------------------------------------------------------------- */
