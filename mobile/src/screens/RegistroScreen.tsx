@@ -74,9 +74,9 @@ export function RegistroScreen({ navigation }: Props) {
 
   return (
     <AuthFrame
-      eyebrow="Empezá hoy"
-      titulo="Creá tu espacio"
-      descripcion="Configurá tu tienda en minutos. Vas a quedar como administrador para empezar a operar."
+      eyebrow="Empieza hoy"
+      titulo="Crea tu espacio"
+      descripcion="Configura tu tienda en minutos. Vas a quedar como administrador para empezar a operar."
       icono="sparkles-outline"
       footer={
         <Boton variante="ghost" onPress={() => navigation.navigate('Login')}>
@@ -168,7 +168,7 @@ export function RegistroScreen({ navigation }: Props) {
             .
           </Text>
         </View>
-        <AvisoDeCampo error={faltaAceptar ? 'Para crear tu cuenta tenés que aceptarlos.' : null} />
+        <AvisoDeCampo error={faltaAceptar ? 'Para crear tu cuenta tienes que aceptarlos.' : null} />
 
         {error && (
           <View style={styles.error}>

@@ -113,7 +113,7 @@ function FormularioNuevaPersona({ onCreado }: { onCreado: (u: UsuarioEquipo) => 
         onChangeText={setPassword}
         onBlur={salir('password')}
         style={[estilosCampo.input, errores.password && estilosCampo.inputInvalido]}
-        placeholder="Pasásela a la persona"
+        placeholder="Pásasela a la persona"
         autoCapitalize="none"
         autoCorrect={false}
       />
@@ -136,7 +136,7 @@ function FormularioNuevaPersona({ onCreado }: { onCreado: (u: UsuarioEquipo) => 
       <Text style={styles.ayuda}>
         {rol === 'cajero'
           ? 'Vende y consulta productos. No ve ganancias ni inventario.'
-          : 'Acceso completo, igual que vos.'}
+          : 'Acceso completo, igual que tú.'}
       </Text>
 
       {error && <Text style={styles.error}>{error}</Text>}
@@ -181,7 +181,7 @@ function FilaPersona({
         <View style={{ flex: 1 }}>
           <Text style={styles.filaNombre} numberOfLines={1}>
             {persona.nombre}
-            {esVos ? ' (vos)' : ''}
+            {esVos ? ' (tú)' : ''}
           </Text>
           <Text style={styles.filaEmail} numberOfLines={1}>
             {persona.email}
@@ -461,8 +461,8 @@ export function EquipoScreen() {
           descripcion={
             // Cambiarla cierra las sesiones de esa persona, también la propia.
             cambiandoPassword.id === usuario?.sub
-              ? 'Es la tuya: al guardarla se cierra tu sesión y entrás de nuevo con la nueva.'
-              : `De ${cambiandoPassword.nombre}. Pasásela en persona: la vieja deja de servir y se cierran sus sesiones.`
+              ? 'Es la tuya: al guardarla se cierra tu sesión y entras de nuevo con la nueva.'
+              : `De ${cambiandoPassword.nombre}. Pásasela en persona: la vieja deja de servir y se cierran sus sesiones.`
           }
           icono="key-outline"
           onCerrar={() => setCambiandoPassword(null)}

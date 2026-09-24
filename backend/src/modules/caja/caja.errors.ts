@@ -6,13 +6,13 @@ import {
 
 export class CajaCerradaError extends ConflictException {
   constructor() {
-    super('Abrí la caja antes de cobrar: indicá con cuánto cambio empezás.');
+    super('Abre la caja antes de cobrar: indica con cuánto cambio empiezas.');
   }
 }
 
 export class CajaYaAbiertaError extends ConflictException {
   constructor() {
-    super('Ya tenés la caja abierta: cerrala antes de abrir otra.');
+    super('Ya tienes la caja abierta: ciérrala antes de abrir otra.');
   }
 }
 
@@ -31,7 +31,7 @@ export class TurnoYaCerradoError extends ConflictException {
 export class DevolucionSinCajaError extends BadRequestException {
   constructor() {
     super(
-      'Esta venta es de un turno de caja que ya se cerró (su efectivo ya se contó). Para devolver la plata, abrí tu caja: la devolución sale de ahí como retiro.',
+      'Esta venta es de un turno de caja que ya se cerró (su efectivo ya se contó). Para devolver el dinero, abre tu caja: la devolución sale de ahí como retiro.',
     );
   }
 }

@@ -43,7 +43,7 @@ export type { TokenPair };
 // ventana se acepta; después, un token viejo es señal de que lo copiaron.
 const VENTANA_REUSO_MS = 60_000;
 
-const SESION_VENCIDA = 'Sesión vencida, iniciá sesión de nuevo';
+const SESION_VENCIDA = 'Sesión vencida, inicia sesión de nuevo';
 
 // --- Autenticación segura (ISO/IEC 27002:2022, 5.17 y 8.5) ---
 
@@ -63,7 +63,7 @@ const MINUTOS_DE_BLOQUEO = 15;
 const MINUTOS_ENLACE_RECUPERACION = 30;
 const PEDIDOS_DE_RECUPERACION_POR_HORA = 3;
 const ENLACE_INVALIDO =
-  'El enlace para cambiar la contraseña venció o ya se usó. Pedí uno nuevo.';
+  'El enlace para cambiar la contraseña venció o ya se usó. Pide uno nuevo.';
 
 // bcrypt con costo 12 (unos 250 ms por intento): caro para quien prueba
 // millones, imperceptible para quien entra una vez.
@@ -244,7 +244,7 @@ export class AuthService {
     );
     return `Por seguridad bloqueamos el ingreso por ${minutos} minuto${
       minutos === 1 ? '' : 's'
-    } después de varios intentos fallidos. Probá de nuevo después o cambiá tu contraseña con "¿Olvidaste tu contraseña?".`;
+    } después de varios intentos fallidos. Prueba de nuevo después o cambia tu contraseña con "¿Olvidaste tu contraseña?".`;
   }
 
   // --- Recuperar la contraseña ---
@@ -591,7 +591,7 @@ export class AuthService {
     if (!tokens) {
       throw new UnauthorizedException(
         revocadaPorReuso
-          ? 'Por seguridad cerramos tu sesión: iniciá sesión de nuevo'
+          ? 'Por seguridad cerramos tu sesión: inicia sesión de nuevo'
           : SESION_VENCIDA,
       );
     }

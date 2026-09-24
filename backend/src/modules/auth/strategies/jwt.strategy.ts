@@ -39,7 +39,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   // robado) el accessToken deja de servir en el acto, no 15 min después.
   async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
     if (!payload.sid) {
-      throw new UnauthorizedException('Sesión vencida, iniciá sesión de nuevo');
+      throw new UnauthorizedException('Sesión vencida, inicia sesión de nuevo');
     }
     const [usuario, sesionViva] = await Promise.all([
       this.usuarioRepo.findOne({
@@ -59,7 +59,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Tu usuario fue desactivado');
     }
     if (!sesionViva) {
-      throw new UnauthorizedException('Sesión cerrada, iniciá sesión de nuevo');
+      throw new UnauthorizedException('Sesión cerrada, inicia sesión de nuevo');
     }
 
     return {

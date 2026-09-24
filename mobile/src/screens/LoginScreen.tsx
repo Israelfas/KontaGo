@@ -58,7 +58,7 @@ export function LoginScreen({ navigation }: Props) {
       // pasos extra para crear la cuenta. Antes esto no decía nada y la
       // pantalla se quedaba como si el botón no hubiera hecho nada.
       if (!createdSessionId || !setActive) {
-        setError('No se completó el ingreso con Google. Probá de nuevo o entrá con tu email.');
+        setError('No se completó el ingreso con Google. Prueba de nuevo o entra con tu email.');
         return;
       }
       await setActive({ session: createdSessionId });
@@ -81,11 +81,11 @@ export function LoginScreen({ navigation }: Props) {
     <AuthFrame
       eyebrow="Bienvenido de vuelta"
       titulo="Tu tienda, bajo control"
-      descripcion="Entrá para cobrar, revisar tu inventario y cerrar el día desde un solo lugar."
+      descripcion="Entra para cobrar, revisar tu inventario y cerrar el día desde un solo lugar."
       icono="shield-checkmark-outline"
       footer={
         <Boton variante="ghost" onPress={() => navigation.navigate('Registro')}>
-          ¿No tenés cuenta? Registrá tu tienda
+          ¿No tienes cuenta? Registra tu tienda
         </Boton>
       }
     >

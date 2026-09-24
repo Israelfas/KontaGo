@@ -88,7 +88,7 @@ export function diasDelPeriodo(desde: string, hasta: string): number {
 
 /** Por qué un rango elegido a mano no sirve, o null si está bien. */
 export function problemaDelRango(desde: string, hasta: string): string | null {
-  if (!desde || !hasta) return 'Elegí las dos fechas.';
+  if (!desde || !hasta) return 'Elige las dos fechas.';
   if (desde > hasta) return 'La fecha de inicio tiene que ser anterior a la de fin.';
   if (hasta > hoyISO()) return 'Todavía no hay ventas de días que no llegaron.';
   if (diasDelPeriodo(desde, hasta) > DIAS_MAXIMOS_PERIODO)

@@ -79,7 +79,7 @@ export function ActividadDeLaCuenta({
           {alertasRecientes === 1
             ? 'Hubo un intento fallido'
             : `Hubo ${alertasRecientes} intentos fallidos`}{' '}
-          en la última semana. Si no fue {esVos ? 'vos' : persona.nombre}, conviene cambiar la
+          en la última semana. Si no {esVos ? 'fuiste tú' : `fue ${persona.nombre}`}, conviene cambiar la
           contraseña.
         </Text>
       )}

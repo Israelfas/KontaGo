@@ -93,7 +93,7 @@ function FormularioProductoNuevo({
       <Text style={styles.formularioNuevoTitulo}>Producto nuevo</Text>
       <Text style={styles.formularioNuevoCodigo}>{codigoBarras}</Text>
       <Text style={styles.formularioNuevoSubtitulo}>
-        Ese código no está en tu catálogo. Cargalo y se agrega a la venta al instante.
+        Ese código no está en tu catálogo. Cárgalo y se agrega a la venta al instante.
       </Text>
 
       <Etiqueta>Nombre</Etiqueta>
@@ -222,7 +222,7 @@ export function VentaScreen() {
           setCodigoNoEncontrado(codigo.trim());
         } else {
           setErrorBusqueda(
-            `El código ${codigo.trim()} no está en el catálogo. Pedile al administrador que lo cargue.`,
+            `El código ${codigo.trim()} no está en el catálogo. Pídele al administrador que lo cargue.`,
           );
         }
         return;
@@ -361,7 +361,7 @@ export function VentaScreen() {
         <Banda
           eyebrow="Caja"
           titulo="Vender"
-          detalle={caja === null ? 'Tu caja está cerrada. Abrila para empezar a cobrar.' : undefined}
+          detalle={caja === null ? 'Tu caja está cerrada. Ábrela para empezar a cobrar.' : undefined}
         />
         <LabioHoja />
         <View style={{ paddingHorizontal: espaciado.lg }}>
@@ -381,7 +381,7 @@ export function VentaScreen() {
         valor={formatearCentavos(totalCentavos)}
         detalle={
           carrito.length === 0
-            ? 'Escaneá un producto para empezar el ticket.'
+            ? 'Escanea un producto para empezar el ticket.'
             : `Total a cobrar · ${carrito.reduce((acc, i) => acc + i.cantidad, 0)} unidad${
                 carrito.reduce((acc, i) => acc + i.cantidad, 0) === 1 ? '' : 'es'
               }`
@@ -425,7 +425,7 @@ export function VentaScreen() {
 
           <View style={styles.separadorO}>
             <View style={styles.separadorLinea} />
-            <Text style={styles.separadorTexto}>o tipeá el código</Text>
+            <Text style={styles.separadorTexto}>o escribe el código</Text>
             <View style={styles.separadorLinea} />
           </View>
 
@@ -490,7 +490,7 @@ export function VentaScreen() {
 
         {!efectivo && (
           <Text style={styles.avisoTransferencia}>
-            Confirmá en el celular que llegó la transferencia de {formatearCentavos(totalCentavos)} antes de
+            Confirma en el celular que llegó la transferencia de {formatearCentavos(totalCentavos)} antes de
             entregar. No entra al cajón.
           </Text>
         )}
@@ -611,7 +611,7 @@ export function VentaScreen() {
             <EstadoVacio
               icono="cart-outline"
               titulo="El carrito está vacío"
-              descripcion="Escaneá o tipeá un código para empezar."
+              descripcion="Escanea o escribe un código para empezar."
             />
           }
           renderItem={({ item }) => (

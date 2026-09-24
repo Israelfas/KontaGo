@@ -20,18 +20,18 @@ export function TerminosScreen() {
         <Text style={styles.seccionTitulo}>1. Sobre KontaGo</Text>
         <Text style={styles.parrafo}>
           KontaGo es una herramienta de gestión de inventario y punto de venta pensada
-          para pequeños negocios. Al usarla, aceptás estos términos.
+          para pequeños negocios. Al usarla, aceptas estos términos.
         </Text>
 
         <Text style={styles.seccionTitulo}>2. Tu cuenta</Text>
         <Text style={styles.parrafo}>
-          Sos responsable de mantener segura tu contraseña y de la actividad que
-          ocurra dentro de tu cuenta. Avisanos si sospechás un uso no autorizado.
+          Eres responsable de mantener segura tu contraseña y de la actividad que
+          ocurra dentro de tu cuenta. Avísanos si sospechas un uso no autorizado.
         </Text>
 
         <Text style={styles.seccionTitulo}>3. Tus datos</Text>
         <Text style={styles.parrafo}>
-          Los datos que cargás (productos, ventas, inventario) son tuyos. Los usamos
+          Los datos que cargas (productos, ventas, inventario) son tuyos. Los usamos
           únicamente para operar el servicio, no los vendemos a terceros.
         </Text>
 

@@ -33,13 +33,13 @@ export function correoRecuperacion(
   minutos: number,
 ) {
   return {
-    asunto: 'Cambiá tu contraseña de KontaGo',
+    asunto: 'Cambia tu contraseña de KontaGo',
     html: plantilla(
-      'Cambiá tu contraseña',
-      `<p style="margin:0 0 16px">Hola ${escapar(nombre)}: alguien (seguramente vos) pidió cambiar la contraseña de tu cuenta.</p>
+      'Cambia tu contraseña',
+      `<p style="margin:0 0 16px">Hola ${escapar(nombre)}: alguien (seguramente tú) pidió cambiar la contraseña de tu cuenta.</p>
        <p style="margin:0 0 24px"><a href="${escapar(enlace)}" style="display:inline-block;background:#1c2b3a;color:#f6f3ec;text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:10px">Elegir una contraseña nueva</a></p>
        <p style="margin:0 0 8px;font-size:13px;color:#4c5c6b">El enlace sirve una sola vez y durante ${minutos} minutos.</p>
-       <p style="margin:0;font-size:13px;color:#4c5c6b">Si no fuiste vos, ignorá este email: tu contraseña sigue siendo la misma.</p>`,
+       <p style="margin:0;font-size:13px;color:#4c5c6b">Si no fuiste tú, ignora este email: tu contraseña sigue siendo la misma.</p>`,
     ),
   };
 }
@@ -55,7 +55,7 @@ export function correoPasswordCambiada(nombre: string, cuando: Date) {
     html: plantilla(
       'Tu contraseña cambió',
       `<p style="margin:0 0 16px">Hola ${escapar(nombre)}: la contraseña de tu cuenta se cambió el ${escapar(fecha)}. Por seguridad, cerramos tu sesión en todos los dispositivos.</p>
-       <p style="margin:0;font-size:13px;color:#4c5c6b">Si no fuiste vos, pedí una contraseña nueva desde "¿Olvidaste tu contraseña?" y avisale al administrador de tu tienda.</p>`,
+       <p style="margin:0;font-size:13px;color:#4c5c6b">Si no fuiste tú, pide una contraseña nueva desde "¿Olvidaste tu contraseña?" y avísale al administrador de tu tienda.</p>`,
     ),
   };
 }

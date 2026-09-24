@@ -45,7 +45,7 @@ function traducir(regla: string, campo: string, original: string): string {
   const nombre = NOMBRES[campo] ?? `El campo "${campo}"`;
   switch (regla) {
     case 'isEmail':
-      return 'Revisá el email: no tiene un formato válido.';
+      return 'Revisa el email: no tiene un formato válido.';
     case 'isNotEmpty':
     case 'isDefined':
       return faltaEl(nombre);

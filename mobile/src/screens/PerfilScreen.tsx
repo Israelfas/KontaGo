@@ -79,7 +79,7 @@ export function PerfilScreen() {
             } catch (err) {
               Alert.alert(
                 'No se pudo',
-                err instanceof ApiError ? err.message : 'Revisá tu conexión y probá de nuevo.',
+                err instanceof ApiError ? err.message : 'Revisa tu conexión y prueba de nuevo.',
               );
             }
           },
@@ -89,7 +89,7 @@ export function PerfilScreen() {
   }
 
   function confirmarCierreSesion() {
-    Alert.alert('Cerrar sesión', '¿Querés cerrar sesión?', [
+    Alert.alert('Cerrar sesión', '¿Quieres cerrar sesión?', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Cerrar sesión', style: 'destructive', onPress: () => cerrarSesion() },
     ]);

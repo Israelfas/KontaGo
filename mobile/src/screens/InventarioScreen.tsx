@@ -131,7 +131,7 @@ function FormularioAbastecimiento({
       <AvisoDeCampo
         advertencia={
           avisoCosto && elegido
-            ? `Hoy lo vendés a ${formatearCentavos(elegido.precioVentaCentavos)}. ${avisoCosto}`
+            ? `Hoy lo vendes a ${formatearCentavos(elegido.precioVentaCentavos)}. ${avisoCosto}`
             : null
         }
       />
@@ -161,7 +161,7 @@ function FormularioAbastecimiento({
       <Text style={styles.ayuda}>
         {elegido?.lotes && elegido.lotes.length > 0
           ? `Hoy hay ${resumenDeLotes(elegido)}. Si esta mercadería trae otra fecha, queda como un lote aparte.`
-          : 'Dejalo vacío si el producto no vence.'}
+          : 'Déjalo vacío si el producto no vence.'}
       </Text>
 
       {error && <Text style={styles.error}>{error}</Text>}
@@ -338,7 +338,7 @@ function SeccionAlertas({
     <View style={{ gap: espaciado.md }}>
       {vencidos.length > 0 && (
         <View style={styles.alertaBloque}>
-          <Text style={[styles.alertaTitulo, { color: colores.rojoPerdida }]}>Vencidos en la góndola</Text>
+          <Text style={[styles.alertaTitulo, { color: colores.rojoPerdida }]}>Vencidos en el estante</Text>
           {vencidos.map(({ p, lote }) => (
             <View key={lote.id} style={styles.alertaFila}>
               <View style={{ flex: 1 }}>
@@ -504,7 +504,7 @@ function EditorLotes({
         {diferencia > 0 ? ` · sobran ${diferencia}` : ''}
         {diferencia < 0 ? ` · faltan ${-diferencia}` : ''}.
         {diferencia !== 0
-          ? ' Si en la góndola hay otra cantidad, registrá la diferencia como merma o abastecimiento.'
+          ? ' Si en el estante hay otra cantidad, registra la diferencia como merma o abastecimiento.'
           : ''}
       </Text>
       {!fechasValidas && <Text style={styles.error}>Hay una fecha que no existe.</Text>}
@@ -770,7 +770,7 @@ export function InventarioScreen() {
         {!cargando && !error && esAdmin && productos.length === 0 && (
           <EstadoVacio
             titulo="Todavía no hay productos"
-            descripcion="Agregá alguno en Productos antes de registrar movimientos."
+            descripcion="Agrega alguno en Productos antes de registrar movimientos."
           />
         )}
 

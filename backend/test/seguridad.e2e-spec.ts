@@ -50,7 +50,7 @@ describe('Seguridad de acceso (ISO/IEC 27002: 5.17, 8.5, 8.15)', () => {
       const res = await cliente(app)
         .post('/auth/login', { email: 'no-es-email', password: 'x' })
         .expect(400);
-      expect(mensaje(res)).toContain('Revisá el email');
+      expect(mensaje(res)).toContain('Revisa el email');
       expect(mensaje(res)).not.toMatch(/must be/);
     });
 

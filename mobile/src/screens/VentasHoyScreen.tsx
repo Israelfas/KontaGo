@@ -420,9 +420,9 @@ export function VentasHoyScreen() {
             <LabioHoja />
             <Text style={[styles.descripcion, styles.fila]}>
               {!esAdmin
-                ? 'Si hay que anular una venta, avisale al administrador.'
+                ? 'Si hay que anular una venta, avísale al administrador.'
                 : hoy
-                  ? 'Podés anular una venta completa o solo algunos productos; el stock vuelve al inventario.'
+                  ? 'Puedes anular una venta completa o solo algunos productos; el stock vuelve al inventario.'
                   : 'Las ventas se pueden anular solo el mismo día en que se hicieron.'}
             </Text>
           </View>
@@ -439,8 +439,8 @@ export function VentasHoyScreen() {
                 titulo={hoy ? 'Todavía no hay ventas hoy' : 'No hubo ventas en estas fechas'}
                 descripcion={
                   hoy
-                    ? 'Las ventas que se registren en la caja van a aparecer acá.'
-                    : 'Probá con otro período.'
+                    ? 'Las ventas que se registren en la caja van a aparecer aquí.'
+                    : 'Prueba con otro período.'
                 }
               />
             )}
@@ -454,7 +454,7 @@ export function VentasHoyScreen() {
               ) : (
                 <Text style={styles.pieTexto}>
                   {ventas.length < total
-                    ? `Mostrando ${ventas.length} de ${total} · deslizá para ver más`
+                    ? `Mostrando ${ventas.length} de ${total} · desliza para ver más`
                     : `${total} venta${total === 1 ? '' : 's'}`}
                 </Text>
               )}

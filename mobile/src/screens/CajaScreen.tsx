@@ -119,7 +119,7 @@ function TarjetaTurno({
       {cerrando && (
         <HojaModal
           titulo={`Cerrar la caja de ${turno.cajero}`}
-          descripcion="Contá todo el efectivo del cajón, incluido el cambio con el que abrió."
+          descripcion="Cuenta todo el efectivo del cajón, incluido el cambio con el que abrió."
           icono="cash-outline"
           onCerrar={() => setCerrando(false)}
         >
@@ -243,8 +243,8 @@ export function CajaScreen() {
                 ? `Efectivo que debería haber · empezaste con ${formatearCentavos(turno!.fondoInicialCentavos)}.`
                 : `Empezaste con ${formatearCentavos(turno!.fondoInicialCentavos)}. Lo que debería haber lo ves al cerrar.`
               : cierre
-                ? 'Caja cerrada. Abrí otra cuando vuelvas a vender.'
-                : 'Abrí la caja con el cambio del cajón para empezar a vender.'
+                ? 'Caja cerrada. Abre otra cuando vuelvas a vender.'
+                : 'Abre la caja con el cambio del cajón para empezar a vender.'
           }
         />
         <Hoja style={styles.hoja}>
@@ -303,7 +303,7 @@ export function CajaScreen() {
                 <Text style={styles.seccion}>Movimientos de efectivo</Text>
                 {turno!.movimientos.length === 0 && (
                   <Text style={styles.ayuda}>
-                    Si pagás algo con plata del cajón o traés más cambio, registralo acá para que la caja cuadre.
+                    Si pagas algo con dinero del cajón o traes más cambio, regístralo aquí para que la caja cuadre.
                   </Text>
                 )}
                 <ListaMovimientos movimientos={turno!.movimientos} />
@@ -336,7 +336,7 @@ export function CajaScreen() {
       {accion === 'cerrar' && (
         <HojaModal
           titulo="Cerrar la caja"
-          descripcion="Contá todo el efectivo del cajón, incluido el cambio con el que abriste. Después de cerrar vas a ver si cuadra."
+          descripcion="Cuenta todo el efectivo del cajón, incluido el cambio con el que abriste. Después de cerrar vas a ver si cuadra."
           icono="lock-closed-outline"
           onCerrar={() => setAccion(null)}
         >

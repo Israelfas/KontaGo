@@ -134,7 +134,7 @@ export class UsuariosService {
     // Si el admin se desactivara a sí mismo, la tienda podría quedar sin
     // nadie que pueda administrarla.
     if (id === usuarioActualId) {
-      throw new BadRequestException('No podés desactivar tu propia cuenta');
+      throw new BadRequestException('No puedes desactivar tu propia cuenta');
     }
     const usuario = await this.buscar(tenantId, id);
     usuario.activo = false;

@@ -75,7 +75,7 @@ export function SelectorProducto({
               <Text style={styles.campoDetalle}>Stock actual: {seleccionado.stock}</Text>
             </>
           ) : (
-            <Text style={styles.campoPlaceholder}>Elegí un producto…</Text>
+            <Text style={styles.campoPlaceholder}>Elige un producto…</Text>
           )}
         </View>
         <Ionicons name="search" size={18} color={colores.tintaSuave} />
@@ -89,7 +89,7 @@ export function SelectorProducto({
       >
         <SafeAreaView style={styles.modal} edges={['top', 'bottom']}>
           <View style={styles.modalCabecera}>
-            <Text style={styles.modalTitulo}>Elegí un producto</Text>
+            <Text style={styles.modalTitulo}>Elige un producto</Text>
             <Pressable onPress={() => setAbierto(false)} hitSlop={10}>
               <Ionicons name="close" size={24} color={colores.tinta} />
             </Pressable>
@@ -109,7 +109,7 @@ export function SelectorProducto({
                   setBusqueda(t);
                   setAviso(null);
                 }}
-                placeholder="Buscá por nombre o código"
+                placeholder="Busca por nombre o código"
                 autoFocus
                 autoCorrect={false}
                 style={[estilosCampo.input, { flex: 1, marginBottom: 0 }]}

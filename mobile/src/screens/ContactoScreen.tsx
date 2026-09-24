@@ -42,7 +42,7 @@ export function ContactoScreen() {
         <View style={styles.avisoContenedor}>
           <Ionicons name="chatbubble-ellipses-outline" size={18} color={colores.ambar} />
           <Text style={styles.avisoTexto}>
-            ¿Algo no funciona o tenés una duda? Escribinos y te respondemos lo antes posible.
+            ¿Algo no funciona o tienes una duda? Escríbenos y te respondemos lo antes posible.
           </Text>
         </View>
 

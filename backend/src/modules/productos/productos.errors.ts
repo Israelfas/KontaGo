@@ -11,7 +11,7 @@ export class CodigoBarrasDuplicadoError extends ConflictException {
 export class CodigoBarrasEnUsoAlReactivarError extends ConflictException {
   constructor(codigoBarras: string) {
     super(
-      `No se puede reactivar: ya hay otro producto activo con el código de barras "${codigoBarras}". Dalo de baja primero si querés volver a usar este.`,
+      `No se puede reactivar: ya hay otro producto activo con el código de barras "${codigoBarras}". Dalo de baja primero si quieres volver a usar este.`,
     );
   }
 }
@@ -19,7 +19,7 @@ export class CodigoBarrasEnUsoAlReactivarError extends ConflictException {
 export class VariosLotesError extends BadRequestException {
   constructor(cantidadLotes: number) {
     super(
-      `Este producto tiene ${cantidadLotes} lotes con distinta fecha de vencimiento: corregilos desde Inventario → Lotes.`,
+      `Este producto tiene ${cantidadLotes} lotes con distinta fecha de vencimiento: corrígelos desde Inventario → Lotes.`,
     );
   }
 }

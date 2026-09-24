@@ -34,7 +34,7 @@ export class RegistroDto {
   // los términos y la política de privacidad no se crea la cuenta.
   @Equals(true, {
     message:
-      'Para crear tu cuenta tenés que aceptar los términos y la política de privacidad.',
+      'Para crear tu cuenta tienes que aceptar los términos y la política de privacidad.',
   })
   aceptaTerminos!: boolean;
 }

@@ -218,7 +218,7 @@ function diaA(hace, horas, minutos = 0) {
 try {
   await api('/health');
 } catch {
-  console.error(`No responde el backend en ${API}. Levantalo con "npm run start:dev" y volvé a correr esto.`);
+  console.error(`No responde el backend en ${API}. Levántalo con "npm run start:dev" y vuelve a correr esto.`);
   process.exit(1);
 }
 await db.connect();

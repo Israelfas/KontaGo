@@ -305,7 +305,7 @@ function FormularioNuevoProducto({ onCreado }: { onCreado: (p: Producto) => void
         onChangeText={(t) => setFechaVencimiento(escribirFecha(t))}
         editable={!sinStockInicial}
         style={[estilosCampo.input, sinStockInicial && { opacity: 0.5 }]}
-        placeholder={sinStockInicial ? 'Primero cargá el stock inicial' : 'AAAA-MM-DD'}
+        placeholder={sinStockInicial ? 'Primero carga el stock inicial' : 'AAAA-MM-DD'}
         keyboardType="number-pad"
         maxLength={10}
       />
@@ -472,7 +472,7 @@ function FormularioEditarProducto({
         <View style={styles.confirmacionBaja}>
           <Text style={styles.confirmacionTexto}>
             <Text style={{ fontWeight: '700' }}>{producto.nombre}</Text> dejará de aparecer en el
-            catálogo y no se podrá vender. Sus ventas pasadas se conservan, y podés reactivarlo
+            catálogo y no se podrá vender. Sus ventas pasadas se conservan, y puedes reactivarlo
             después.
           </Text>
           <View style={{ flexDirection: 'row', gap: espaciado.sm }}>
@@ -770,13 +770,13 @@ export function ProductosScreen() {
             <EstadoVacio
               icono="search-outline"
               titulo="Ningún producto coincide"
-              descripcion="Probá con otro nombre o código, o quitá el filtro."
+              descripcion="Prueba con otro nombre o código, o quita el filtro."
             />
           ) : !cargando && !error ? (
             <EstadoVacio
               icono="cube-outline"
               titulo="Todavía no hay productos"
-              descripcion='Usá "+ Nuevo" para empezar a cargar tu catálogo.'
+              descripcion='Usa "+ Nuevo" para empezar a cargar tu catálogo.'
             />
           ) : null
         }

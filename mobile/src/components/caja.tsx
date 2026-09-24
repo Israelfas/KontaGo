@@ -60,7 +60,7 @@ export function FormularioAbrirCaja({ onAbierta }: { onAbierta: (t: TurnoCaja) =
     <Tarjeta>
       <Text style={styles.titulo}>Abrir la caja</Text>
       <Text style={styles.ayuda}>
-        Contá el cambio que hay en el cajón antes de empezar. Al cerrar, se compara con lo que haya
+        Cuenta el cambio que hay en el cajón antes de empezar. Al cerrar, se compara con lo que haya
         al final.
       </Text>
       <Etiqueta>Cambio inicial</Etiqueta>

@@ -47,7 +47,7 @@ function parseTrustProxy(valor: string | undefined): number | string | false {
   if (limpio === 'true') {
     throw new Error(
       'TRUST_PROXY=true es inseguro (permite falsificar la IP y saltarse el límite de intentos). ' +
-        'Usá la cantidad de proxies delante del backend, ej. TRUST_PROXY=1',
+        'Usa la cantidad de proxies delante del backend, ej. TRUST_PROXY=1',
     );
   }
   return limpio;

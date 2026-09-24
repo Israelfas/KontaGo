@@ -71,7 +71,7 @@ export function problemaDePassword(
     return `La contraseña puede tener hasta ${LARGO_MAXIMO_PASSWORD} caracteres.`;
   const normalizada = password.trim().toLowerCase();
   if (MAS_USADAS.has(normalizada) || /^(.)\1+$/.test(normalizada))
-    return 'Esa contraseña es de las más usadas: elegí otra.';
+    return 'Esa contraseña es de las más usadas: elige otra.';
   const emailNormalizado = email?.trim().toLowerCase();
   if (
     emailNormalizado &&

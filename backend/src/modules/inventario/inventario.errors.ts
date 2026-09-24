@@ -31,7 +31,7 @@ export class StockDelLoteInsuficienteError extends BadRequestException {
 export class LotesNoSumanElStockError extends BadRequestException {
   constructor(suma: number, stock: number) {
     super(
-      `Los lotes suman ${suma} unidades pero hay ${stock} en stock. Si falta mercadería, registrala como pérdida; si sobra, como abastecimiento.`,
+      `Los lotes suman ${suma} unidades pero hay ${stock} en stock. Si falta mercadería, regístrala como pérdida; si sobra, como abastecimiento.`,
     );
   }
 }

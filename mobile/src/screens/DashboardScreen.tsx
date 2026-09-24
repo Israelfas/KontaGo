@@ -169,7 +169,7 @@ export function DashboardScreen() {
                 />
 
                 <Pieza
-                  etiqueta={resumen.agrupadoPor === 'hora' ? '¿A qué hora vendés?' : 'Ingreso por día'}
+                  etiqueta={resumen.agrupadoPor === 'hora' ? '¿A qué hora vendes?' : 'Ingreso por día'}
                   ancho="completa"
                 >
                   <View style={{ marginTop: espaciado.sm }}>
@@ -205,7 +205,7 @@ export function DashboardScreen() {
                 <View style={styles.tipContenedor}>
                   <Ionicons name="bulb-outline" size={18} color={colores.ambar} />
                   <Text style={styles.tipTexto}>
-                    Todavía no registraste ninguna venta hoy. Andá a la pestaña{' '}
+                    Todavía no registraste ninguna venta hoy. Ve a la pestaña{' '}
                     <Text style={{ fontWeight: '700' }}>Vender</Text> para empezar.
                   </Text>
                 </View>

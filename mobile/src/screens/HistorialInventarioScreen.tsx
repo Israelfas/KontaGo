@@ -207,7 +207,7 @@ export function HistorialInventarioScreen() {
                 }))}
               />
               <ListaConBarras
-                titulo="A quién le comprás"
+                titulo="A quién le compras"
                 filas={resumen.porProveedor.map((p) => ({
                   clave: p.proveedor ?? '—',
                   texto: p.proveedor ?? 'Sin proveedor',
@@ -305,7 +305,7 @@ export function HistorialInventarioScreen() {
           ) : movimientos.length > 0 ? (
             <Text style={styles.pie}>
               {movimientos.length < total
-                ? `Mostrando ${movimientos.length} de ${total} · deslizá para ver más`
+                ? `Mostrando ${movimientos.length} de ${total} · desliza para ver más`
                 : `${total} movimientos`}
             </Text>
           ) : null

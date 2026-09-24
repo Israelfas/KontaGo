@@ -12,7 +12,7 @@ import type { Tienda } from '../lib/tipos';
 const CAMPOS = [
   { clave: 'nombre', etiqueta: 'Nombre de la tienda', ayuda: 'El del letrero. Sale arriba en el ticket.', max: 150, teclado: 'default' },
   { clave: 'razonSocial', etiqueta: 'Razón social (opcional)', ayuda: 'Como figura en el SRI, si es distinta del nombre.', max: 200, teclado: 'default' },
-  { clave: 'ruc', etiqueta: 'RUC (opcional)', ayuda: '13 números: tu cédula seguida de 001, si sos persona natural.', max: 15, teclado: 'number-pad' },
+  { clave: 'ruc', etiqueta: 'RUC (opcional)', ayuda: '13 números: tu cédula seguida de 001, si eres persona natural.', max: 15, teclado: 'number-pad' },
   { clave: 'direccion', etiqueta: 'Dirección (opcional)', ayuda: null, max: 250, teclado: 'default' },
   { clave: 'telefono', etiqueta: 'Teléfono (opcional)', ayuda: null, max: 30, teclado: 'phone-pad' },
   { clave: 'mensajeTicket', etiqueta: 'Mensaje al pie del ticket (opcional)', ayuda: 'Horario, redes sociales, promociones…', max: 200, teclado: 'default' },
@@ -84,7 +84,7 @@ export function TiendaScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.intro}>
-            Lo que sale en el ticket que imprimís o compartís: nombre, RUC, dirección y un mensaje al pie.
+            Lo que sale en el ticket que imprimes o compartes: nombre, RUC, dirección y un mensaje al pie.
           </Text>
           {error && <EstadoError mensaje={error} onReintentar={cargar} />}
           {!datos && !error && <EstadoCargando texto="Cargando…" />}

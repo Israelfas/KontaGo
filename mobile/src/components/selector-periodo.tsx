@@ -151,15 +151,15 @@ function CalendarioRango({
       ? `${rangoLegible({ clave: 'elegido', desde, hasta: fin })} · ${diasDelPeriodo(desde, fin)} día${
           diasDelPeriodo(desde, fin) === 1 ? '' : 's'
         }`
-      : 'Tocá el primer día';
+      : 'Toca el primer día';
 
   return (
     <HojaModal
       titulo="Elegir fechas"
       descripcion={
         desde && !hasta
-          ? 'Ahora tocá el último día (o Ver, para un solo día).'
-          : 'Tocá el primer día y después el último.'
+          ? 'Ahora toca el último día (o Ver, para un solo día).'
+          : 'Toca el primer día y después el último.'
       }
       icono="calendar-outline"
       onCerrar={onCerrar}

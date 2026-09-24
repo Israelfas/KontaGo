@@ -26,7 +26,7 @@ export function RecuperarScreen({ navigation, route }: Props) {
   const [enviado, setEnviado] = useState(false);
   const [espera, setEspera] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const problema = problemaDelEmail(email) ?? (email.trim() ? null : 'Escribí el email de tu cuenta.');
+  const problema = problemaDelEmail(email) ?? (email.trim() ? null : 'Escribe el email de tu cuenta.');
 
   useEffect(() => {
     if (espera <= 0) return;
@@ -47,7 +47,7 @@ export function RecuperarScreen({ navigation, route }: Props) {
       setEnviado(true);
       setEspera(ESPERA_REENVIO_S);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'No se pudo enviar. Revisá tu conexión.');
+      setError(err instanceof ApiError ? err.message : 'No se pudo enviar. Revisa tu conexión.');
     } finally {
       setEnviando(false);
     }
@@ -56,11 +56,11 @@ export function RecuperarScreen({ navigation, route }: Props) {
   return (
     <AuthFrame
       eyebrow="Recuperar el acceso"
-      titulo={enviado ? 'Revisá tu correo' : '¿Olvidaste tu contraseña?'}
+      titulo={enviado ? 'Revisa tu correo' : '¿Olvidaste tu contraseña?'}
       descripcion={
         enviado
           ? 'Si el email tiene una cuenta en KontaGo, te llega un enlace para elegir una contraseña nueva.'
-          : 'Escribí el email de tu cuenta y te mandamos un enlace para elegir una nueva.'
+          : 'Escribe el email de tu cuenta y te mandamos un enlace para elegir una nueva.'
       }
       icono="key-outline"
       footer={
@@ -75,9 +75,9 @@ export function RecuperarScreen({ navigation, route }: Props) {
             Lo mandamos a <Text style={{ fontWeight: '700' }}>{email.trim()}</Text>.
           </Text>
           <Text style={styles.ayuda}>
-            · Abrí el enlace desde este mismo teléfono: vence en 30 minutos y sirve una sola vez.
-            {'\n'}· Si no aparece, revisá spam o promociones.
-            {'\n'}· Después entrá acá con la contraseña nueva.
+            · Abre el enlace desde este mismo teléfono: vence en 30 minutos y sirve una sola vez.
+            {'\n'}· Si no aparece, revisa spam o promociones.
+            {'\n'}· Después entra aquí con la contraseña nueva.
           </Text>
           <Boton
             variante="secondary"
@@ -117,7 +117,7 @@ export function RecuperarScreen({ navigation, route }: Props) {
             Mandarme el enlace
           </Boton>
           <Text style={[styles.ayuda, { marginTop: espaciado.md }]}>
-            ¿Sos cajero y no usás tu propio email? Pedile al administrador de tu tienda que te ponga
+            ¿Eres cajero y no usas tu propio email? Pídele al administrador de tu tienda que te ponga
             una contraseña nueva desde Equipo.
           </Text>
         </View>

@@ -31,7 +31,7 @@ import { limiteDeIntentos } from './common/seguridad/limite-de-intentos';
       throttlers: [{ ttl: 60_000, limit: limiteDeIntentos(10) }],
       // En español: este texto le llega a la persona en el login.
       errorMessage:
-        'Demasiados intentos seguidos desde esta conexión. Esperá un minuto y probá de nuevo.',
+        'Demasiados intentos seguidos desde esta conexión. Espera un minuto y prueba de nuevo.',
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
