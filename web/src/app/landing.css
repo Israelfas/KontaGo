@@ -643,37 +643,46 @@
   }
 }
 
-/* La línea que une los números: vertical en el celular, horizontal en la
-   compu. Se dibuja al aparecer, y cada número se enciende al alcanzarlo. */
-.pasos::before {
-  position: absolute;
-  top: 1.4rem;
-  bottom: 1.4rem;
-  left: 1.4rem;
-  width: 2px;
-  background: linear-gradient(var(--ambar), rgba(217, 140, 43, 0.25));
-  content: '';
-  transform: scaleY(0);
-  transform-origin: top;
-}
-
+/* La línea que une los números. En la compu, una sola horizontal; en el
+   celular, un tramo vertical de cada número al siguiente. Se dibujan al
+   aparecer, y cada número se enciende cuando la línea lo alcanza. */
 @media (min-width: 768px) {
   .pasos::before {
+    position: absolute;
     top: 1.4rem;
     right: calc(33.333% - 1rem);
-    bottom: auto;
     left: 1.4rem;
     height: 2px;
-    width: auto;
     background: linear-gradient(90deg, var(--ambar), rgba(217, 140, 43, 0.25));
+    content: '';
     transform: scaleX(0);
     transform-origin: left;
   }
+
+  .revelar[data-visible='true'] .pasos::before {
+    transform: none;
+    transition: transform 1500ms var(--ease-deslizar) 200ms;
+  }
 }
 
-.revelar[data-visible='true'] .pasos::before {
-  transform: none;
-  transition: transform 1500ms var(--ease-deslizar) 200ms;
+@media (max-width: 767px) {
+  .paso:not(:last-child)::after {
+    position: absolute;
+    top: 2.8rem;
+    bottom: -2.5rem;
+    left: calc(1.4rem - 1px);
+    width: 2px;
+    background: linear-gradient(var(--ambar), rgba(217, 140, 43, 0.3));
+    content: '';
+    transform: scaleY(0);
+    transform-origin: top;
+  }
+
+  .revelar[data-visible='true'] .paso:not(:last-child)::after {
+    transform: none;
+    transition: transform 600ms var(--ease-deslizar);
+    transition-delay: calc(var(--i, 0) * 550ms + 450ms);
+  }
 }
 
 .paso {
@@ -713,8 +722,12 @@
 }
 
 .paso-cuando {
+  position: relative;
+  z-index: 1;
+  /* Sólido: tapa la línea que pasa por detrás. */
+  border: 1px solid rgba(246, 243, 236, 0.12);
   border-radius: 999px;
-  background: rgba(246, 243, 236, 0.08);
+  background: #22364a;
   padding: 0.25rem 0.7rem;
   color: rgba(246, 243, 236, 0.7);
   font-family: var(--font-ticket);
