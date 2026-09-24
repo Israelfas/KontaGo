@@ -41,7 +41,7 @@ test.describe('Entrar', () => {
     await page.goto('/login');
     await page.locator('#email').fill('maria@gmail');
     await page.locator('#password').focus();
-    await expect(page.locator('#email-aviso')).toContainText('Revisá lo que va después de la @');
+    await expect(page.locator('#email-aviso')).toContainText('Revisa lo que va después de la @');
   });
 });
 
@@ -55,7 +55,7 @@ test.describe('Recuperar la contraseña', () => {
     await expect(page).toHaveURL(/\/recuperar/);
     await expect(page.locator('#recuperar-email')).toHaveValue(NADIE);
     await page.getByRole('button', { name: 'Mandarme el enlace' }).click();
-    await expect(page.getByRole('heading', { name: 'Revisá tu correo' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Revisa tu correo' })).toBeVisible();
     await expect(page.getByRole('button', { name: /Reenviar en \d+ s/ })).toBeDisabled();
   });
 
@@ -82,7 +82,7 @@ test.describe('Crear una cuenta', () => {
     await page.locator('#registro-password').fill('una frase segura');
     await expect(page.getByText('Seguridad: Fuerte')).toBeVisible();
     await page.getByRole('button', { name: 'Crear mi tienda' }).click();
-    await expect(page.locator('#registro-terminos-aviso')).toContainText('tenés que aceptarlos');
+    await expect(page.locator('#registro-terminos-aviso')).toContainText('tienes que aceptarlos');
     await expect(page).toHaveURL(/\/registro/);
   });
 

@@ -45,7 +45,7 @@ test.describe('Productos (admin)', () => {
     await ventana(page).locator('#producto-precio').fill('0.70');
     await ventana(page).locator('#producto-costo').fill('0.90');
     await expect(
-      ventana(page).getByText(/Vendés por debajo del costo: perdés \$0,20/),
+      ventana(page).getByText(/Vendes por debajo del costo: pierdes \$0,20/),
     ).toBeVisible();
   });
 

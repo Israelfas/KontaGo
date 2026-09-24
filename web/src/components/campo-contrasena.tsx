@@ -73,7 +73,7 @@ export function CampoContrasena({
       </div>
       {mayusculas && (
         <p className="aviso-advertencia mt-1 text-xs" role="status">
-          Tenés las mayúsculas activadas.
+          Tienes las mayúsculas activadas.
         </p>
       )}
     </div>

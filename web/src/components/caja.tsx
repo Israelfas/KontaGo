@@ -54,7 +54,7 @@ export function FormularioAbrirCaja({ onAbierta }: { onAbierta: (t: TurnoCaja) =
     <form onSubmit={abrir} className="app-card mx-auto max-w-md p-5 sm:p-6">
       <h2 className="font-display text-lg font-bold text-tinta">Abrir la caja</h2>
       <p className="mt-1 text-sm text-tinta-suave">
-        Contá el cambio que hay en el cajón antes de empezar. Al cerrar, se compara con lo que haya
+        Cuenta el cambio que hay en el cajón antes de empezar. Al cerrar, se compara con lo que haya
         al final.
       </p>
       <label className="field-label mt-5" htmlFor="fondo-inicial">

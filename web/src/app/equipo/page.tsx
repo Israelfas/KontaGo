@@ -140,7 +140,7 @@ function FormularioNuevaPersona({ onCreado }: { onCreado: (u: UsuarioEquipo) => 
             error={tocado('password') ? problemas.password : null}
             ayuda={
               ayudaDeLaContrasena(password) ??
-              'Pasásela a la persona; podés cambiarla después desde acá.'
+              'Pásasela a la persona; puedes cambiarla después desde aquí.'
             }
           />
         </div>
@@ -155,7 +155,7 @@ function FormularioNuevaPersona({ onCreado }: { onCreado: (u: UsuarioEquipo) => 
             className="field"
           >
             <option value="cajero">Cajero: vende y consulta productos</option>
-            <option value="admin">Admin: acceso completo, como vos</option>
+            <option value="admin">Admin: acceso completo, como tú</option>
           </select>
         </div>
       </div>
@@ -380,8 +380,8 @@ function ContenidoEquipo() {
               descripcion={
                 // Cambiarla cierra las sesiones de esa persona, también la propia.
                 cambiandoPassword.id === usuario?.sub
-                  ? 'Es la tuya: al guardarla se cierra tu sesión y entrás de nuevo con la nueva.'
-                  : `De ${cambiandoPassword.nombre}. Pasásela en persona: la vieja deja de servir y se cierran sus sesiones.`
+                  ? 'Es la tuya: al guardarla se cierra tu sesión y entras de nuevo con la nueva.'
+                  : `De ${cambiandoPassword.nombre}. Pásasela en persona: la vieja deja de servir y se cierran sus sesiones.`
               }
               icono={<PencilIcon className="h-5 w-5" />}
               onCerrar={() => setCambiandoPassword(null)}
@@ -432,7 +432,7 @@ function ContenidoEquipo() {
                       <div className="min-w-0">
                         <p className="font-medium text-tinta">
                           {persona.nombre}
-                          {esVos && <span className="ml-1 text-xs text-tinta-suave">(vos)</span>}
+                          {esVos && <span className="ml-1 text-xs text-tinta-suave">(tú)</span>}
                         </p>
                         <p className="break-all text-xs text-tinta-suave">{persona.email}</p>
                         <p className="mt-1 text-xs text-tinta-suave">
@@ -527,7 +527,7 @@ function ContenidoEquipo() {
                       >
                         <td className="px-4 py-3 text-tinta">
                           {persona.nombre}
-                          {esVos && <span className="ml-2 text-xs text-tinta-suave">(vos)</span>}
+                          {esVos && <span className="ml-2 text-xs text-tinta-suave">(tú)</span>}
                           {!persona.activo && (
                             <span className="ml-2 text-xs text-rojo-perdida">Desactivado</span>
                           )}

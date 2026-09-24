@@ -81,7 +81,7 @@ function BotonTienda({
   );
 }
 
-/** Botones de descarga y, en la compu, el QR para bajarla desde el celular. */
+/** Botones de descarga y, en la computadora, el QR para descargarla desde el celular. */
 export async function Descarga() {
   const qr = ANDROID
     ? await QRCode.toString(ANDROID, {
@@ -104,7 +104,7 @@ export async function Descarga() {
           <BotonTienda href={IOS} plataforma="iPhone" icono={<IconoIphone className="h-6 w-6" />} />
         </div>
         <p className="text-sm text-papel/65">
-          {ANDROID || IOS ? 'O usala' : 'Mientras tanto, usala'} desde el navegador del celular:{' '}
+          {ANDROID || IOS ? 'O úsala' : 'Mientras tanto, úsala'} desde el navegador del celular:{' '}
           <Link
             href="/registro"
             className="font-semibold text-papel underline decoration-ambar decoration-2 underline-offset-4"
@@ -124,7 +124,7 @@ export async function Descarga() {
             dangerouslySetInnerHTML={{ __html: qr }}
           />
           <span className="max-w-[9rem] text-xs leading-5 text-tinta-suave">
-            Escaneá con la cámara del celular para bajarla.
+            Escanéalo con la cámara del celular para descargarla.
           </span>
         </div>
       )}

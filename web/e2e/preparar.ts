@@ -11,7 +11,7 @@ export default async function preparar() {
   const salud = await fetch(`${api}/health`).catch(() => null);
   if (!salud?.ok) {
     throw new Error(
-      `El backend no responde en ${api}. Levantalo (npm run start:dev en backend/) antes de las pruebas.`,
+      `El backend no responde en ${api}. Levántalo (npm run start:dev en backend/) antes de las pruebas.`,
     );
   }
   if (process.env.E2E_SIN_SEED) return;

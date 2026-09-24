@@ -116,7 +116,7 @@ function MiniMenu({ activa }: { activa: string }) {
 // Ventas por hora de un día normal (8h a 20h), en proporción.
 const VENTAS_POR_HORA = [22, 35, 48, 40, 62, 70, 45, 38, 52, 80, 92, 66, 30];
 
-/** El resumen del día en la compu: lo primero que ve el dueño. */
+/** El resumen del día en la computadora: lo primero que ve el dueño. */
 export function MaquetaResumen({ cifra = true }: { cifra?: boolean }) {
   return (
     <>
@@ -360,7 +360,7 @@ export function MaquetaGanancia() {
 /** El equipo: roles, último ingreso y una cuenta bloqueada. */
 export function MaquetaEquipo() {
   const personas = [
-    { nombre: 'Ana Morales', detalle: 'Admin · vos', inicial: 'A', color: 'bg-tinta' },
+    { nombre: 'Ana Morales', detalle: 'Admin · tú', inicial: 'A', color: 'bg-tinta' },
     {
       nombre: 'Carlos Vera',
       detalle: 'Cajero · entró hace 12 min',

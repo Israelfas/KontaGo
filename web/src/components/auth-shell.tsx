@@ -28,7 +28,7 @@ export function AuthShell({
               href="/"
               className="mb-8 inline-flex items-center gap-1.5 text-sm font-medium text-papel/60 transition-colors hover:text-papel"
             >
-              <span aria-hidden="true">←</span> Conocé KontaGo
+              <span aria-hidden="true">←</span> Conoce KontaGo
             </Link>
             <br />
             <span className="inline-flex items-center gap-2 rounded-full border border-papel/15 bg-papel/10 px-3 py-1.5 font-ticket text-[0.68rem] font-medium uppercase tracking-[0.14em] text-papel/80">
@@ -39,7 +39,7 @@ export function AuthShell({
               La operación diaria, bajo control.
             </h1>
             <p className="mt-6 max-w-sm text-base leading-7 text-papel/70">
-              Vendé, controlá tu stock y detectá lo importante antes de que se vuelva un problema.
+              Vende, controla tu stock y detecta lo importante antes de que se vuelva un problema.
             </p>
           </div>
 

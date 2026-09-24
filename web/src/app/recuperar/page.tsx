@@ -45,7 +45,7 @@ export default function RecuperarPage() {
       setEnviado(true);
       setEspera(ESPERA_REENVIO_S);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'No se pudo enviar. Revisá tu conexión.');
+      setError(err instanceof ApiError ? err.message : 'No se pudo enviar. Revisa tu conexión.');
     } finally {
       setEnviando(false);
     }
@@ -54,11 +54,11 @@ export default function RecuperarPage() {
   return (
     <AuthShell
       eyebrow="Recuperar el acceso"
-      title={enviado ? 'Revisá tu correo' : '¿Olvidaste tu contraseña?'}
+      title={enviado ? 'Revisa tu correo' : '¿Olvidaste tu contraseña?'}
       description={
         enviado
           ? 'Si el email tiene una cuenta en KontaGo, te llega un enlace para elegir una contraseña nueva.'
-          : 'Escribí el email de tu cuenta y te mandamos un enlace para elegir una nueva.'
+          : 'Escribe el email de tu cuenta y te mandamos un enlace para elegir una nueva.'
       }
       footer={
         <Link
@@ -76,7 +76,7 @@ export default function RecuperarPage() {
           </p>
           <ul className="mt-3 space-y-1.5 text-sm text-tinta-suave">
             <li>· El enlace vence en 30 minutos y sirve una sola vez.</li>
-            <li>· Si no aparece, revisá la carpeta de spam o promociones.</li>
+            <li>· Si no aparece, revisa la carpeta de spam o promociones.</li>
             <li>· Si pediste varios, vale solo el último.</li>
           </ul>
           <Button
@@ -119,7 +119,7 @@ export default function RecuperarPage() {
             id="recuperar-email-aviso"
             error={
               salioDelEmail
-                ? (problemaEmail ?? (email.trim() ? null : 'Escribí el email de tu cuenta.'))
+                ? (problemaEmail ?? (email.trim() ? null : 'Escribe el email de tu cuenta.'))
                 : null
             }
           />
@@ -132,7 +132,7 @@ export default function RecuperarPage() {
             {enviando ? 'Enviando…' : 'Mandarme el enlace'}
           </Button>
           <p className="mt-4 text-xs leading-5 text-tinta-suave">
-            ¿Sos cajero y no usás tu propio email? Pedile al administrador de tu tienda que te ponga
+            ¿Eres cajero y no usas tu propio email? Pídele al administrador de tu tienda que te ponga
             una contraseña nueva desde Equipo.
           </p>
         </form>

@@ -7,7 +7,7 @@ import { Revelar } from './revelar';
  * muestra lo que cuenta (no un ícono suelto). El mosaico cierra en todos
  * los anchos:
  *
- *   compu (3 col)          tablet (2 col)       celular
+ *   pc (3 col)             tablet (2 col)       celular
  *   [ escáner   ][avisos]  [ escáner     ]      [escáner]
  *   [ticket][clave][avisos][ avisos      ]      [avisos ]
  *                          [ticket][clave]      [ticket ] ...

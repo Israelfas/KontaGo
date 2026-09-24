@@ -27,11 +27,11 @@ import './landing.css';
 export const metadata: Metadata = {
   title: 'KontaGo · La caja de tu tienda, en el celular',
   description:
-    'Vendé escaneando con el celular, cerrá la caja sin diferencias y sabé cuánto ganás de verdad. Para tiendas y minimarkets de Ecuador.',
+    'Vende escaneando con el celular, cierra la caja sin diferencias y sabe cuánto ganas de verdad. Para tiendas y minimarkets de Ecuador.',
   openGraph: {
     title: 'KontaGo · La caja de tu tienda, en el celular',
     description:
-      'Ventas, caja, inventario con vencimientos y tu ganancia real, desde el celular o la compu.',
+      'Ventas, caja, inventario con vencimientos y tu ganancia real, desde el celular o la computadora.',
     type: 'website',
     locale: 'es_EC',
   },
@@ -89,8 +89,8 @@ const DIAPOSITIVAS: Diapositiva[] = [
         texto={
           <TextoDiapositiva
             etiqueta="Vender"
-            titulo="Cobrá en segundos."
-            texto="Escaneá con la cámara del celular o con el lector de la caja: el carrito suma solo, con el IVA incluido, y cada venta queda con su ticket numerado."
+            titulo="Cobra en segundos."
+            texto="Escanea con la cámara del celular o con el lector de la caja: el carrito suma solo, con el IVA incluido, y cada venta queda con su ticket numerado."
             puntos={[
               'Escáner con la cámara del celular',
               'Efectivo o transferencia',
@@ -114,7 +114,7 @@ const DIAPOSITIVAS: Diapositiva[] = [
         texto={
           <TextoDiapositiva
             etiqueta="Caja"
-            titulo="La caja cuadra, o sabés por qué no."
+            titulo="La caja cuadra, o sabes por qué no."
             texto="Cada uno abre su caja con un fondo y anota lo que saca o pone. Al cerrar, el cajero cuenta el efectivo sin ver cuánto debería haber, y KontaGo te dice si cuadra, sobra o falta."
             puntos={[
               'Conteo a ciegas para el cajero',
@@ -136,7 +136,7 @@ const DIAPOSITIVAS: Diapositiva[] = [
           <TextoDiapositiva
             etiqueta="Inventario"
             titulo="Stock y vencimientos, sin sorpresas."
-            texto="Cargás lo que compraste con su costo y fecha de vencimiento. KontaGo descuenta primero lo que vence antes y te avisa cuando algo se acaba o está por vencer."
+            texto="Registras lo que compraste con su costo y fecha de vencimiento. KontaGo descuenta primero lo que vence antes y te avisa cuando algo se acaba o está por vencer."
             puntos={[
               'Lotes por fecha de vencimiento',
               'Alertas de stock bajo',
@@ -182,7 +182,7 @@ const DIAPOSITIVAS: Diapositiva[] = [
           <TextoDiapositiva
             etiqueta="Equipo"
             titulo="Tu equipo, con los permisos justos."
-            texto="Los cajeros venden y consultan productos, pero no ven ganancias ni inventario. Vos ves desde dónde entra cada uno y podés cerrar sus sesiones al instante."
+            texto="Los cajeros venden y consultan productos, pero no ven ganancias ni inventario. Tú ves desde dónde entra cada uno y puedes cerrar sus sesiones al instante."
             puntos={[
               'Roles de administrador y cajero',
               'Bloqueo tras intentos fallidos',
@@ -201,11 +201,11 @@ const DIAPOSITIVAS: Diapositiva[] = [
 const PREGUNTAS = [
   {
     p: '¿Cuánto cuesta?',
-    r: 'Podés crear tu cuenta y empezar a usarla gratis, sin tarjeta.',
+    r: 'Puedes crear tu cuenta y empezar a usarla gratis, sin tarjeta.',
   },
   {
     p: '¿Necesito comprar un lector de códigos o una computadora?',
-    r: 'No. Con el celular alcanza: la cámara escanea los códigos. Si ya tenés un lector o una compu en la caja, también funcionan.',
+    r: 'No. Con el celular alcanza: la cámara escanea los códigos. Si ya tienes un lector o una computadora en la caja, también funcionan.',
   },
   {
     p: '¿Emite facturas electrónicas del SRI?',
@@ -217,11 +217,11 @@ const PREGUNTAS = [
   },
   {
     p: '¿Puedo tener cajeros?',
-    r: 'Sí. Creás una cuenta para cada persona. Los cajeros venden y consultan productos; las ganancias, el inventario y el equipo solo los ve el administrador.',
+    r: 'Sí. Creas una cuenta para cada persona. Los cajeros venden y consultan productos; las ganancias, el inventario y el equipo solo los ve el administrador.',
   },
   {
     p: '¿Mis datos están seguros?',
-    r: 'Las contraseñas se guardan cifradas, las cuentas se bloquean tras varios intentos fallidos y cada tienda ve solo sus datos. Además, podés ver desde dónde entró cada persona y cerrar sus sesiones.',
+    r: 'Las contraseñas se guardan cifradas, las cuentas se bloquean tras varios intentos fallidos y cada tienda ve solo sus datos. Además, puedes ver desde dónde entró cada persona y cerrar sus sesiones.',
   },
 ];
 
@@ -245,8 +245,8 @@ export default function Landing() {
                 La caja de tu tienda, <span className="hero-subrayado">en el celular.</span>
               </h1>
               <p className="hero-entra hero-bajada" style={escalon(2)}>
-                Vendé escaneando con la cámara, cerrá la caja sin diferencias y sabé cuánto ganás de
-                verdad, cada día.
+                Vende escaneando con la cámara, cierra la caja sin diferencias y sabe cuánto ganas
+                de verdad, cada día.
               </p>
               <div className="hero-entra mt-8 flex flex-wrap items-center gap-3" style={escalon(3)}>
                 <Link href="/registro" className="button button-primary hero-boton">
@@ -261,7 +261,7 @@ export default function Landing() {
                 className="hero-entra mt-5 flex flex-wrap gap-x-5 gap-y-1 text-sm text-tinta-suave"
                 style={escalon(4)}
               >
-                {['Gratis para empezar', 'Sin tarjeta', 'En la compu y el celular'].map((t) => (
+                {['Gratis para empezar', 'Sin tarjeta', 'En computadora y celular'].map((t) => (
                   <span key={t} className="inline-flex items-center gap-1.5">
                     <CheckIcon className="h-3.5 w-3.5 text-verde-ganancia" />
                     {t}
@@ -290,7 +290,7 @@ export default function Landing() {
               <p className="eyebrow">El producto</p>
               <h2 className="landing-titulo">Todo lo de tu tienda, en un solo lugar.</h2>
               <p className="landing-bajada">
-                De la venta al cierre de caja, del stock a tu ganancia. Arrastrá para recorrerlo.
+                De la venta al cierre de caja, del stock a tu ganancia. Desliza para recorrerlo.
               </p>
             </Revelar>
             <Revelar retraso={120}>
@@ -330,8 +330,8 @@ export default function Landing() {
                     Tu tienda, en el bolsillo.
                   </h2>
                   <p className="mt-4 max-w-md text-base leading-7 text-papel/70">
-                    Vendé desde el mostrador, mirá la ganancia del día desde tu casa y recibí los
-                    avisos de stock donde estés. La misma cuenta en la compu y en el celular.
+                    Vende desde el mostrador, mira la ganancia del día desde tu casa y recibe los
+                    avisos de stock donde estés. La misma cuenta en la computadora y en el celular.
                   </p>
                   <div className="mt-8">
                     <Descarga />
@@ -355,7 +355,7 @@ export default function Landing() {
               <h2 className="landing-titulo">Lo que todos preguntan.</h2>
               {CORREO_SOPORTE && (
                 <p className="landing-bajada">
-                  ¿Otra duda? Escribinos a{' '}
+                  ¿Otra duda? Escríbenos a{' '}
                   <a
                     href={`mailto:${CORREO_SOPORTE}`}
                     className="font-semibold text-tinta underline decoration-ambar decoration-2 underline-offset-4"
@@ -387,10 +387,10 @@ export default function Landing() {
           <div className="app-container">
             <Revelar className="cierre">
               <h2 className="font-display text-3xl font-bold leading-[1.02] tracking-[-0.05em] text-tinta sm:text-5xl">
-                Abrí tu caja hoy.
+                Abre tu caja hoy.
               </h2>
               <p className="mx-auto mt-4 max-w-md text-base leading-7 text-tinta-suave">
-                Creá tu tienda gratis y hacé tu primera venta en minutos.
+                Crea tu tienda gratis y haz tu primera venta en minutos.
               </p>
               <div className="mt-8 flex flex-wrap justify-center gap-3">
                 <Link href="/registro" className="button button-primary hero-boton">

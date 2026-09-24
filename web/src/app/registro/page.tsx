@@ -58,17 +58,17 @@ export default function RegistroPage() {
 
   return (
     <AuthShell
-      eyebrow="Creá tu espacio"
-      title="Empezá con tu tienda"
-      description="Configurá tu cuenta en unos minutos. Vas a quedar como administrador y podrás sumar a tu equipo después."
+      eyebrow="Crea tu espacio"
+      title="Empieza con tu tienda"
+      description="Configura tu cuenta en unos minutos. Vas a quedar como administrador y podrás sumar a tu equipo después."
       footer={
         <>
-          ¿Ya tenés cuenta?{' '}
+          ¿Ya tienes cuenta?{' '}
           <Link
             href="/login"
             className="font-semibold text-tinta underline decoration-ambar decoration-2 underline-offset-4 hover:text-ambar"
           >
-            Iniciá sesión
+            Inicia sesión
           </Link>
         </>
       }
@@ -195,7 +195,7 @@ export default function RegistroPage() {
             </label>
             <AvisoDeCampo
               id="registro-terminos-aviso"
-              error={faltaAceptar ? 'Para crear tu cuenta tenés que aceptarlos.' : null}
+              error={faltaAceptar ? 'Para crear tu cuenta tienes que aceptarlos.' : null}
             />
           </div>
         </div>

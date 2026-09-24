@@ -23,7 +23,7 @@ function EscenaCrear() {
         <span className="paso-cursor" />
       </p>
       <p className="mt-2 flex items-center justify-between text-[0.68rem] text-tinta-suave">
-        <span>o entrá con Google</span>
+        <span>o entra con Google</span>
         <span className="paso-boton">Crear</span>
       </p>
     </div>
@@ -78,20 +78,20 @@ function EscenaVender() {
 
 const PASOS: { titulo: string; texto: string; cuando: string; escena: ReactNode }[] = [
   {
-    titulo: 'Creá tu tienda',
-    texto: 'Con tu email o tu cuenta de Google. Le ponés el nombre y ya podés vender.',
+    titulo: 'Crea tu tienda',
+    texto: 'Con tu email o tu cuenta de Google. Le pones el nombre y ya puedes vender.',
     cuando: 'En un minuto',
     escena: <EscenaCrear />,
   },
   {
-    titulo: 'Cargá tus productos',
-    texto: 'Escaneás el código con la cámara, ponés precio y costo, y registrás lo que tenés.',
+    titulo: 'Carga tus productos',
+    texto: 'Escaneas el código con la cámara, pones precio y costo, y registras lo que tienes.',
     cuando: 'Con la cámara',
     escena: <EscenaCargar />,
   },
   {
-    titulo: 'Vendé y mirá tu ganancia',
-    texto: 'Desde la caja o el celular. Al cerrar el día sabés cuánto vendiste y cuánto te quedó.',
+    titulo: 'Vende y mira tu ganancia',
+    texto: 'Desde la caja o el celular. Al cerrar el día sabes cuánto vendiste y cuánto te quedó.',
     cuando: 'Todos los días',
     escena: <EscenaVender />,
   },
@@ -110,7 +110,7 @@ export function ComoFunciona() {
               Cómo funciona
             </p>
             <h2 className="mt-3 font-display text-[clamp(2rem,4.6vw,3.3rem)] font-bold leading-none tracking-[-0.052em] text-papel">
-              Empezás hoy, en tres pasos.
+              Empieza hoy, en tres pasos.
             </h2>
             <p className="mt-4 text-[1.05rem] leading-7 text-papel/70">
               Sin instalar nada raro ni comprar equipos: de crear tu cuenta a tu primera venta, en

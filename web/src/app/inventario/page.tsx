@@ -73,7 +73,7 @@ function SelectorProducto({
       className="field"
     >
       <option value="" disabled>
-        Elegí un producto…
+        Elige un producto…
       </option>
       {productos.map((p) => (
         <option key={p.id} value={p.id}>
@@ -184,7 +184,7 @@ function FormularioAbastecimiento({
               siempre es un precio mal tipeado (o hay que subir el de venta). */}
           {avisoCosto && elegido && (
             <p className="aviso-advertencia col-span-2 -mt-2 text-xs" aria-live="polite">
-              {`Hoy lo vendés a ${formatearCentavos(elegido.precioVentaCentavos)}. ${avisoCosto}`}
+              {`Hoy lo vendes a ${formatearCentavos(elegido.precioVentaCentavos)}. ${avisoCosto}`}
             </p>
           )}
         </div>
@@ -226,7 +226,7 @@ function FormularioAbastecimiento({
           <p className="mt-1.5 text-xs text-tinta-suave">
             {elegido?.lotes && elegido.lotes.length > 0
               ? `Hoy hay ${resumenDeLotes(elegido)}. Si esta mercadería trae otra fecha, queda como un lote aparte y se vende después.`
-              : 'Dejalo vacío si el producto no vence.'}
+              : 'Déjalo vacío si el producto no vence.'}
           </p>
         </div>
       </div>
@@ -559,7 +559,7 @@ function TablaAlertas({
         <div className="table-shell sm:col-span-2">
           <div className="table-header flex items-center gap-1.5 px-4 py-2.5">
             <AlertIcon className="h-3.5 w-3.5 text-rojo-perdida" />
-            Vencidos en la góndola
+            Vencidos en el estante
           </div>
           <table className="w-full text-left text-sm">
             <tbody>
@@ -775,7 +775,7 @@ function EditorLotes({ producto, onGuardado }: { producto: Producto; onGuardado:
         {diferencia > 0 && ` · sobran ${diferencia}`}
         {diferencia < 0 && ` · faltan ${-diferencia}`}.
         {diferencia !== 0 &&
-          ' Si en la góndola hay otra cantidad, registrá la diferencia como merma o abastecimiento.'}
+          ' Si en el estante hay otra cantidad, registra la diferencia como merma o abastecimiento.'}
       </p>
 
       {error && (
@@ -855,7 +855,7 @@ function SeccionLotes({ productos, onCambio }: { productos: Producto[]; onCambio
       {editando && (
         <Ventana
           titulo={`Lotes de ${editando.nombre}`}
-          descripcion={`Cuántas de las ${unidades(editando.stock)} vencen en cada fecha, según la góndola.`}
+          descripcion={`Cuántas de las ${unidades(editando.stock)} vencen en cada fecha, según lo que hay en el estante.`}
           icono={<PencilIcon className="h-5 w-5" />}
           onCerrar={() => setEditando(null)}
         >
@@ -988,7 +988,7 @@ function ContenidoInventario() {
               <div>
                 <SectionHeader
                   title="Alertas"
-                  description="Lo vencido que sigue en la góndola, el stock por debajo del mínimo y lo que vence pronto."
+                  description="Lo vencido que sigue en el estante, el stock por debajo del mínimo y lo que vence pronto."
                 />
                 <div className="mt-4">
                   <TablaAlertas
@@ -1006,7 +1006,7 @@ function ContenidoInventario() {
                   <EmptyState
                     icon={<BoxIcon className="h-6 w-6" />}
                     title="Todavía no hay productos"
-                    description="Agregá alguno en la sección Productos antes de registrar movimientos de inventario."
+                    description="Agrega alguno en la sección Productos antes de registrar movimientos de inventario."
                   />
                 ) : (
                   <>

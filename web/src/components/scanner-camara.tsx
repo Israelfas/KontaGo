@@ -114,11 +114,11 @@ export function ScannerCamara({ onDetectado, onCerrar, confirmacion }: ScannerCa
       const nombre = err instanceof Error ? err.name : 'desconocido';
       const mensaje =
         nombre === 'NotAllowedError'
-          ? 'No se pudo acceder a la cámara. Revisá los permisos del navegador.'
+          ? 'No se pudo acceder a la cámara. Revisa los permisos del navegador.'
           : nombre === 'NotFoundError'
             ? 'No se encontró ninguna cámara en este dispositivo.'
             : nombre === 'NotReadableError'
-              ? 'La cámara está siendo usada por otra aplicación o pestaña. Cerrala e intentá de nuevo.'
+              ? 'La cámara está siendo usada por otra aplicación o pestaña. Ciérrala e intenta de nuevo.'
               : `No se pudo iniciar la cámara (${nombre}).`;
       setError(mensaje);
     }

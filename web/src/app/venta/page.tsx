@@ -78,7 +78,7 @@ function FormularioProductoNuevo({
         Producto nuevo · <span className="font-ticket text-tinta-suave">{codigoBarras}</span>
       </p>
       <p className="mt-0.5 text-xs text-tinta-suave">
-        Ese código no está en tu catálogo todavía. Cargalo y se agrega a la venta al instante.
+        Ese código no está en tu catálogo todavía. Cárgalo y se agrega a la venta al instante.
       </p>
 
       <div className="mt-3 grid grid-cols-2 gap-3">
@@ -223,7 +223,7 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
           setCodigoNoEncontrado(codigo.trim());
         } else {
           setErrorBusqueda(
-            `El código ${codigo.trim()} no está en el catálogo. Pedile al administrador que lo cargue.`,
+            `El código ${codigo.trim()} no está en el catálogo. Pídele al administrador que lo cargue.`,
           );
         }
         return;
@@ -434,7 +434,7 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
 
       {!efectivo && (
         <p className="rounded-xl bg-papel px-3.5 py-3 text-sm text-tinta">
-          Confirmá en el celular que llegó la transferencia de{' '}
+          Confirma en el celular que llegó la transferencia de{' '}
           <strong className="font-ticket">{formatearCentavos(totalCentavos)}</strong> antes de
           entregar. No entra al cajón.
         </p>
@@ -542,7 +542,7 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
         valor={formatearCentavos(totalCentavos)}
         detalle={
           carrito.length === 0
-            ? 'Escaneá o tipeá un código para empezar el ticket.'
+            ? 'Escanea o escribe un código para empezar el ticket.'
             : `Total a cobrar · ${unidades} unidad${unidades === 1 ? '' : 'es'} de ${
                 carrito.length
               } producto${carrito.length === 1 ? '' : 's'}`
@@ -574,7 +574,7 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
                   onChange={(e) => setCodigoInput(e.target.value)}
                   onKeyDown={manejarTecla}
                   className="field flex-1 font-ticket !mb-0"
-                  placeholder="Escaneá o tipeá el código y presioná Enter"
+                  placeholder="Escanea o escribe el código y presiona Enter"
                 />
                 <Button type="submit" variant="primary" disabled={buscando}>
                   Agregar
@@ -617,7 +617,7 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
                 <EmptyState
                   icon={<CartIcon className="h-6 w-6" />}
                   title="El carrito está vacío"
-                  description="Buscá un producto por su código de barras para empezar."
+                  description="Busca un producto por su código de barras para empezar."
                 />
               </div>
             ) : pantallaChica ? (
@@ -773,7 +773,7 @@ function VentaConCaja() {
       <Banda
         eyebrow="Caja"
         titulo="Vender"
-        detalle={caja === null ? 'Tu caja está cerrada. Abrila para empezar a cobrar.' : undefined}
+        detalle={caja === null ? 'Tu caja está cerrada. Ábrela para empezar a cobrar.' : undefined}
       />
       <Hoja>
         <div className="mt-4">

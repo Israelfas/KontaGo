@@ -10,7 +10,7 @@ export default function TerminosPage() {
       <h2>1. Sobre KontaGo</h2>
       <p>
         KontaGo es una herramienta de punto de venta e inventario para pequeños negocios. Al crear
-        una cuenta o usarla, aceptás estos términos y la{' '}
+        una cuenta o usarla, aceptas estos términos y la{' '}
         <Link href="/privacidad" className="font-semibold underline">
           política de privacidad
         </Link>
@@ -19,9 +19,9 @@ export default function TerminosPage() {
 
       <h2>2. Tu cuenta y tu equipo</h2>
       <p>
-        Sos responsable de tu contraseña y de lo que se haga con tu cuenta. Como administrador,
-        también de las cuentas que creás para tu equipo y de quitarle el acceso a quien deje de
-        trabajar con vos. Si sospechás un uso indebido, cambiá la contraseña y avisanos.
+        Eres responsable de tu contraseña y de lo que se haga con tu cuenta. Como administrador,
+        también de las cuentas que creas para tu equipo y de quitarle el acceso a quien deje de
+        trabajar contigo. Si sospechas un uso indebido, cambia la contraseña y avísanos.
       </p>
 
       <h2>3. Tus datos</h2>

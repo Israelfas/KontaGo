@@ -59,7 +59,7 @@ export default function LoginPage() {
         redirectUrlComplete: '/clerk-bridge',
       });
     } catch {
-      setError('No se pudo iniciar el login con Google. Probá de nuevo.');
+      setError('No se pudo iniciar el login con Google. Prueba de nuevo.');
       setConGoogle(false);
     }
   }
@@ -67,16 +67,16 @@ export default function LoginPage() {
   return (
     <AuthShell
       eyebrow="Bienvenido de vuelta"
-      title="Entrá a tu operación"
-      description="Todo lo que necesitás para atender, cobrar y controlar tu tienda en un solo lugar."
+      title="Entra a tu operación"
+      description="Todo lo que necesitas para atender, cobrar y controlar tu tienda en un solo lugar."
       footer={
         <>
-          ¿Todavía no tenés tienda?{' '}
+          ¿Todavía no tienes tienda?{' '}
           <Link
             href="/registro"
             className="font-semibold text-tinta underline decoration-ambar decoration-2 underline-offset-4 hover:text-ambar"
           >
-            Registrá tu negocio
+            Registra tu negocio
           </Link>
         </>
       }
@@ -87,7 +87,7 @@ export default function LoginPage() {
             className="entra mb-4 rounded-xl border border-verde-ganancia/25 bg-verde-ganancia/[0.07] px-3.5 py-3 text-sm text-verde-ganancia"
             role="status"
           >
-            Listo: tu contraseña cambió. Entrá con la nueva.
+            Listo: tu contraseña cambió. Entra con la nueva.
           </p>
         )}
         <div className="space-y-4">

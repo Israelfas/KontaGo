@@ -206,7 +206,7 @@ function ContenidoDashboard() {
 
               <div className="pieza pieza-mitad">
                 <p className="pieza-etiqueta">
-                  {resumen.agrupadoPor === 'hora' ? '¿A qué hora vendés?' : 'Ingreso por día'}
+                  {resumen.agrupadoPor === 'hora' ? '¿A qué hora vendes?' : 'Ingreso por día'}
                 </p>
                 <div className="mt-3">
                   <GraficoIngreso datos={resumen.serie} agrupadoPor={resumen.agrupadoPor} />

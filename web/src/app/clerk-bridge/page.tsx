@@ -25,7 +25,7 @@ export default function ClerkBridgePage() {
       try {
         const clerkToken = await getToken();
         if (!clerkToken) {
-          setError('No se pudo obtener la sesión de Google. Probá iniciar sesión de nuevo.');
+          setError('No se pudo obtener la sesión de Google. Prueba iniciar sesión de nuevo.');
           return;
         }
         await completarLoginConClerk(clerkToken);

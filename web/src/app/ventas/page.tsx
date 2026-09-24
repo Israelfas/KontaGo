@@ -442,9 +442,9 @@ function ContenidoVentas() {
             Cobrado en {cantidadCobradas} venta{cantidadCobradas === 1 ? '' : 's'}
             {anuladoCentavos > 0 && ` · ${formatearCentavos(anuladoCentavos)} anulados`}.{' '}
             {!esAdmin
-              ? 'Si hay que anular una venta, avisale al administrador.'
+              ? 'Si hay que anular una venta, avísale al administrador.'
               : hoy
-                ? 'Podés anular una venta completa o solo algunos productos; el stock vuelve al inventario.'
+                ? 'Puedes anular una venta completa o solo algunos productos; el stock vuelve al inventario.'
                 : 'Las ventas se pueden anular solo el mismo día en que se hicieron.'}
           </>
         }
@@ -521,8 +521,8 @@ function ContenidoVentas() {
                   title={hoy ? 'Todavía no hay ventas hoy' : 'No hubo ventas en este período'}
                   description={
                     hoy
-                      ? 'Las ventas que se registren en la caja van a aparecer acá.'
-                      : 'Probá con otras fechas.'
+                      ? 'Las ventas que se registren en la caja van a aparecer aquí.'
+                      : 'Prueba con otras fechas.'
                   }
                 />
               )}

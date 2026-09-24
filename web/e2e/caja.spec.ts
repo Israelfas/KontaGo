@@ -29,7 +29,7 @@ test.describe('Caja', () => {
     await ventana(page).locator('#movimiento-monto').fill('2.50');
     await ventana(page).locator('#movimiento-motivo').fill('pa');
     await expect(ventana(page).locator('#movimiento-motivo-aviso')).toHaveText(
-      'Escribí 1 letra más.',
+      'Escribe 1 letra más.',
     );
     await ventana(page).locator('#movimiento-motivo').fill('Compra de fundas');
     await ventana(page).getByRole('button', { name: 'Registrar' }).click();

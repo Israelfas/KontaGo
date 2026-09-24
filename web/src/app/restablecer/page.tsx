@@ -70,7 +70,7 @@ export default function RestablecerPage() {
       ) {
         setEstado('invalido');
       } else {
-        setError(err instanceof ApiError ? err.message : 'No se pudo guardar. Revisá tu conexión.');
+        setError(err instanceof ApiError ? err.message : 'No se pudo guardar. Revisa tu conexión.');
       }
       setEnviando(false);
     }
@@ -79,10 +79,10 @@ export default function RestablecerPage() {
   return (
     <AuthShell
       eyebrow="Recuperar el acceso"
-      title={estado === 'invalido' ? 'El enlace ya no sirve' : 'Elegí una contraseña nueva'}
+      title={estado === 'invalido' ? 'El enlace ya no sirve' : 'Elige una contraseña nueva'}
       description={
         estado === 'invalido'
-          ? 'Los enlaces vencen a los 30 minutos y sirven una sola vez. Pedí uno nuevo: tarda un minuto.'
+          ? 'Los enlaces vencen a los 30 minutos y sirven una sola vez. Pide uno nuevo: tarda un minuto.'
           : 'Al guardarla se cierra tu sesión en todos los dispositivos y te avisamos por email.'
       }
       footer={
@@ -135,7 +135,7 @@ export default function RestablecerPage() {
             </div>
             <div>
               <label className="field-label" htmlFor="repetir-password">
-                Repetila
+                Repítela
               </label>
               <CampoContrasena
                 id="repetir-password"
@@ -151,7 +151,7 @@ export default function RestablecerPage() {
                 error={
                   salio.repetida
                     ? (problemaRepetida ??
-                      (repetida ? null : 'Escribila de nuevo para confirmarla.'))
+                      (repetida ? null : 'Escríbela de nuevo para confirmarla.'))
                     : null
                 }
                 ayuda={repetida && !problemaRepetida && !problemaPassword ? 'Coinciden.' : null}

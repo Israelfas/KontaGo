@@ -25,7 +25,7 @@ export function problemaDelEmail(email: string): string | null {
   const [usuario, dominio] = partes;
   if (!usuario) return 'Falta lo que va antes de la @.';
   if (!/^[^.]+(\.[^.]+)*\.[a-z]{2,}$/i.test(dominio))
-    return `Revisá lo que va después de la @ (ej. ${usuario}@gmail.com).`;
+    return `Revisa lo que va después de la @ (ej. ${usuario}@gmail.com).`;
   return null;
 }
 
@@ -79,7 +79,7 @@ export function problemaDeLaContrasena(contrasena: string, email?: string): stri
     return `Faltan ${faltan} caracter${faltan === 1 ? '' : 'es'}: son ${LARGO_MINIMO_CONTRASENA} como mínimo.`;
   const normalizada = contrasena.trim().toLowerCase();
   if (MAS_USADAS.has(normalizada) || /^(.)\1+$/.test(normalizada))
-    return 'Esa contraseña es de las más usadas: elegí otra.';
+    return 'Esa contraseña es de las más usadas: elige otra.';
   const e = email?.trim().toLowerCase();
   if (e && (normalizada === e || normalizada === e.split('@')[0]))
     return 'La contraseña no puede ser tu email.';
@@ -125,7 +125,7 @@ export function problemaDelNombre(nombre: string, minimo = 2): string | null {
 export function problemaDelLargo(texto: string, minimo: number): string | null {
   const faltan = minimo - texto.trim().length;
   if (!texto || faltan <= 0) return null;
-  return `Escribí ${faltan} letra${faltan === 1 ? '' : 's'} más.`;
+  return `Escribe ${faltan} letra${faltan === 1 ? '' : 's'} más.`;
 }
 
 /**
@@ -138,8 +138,8 @@ export function avisoDelMargen(
 ): string | null {
   if (precioCentavos === null || costoCentavos === null || costoCentavos <= 0) return null;
   if (precioCentavos < costoCentavos)
-    return `Vendés por debajo del costo: perdés ${formatearCentavos(costoCentavos - precioCentavos)} en cada una.`;
-  if (precioCentavos === costoCentavos) return 'Es el mismo precio que el costo: no le ganás nada.';
+    return `Vendes por debajo del costo: pierdes ${formatearCentavos(costoCentavos - precioCentavos)} en cada una.`;
+  if (precioCentavos === costoCentavos) return 'Es el mismo precio que el costo: no le ganas nada.';
   return null;
 }
 

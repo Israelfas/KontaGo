@@ -133,7 +133,7 @@ function TarjetaTurno({
       {cerrando && (
         <Ventana
           titulo={`Cerrar la caja de ${turno.cajero}`}
-          descripcion="Contá todo el efectivo del cajón, incluido el cambio con el que abrió."
+          descripcion="Cuenta todo el efectivo del cajón, incluido el cambio con el que abrió."
           icono={<CashIcon className="h-5 w-5" />}
           onCerrar={() => setCerrando(false)}
         >
@@ -277,8 +277,8 @@ function ContenidoCaja() {
               ? `Efectivo que debería haber en el cajón · empezaste con ${formatearCentavos(turno!.fondoInicialCentavos)}.`
               : `Empezaste con ${formatearCentavos(turno!.fondoInicialCentavos)} de cambio. Lo que debería haber lo ves al cerrar, después de contar.`
             : cierre
-              ? 'Caja cerrada. Abrí otra cuando vuelvas a vender.'
-              : 'Abrí la caja con el cambio del cajón para empezar a vender.'
+              ? 'Caja cerrada. Abre otra cuando vuelvas a vender.'
+              : 'Abre la caja con el cambio del cajón para empezar a vender.'
         }
         accion={
           abierta && (
@@ -368,7 +368,7 @@ function ContenidoCaja() {
                 </div>
                 {turno!.movimientos.length === 0 && (
                   <p className="mt-2 text-sm text-tinta-suave">
-                    Si pagás algo con plata del cajón o traés más cambio, registralo acá para que la
+                    Si pagas algo con dinero del cajón o traes más cambio, regístralo aquí para que la
                     caja cuadre.
                   </p>
                 )}
@@ -401,7 +401,7 @@ function ContenidoCaja() {
           {accion === 'cerrar' && (
             <Ventana
               titulo="Cerrar la caja"
-              descripcion="Contá todo el efectivo del cajón, incluido el cambio con el que abriste. Después de cerrar vas a ver si cuadra."
+              descripcion="Cuenta todo el efectivo del cajón, incluido el cambio con el que abriste. Después de cerrar vas a ver si cuadra."
               icono={<MinusIcon className="h-5 w-5" />}
               onCerrar={() => setAccion(null)}
             >

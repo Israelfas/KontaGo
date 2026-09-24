@@ -186,7 +186,7 @@ function FormularioNuevoProducto({ onCreado }: { onCreado: (p: Producto) => void
           <AvisoDeCampo
             id="producto-vencimiento-ayuda"
             advertencia={avisoFecha}
-            ayuda={sinStockInicial ? 'Primero cargá el stock inicial.' : 'La del stock inicial.'}
+            ayuda={sinStockInicial ? 'Primero carga el stock inicial.' : 'La del stock inicial.'}
           />
         </div>
         <div className="col-span-2">
@@ -371,7 +371,7 @@ function FormularioEditarProducto({
               <AvisoDeCampo
                 id={`editar-vencimiento-${producto.id}-aviso`}
                 advertencia={cambioLaFecha ? avisoDelVencimiento(fechaVencimiento) : null}
-                ayuda="Dejá vacío para quitar la fecha."
+                ayuda="Deja vacío para quitar la fecha."
               />
             </>
           )}
@@ -390,7 +390,7 @@ function FormularioEditarProducto({
         <div className="entra mt-4 rounded-xl border border-rojo-perdida/30 bg-rojo-perdida/5 p-3">
           <p className="text-sm text-tinta">
             <strong>{producto.nombre}</strong> dejará de aparecer en el catálogo y no se podrá
-            vender. Sus ventas pasadas se conservan, y podés reactivarlo después.
+            vender. Sus ventas pasadas se conservan, y puedes reactivarlo después.
           </p>
         </div>
       )}
@@ -922,7 +922,7 @@ function ContenidoProductos() {
                   : ''
               }`
             : esAdmin
-              ? 'Cargá tu primer producto para empezar a vender.'
+              ? 'Carga tu primer producto para empezar a vender.'
               : 'Todavía no hay productos en el catálogo.'
         }
         accion={
@@ -985,7 +985,7 @@ function ContenidoProductos() {
             <EmptyState
               icon={<BoxIcon className="h-6 w-6" />}
               title="Todavía no hay productos"
-              description='Usá "Nuevo producto" para empezar a cargar tu catálogo.'
+              description='Usa "Nuevo producto" para empezar a cargar tu catálogo.'
             />
           )}
 

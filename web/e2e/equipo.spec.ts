@@ -62,7 +62,7 @@ test.describe('Equipo y actividad de seguridad (admin)', () => {
 
   test('en la actividad propia, "Este dispositivo"', async ({ page }) => {
     await page
-      .locator('tbody tr', { hasText: '(vos)' })
+      .locator('tbody tr', { hasText: '(tú)' })
       .getByRole('button', { name: 'Actividad' })
       .click();
     await esperarVentana(page, 'Tu actividad');

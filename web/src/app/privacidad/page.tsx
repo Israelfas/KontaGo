@@ -22,7 +22,7 @@ export default function PrivacidadPage() {
         <li>
           De la cuenta: nombre, email, contraseña (guardada cifrada, nadie puede leerla) y rol.
         </li>
-        <li>De la tienda: nombre, y si los cargás, RUC, razón social, dirección y teléfono.</li>
+        <li>De la tienda: nombre, y si los cargas, RUC, razón social, dirección y teléfono.</li>
         <li>
           De la operación: productos, ventas, inventario y movimientos de caja, con quién y cuándo
           los registró.
@@ -41,7 +41,7 @@ export default function PrivacidadPage() {
       </ul>
       <p>
         No vendemos tus datos ni los usamos para publicidad. La base para tratarlos es tu
-        consentimiento al crear la cuenta y la ejecución del servicio que contratás.
+        consentimiento al crear la cuenta y la ejecución del servicio que contratas.
       </p>
 
       <h2>4. Con quién se comparten</h2>
@@ -54,7 +54,7 @@ export default function PrivacidadPage() {
       <h2>5. Cuánto tiempo se guardan</h2>
       <p>
         Mientras tu cuenta esté activa. Las ventas pueden tener que conservarse más tiempo por
-        obligaciones tributarias. Si cerrás la cuenta, eliminamos o anonimizamos los datos en un
+        obligaciones tributarias. Si cierras la cuenta, eliminamos o anonimizamos los datos en un
         plazo razonable, salvo lo que la ley obligue a guardar.
       </p>
 
@@ -62,15 +62,15 @@ export default function PrivacidadPage() {
       <p>
         Contraseñas cifradas, conexión segura, sesiones que se pueden cerrar, bloqueo tras intentos
         fallidos, registro de los accesos y separación de los datos de cada tienda. Si hubiera un
-        incidente que afecte tus datos, te avisamos a vos y a la autoridad dentro de los plazos de
+        incidente que afecte tus datos, te avisamos a ti y a la autoridad dentro de los plazos de
         la ley.
       </p>
 
       <h2>7. Tus derechos</h2>
       <p>
-        Podés pedir acceder a tus datos, corregirlos, eliminarlos, oponerte a un uso, pedir una
-        copia portable o retirar tu consentimiento. Escribinos a <Contacto /> y te respondemos
-        dentro de los plazos de la LOPDP. También podés reclamar ante la Superintendencia de
+        Puedes pedir acceder a tus datos, corregirlos, eliminarlos, oponerte a un uso, pedir una
+        copia portable o retirar tu consentimiento. Escríbenos a <Contacto /> y te respondemos
+        dentro de los plazos de la LOPDP. También puedes reclamar ante la Superintendencia de
         Protección de Datos Personales.
       </p>
 

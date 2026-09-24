@@ -290,7 +290,7 @@ function ContenidoHistorial() {
                   }))}
                 />
                 <ListaConBarras
-                  titulo="A quién le comprás"
+                  titulo="A quién le compras"
                   vacio="Sin compras en este período."
                   filas={resumen.porProveedor.map((p) => ({
                     clave: p.proveedor ?? '—',

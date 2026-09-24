@@ -137,7 +137,7 @@ async function apiFetch<T>(
     // funcionó la primera vez. Mejor avisar y dejar que la persona
     // confirme mirando la lista, que resubmitir a ciegas.
     throw new ApiError(
-      'Es posible que esto sí se haya guardado, pero no pudimos confirmarlo por un corte de conexión. Revisá la lista antes de intentar de nuevo.',
+      'Es posible que esto sí se haya guardado, pero no pudimos confirmarlo por un corte de conexión. Revisa la lista antes de intentar de nuevo.',
       response.status,
     );
   }
@@ -152,7 +152,7 @@ async function apiFetch<T>(
   const textoReintento = await reintento.text();
   if (!textoReintento) {
     throw new ApiError(
-      'El servidor no respondió (conexión inestable). Probá de nuevo.',
+      'El servidor no respondió (conexión inestable). Prueba de nuevo.',
       response.status,
     );
   }

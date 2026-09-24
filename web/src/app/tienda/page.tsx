@@ -28,7 +28,7 @@ const CAMPOS = [
   {
     clave: 'ruc',
     etiqueta: 'RUC (opcional)',
-    ayuda: '13 números: tu cédula seguida de 001, si sos persona natural.',
+    ayuda: '13 números: tu cédula seguida de 001, si eres persona natural.',
     placeholder: 'Ej: 1712345678001',
     max: 15,
   },

@@ -84,7 +84,7 @@ test.describe('Vender (cajero)', () => {
   }) => {
     await page.goto('/venta');
     await escanear(page, '0000000000001');
-    await expect(page.getByText(/no está en el catálogo\. Pedile al administrador/)).toBeVisible();
+    await expect(page.getByText(/no está en el catálogo\. Pídele al administrador/)).toBeVisible();
   });
 
   test('sin caja abierta pide abrirla antes de vender', async ({ page }) => {
