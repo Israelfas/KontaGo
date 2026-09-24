@@ -54,12 +54,14 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: backend/package-lock.json
+      # El mismo npm que generó los package-lock (el 10 de Node 22 los rechaza).
+      - run: npm install -g npm@12
       - run: npm ci
       - name: Lint
         run: npx eslint "{src,apps,libs,test}/**/*.ts"
@@ -77,15 +79,20 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: web/package-lock.json
+      # El mismo npm que generó los package-lock (el 10 de Node 22 los rechaza).
+      - run: npm install -g npm@12
       - run: npm ci
       - name: Tipos
-        run: npx tsc --noEmit
+        # LayoutProps y los tipos de las rutas los genera Next (en .next/).
+        run: |
+          npx next typegen
+          npx tsc --noEmit
       - name: Lint
         run: npm run lint
 
@@ -96,12 +103,14 @@ jobs:
       run:
         working-directory: mobile
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: mobile/package-lock.json
+      # El mismo npm que generó los package-lock (el 10 de Node 22 los rechaza).
+      - run: npm install -g npm@12
       - run: npm ci
       - name: Tipos
         run: npx tsc --noEmit
@@ -131,14 +140,16 @@ jobs:
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
       CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: |
             backend/package-lock.json
             web/package-lock.json
+      # El mismo npm que generó los package-lock (el 10 de Node 22 los rechaza).
+      - run: npm install -g npm@12
 
       - name: Revisar las claves de Clerk
         run: |
