@@ -1,0 +1,1354 @@
+/* ===================================================================
+   Landing (/). Todo cuelga de .landing para no tocar el resto de la app.
+
+   Movimiento: lo que entra, entra una vez y se asienta sin rebotar
+   (--ease-salida); lo que se arrastra (el carrusel) usa resortes en JS.
+   Con menos movimiento, globals.css deja todo en su estado final.
+   =================================================================== */
+
+.landing {
+  /* Lo que se asoma (maquetas, diapositivas vecinas) nunca genera
+     scroll lateral; clip no rompe el position: sticky/fixed. */
+  overflow-x: clip;
+  interpolate-size: allow-keywords;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html:has(.landing) {
+    scroll-behavior: smooth;
+  }
+}
+
+.landing [id] {
+  scroll-margin-top: 5rem;
+}
+
+/* --- Encabezado ------------------------------------------------------ */
+
+.landing-encabezado {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 50;
+  border-bottom: 1px solid transparent;
+  transition:
+    background-color 300ms ease,
+    border-color 300ms ease,
+    backdrop-filter 300ms ease;
+}
+
+/* Al scrollear se vuelve vidrio: el contenido pasa por debajo. */
+.landing-encabezado[data-scrolleado='true'] {
+  border-bottom-color: color-mix(in srgb, var(--papel-linea) 70%, transparent);
+  background: color-mix(in srgb, var(--papel) 72%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  backdrop-filter: blur(18px) saturate(170%);
+}
+
+.landing-enlace {
+  border-radius: 999px;
+  padding: 0.5rem 0.85rem;
+  color: var(--tinta-suave);
+  font-size: 0.875rem;
+  font-weight: 550;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease;
+}
+
+.landing-enlace:hover {
+  background: color-mix(in srgb, var(--papel-linea) 55%, transparent);
+  color: var(--tinta);
+}
+
+/* --- Hero --------------------------------------------------------------- */
+
+.landing-hero {
+  position: relative;
+  padding: 7.5rem 0 4.5rem;
+}
+
+@media (min-width: 1024px) {
+  .landing-hero {
+    padding: 9rem 0 6rem;
+  }
+}
+
+.hero-entra {
+  animation: entrar 760ms var(--ease-salida) both;
+  animation-delay: calc(var(--i, 0) * 90ms + 60ms);
+}
+
+.hero-pastilla {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--papel-linea);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--superficie) 80%, transparent);
+  padding: 0.4rem 0.85rem;
+  color: var(--tinta-suave);
+  font-family: var(--font-ticket);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.hero-titulo {
+  margin-top: 1.5rem;
+  max-width: 13ch;
+  color: var(--tinta);
+  font-family: var(--font-display);
+  font-size: clamp(2.7rem, 6.4vw, 5rem);
+  font-weight: 700;
+  line-height: 0.95;
+  letter-spacing: -0.058em;
+}
+
+/* El subrayado ámbar se dibuja de izquierda a derecha. */
+.hero-subrayado {
+  background: linear-gradient(var(--ambar), var(--ambar)) no-repeat 0 92% / 100% 0.14em;
+  animation: subrayar 900ms var(--ease-salida) 700ms both;
+}
+
+@keyframes subrayar {
+  from {
+    background-size: 0 0.14em;
+  }
+}
+
+.hero-bajada {
+  margin-top: 1.5rem;
+  max-width: 30rem;
+  color: var(--tinta-suave);
+  font-size: 1.125rem;
+  line-height: 1.7;
+}
+
+.hero-boton {
+  min-height: 3.1rem;
+  border-radius: 0.9rem;
+  padding: 0 1.3rem;
+  font-size: 0.95rem;
+}
+
+/* La escena: la compu atrás (con la ganancia a la vista), el celular
+   apoyado en la esquina de abajo a la derecha y un aviso flotando arriba. */
+.hero-escena {
+  position: relative;
+  padding-bottom: 4.5rem;
+}
+
+.hero-resplandor {
+  position: absolute;
+  inset: 10% 5% 15% 15%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 40%, rgba(217, 140, 43, 0.35), transparent 60%),
+    radial-gradient(circle at 75% 65%, rgba(47, 111, 79, 0.25), transparent 60%);
+  filter: blur(48px);
+}
+
+.hero-navegador {
+  position: relative;
+  max-width: 36rem;
+  animation: hero-navegador-entra 1000ms var(--ease-salida) 220ms both;
+}
+
+@keyframes hero-navegador-entra {
+  from {
+    opacity: 0;
+    transform: translateY(36px) scale(0.97);
+  }
+}
+
+.hero-celular {
+  position: absolute;
+  right: -0.5rem;
+  bottom: 0;
+  z-index: 10;
+  zoom: 0.85;
+  transform: rotate(3deg);
+  animation: hero-celular-entra 1150ms var(--ease-salida) 480ms both;
+}
+
+@keyframes hero-celular-entra {
+  from {
+    opacity: 0;
+    transform: translateY(70px) rotate(9deg);
+  }
+}
+
+@media (max-width: 639px) {
+  .hero-escena {
+    padding-bottom: 2.5rem;
+  }
+
+  .hero-celular {
+    right: -0.25rem;
+    zoom: 0.55;
+  }
+}
+
+@media (min-width: 1280px) {
+  .hero-celular {
+    right: -2.5rem;
+  }
+}
+
+/* Al scrollear, el celular sube más rápido que la compu: profundidad.
+   Solo donde el navegador lo hace sin JavaScript. */
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .hero-celular {
+      animation:
+        hero-celular-entra 1150ms var(--ease-salida) 480ms both,
+        profundidad-cerca linear both;
+      animation-timeline: auto, scroll(root);
+      animation-range:
+        normal,
+        0 80vh;
+    }
+
+    .hero-navegador {
+      animation:
+        hero-navegador-entra 1000ms var(--ease-salida) 220ms both,
+        profundidad-lejos linear both;
+      animation-timeline: auto, scroll(root);
+      animation-range:
+        normal,
+        0 80vh;
+    }
+
+    .descarga-celular {
+      animation: flotar-al-pasar linear both;
+      animation-timeline: view();
+      animation-range: entry 0% exit 100%;
+    }
+  }
+}
+
+@keyframes profundidad-cerca {
+  to {
+    translate: 0 -70px;
+  }
+}
+
+@keyframes profundidad-lejos {
+  to {
+    translate: 0 -24px;
+  }
+}
+
+@keyframes flotar-al-pasar {
+  from {
+    translate: 0 50px;
+  }
+  to {
+    translate: 0 -50px;
+  }
+}
+
+/* Avisos en vivo: aparecen como un material que se materializa. */
+.avisos-en-vivo {
+  position: absolute;
+  top: -1.4rem;
+  left: 40%;
+  z-index: 20;
+}
+
+@media (max-width: 639px) {
+  .avisos-en-vivo {
+    top: auto;
+    bottom: 0.25rem;
+    left: 0;
+  }
+}
+
+.aviso-flotante {
+  display: flex;
+  width: 13.5rem;
+  align-items: center;
+  gap: 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 1rem;
+  background: rgba(255, 253, 248, 0.8);
+  box-shadow:
+    0 18px 40px rgba(28, 43, 58, 0.16),
+    0 2px 6px rgba(28, 43, 58, 0.06);
+  padding: 0.5rem 0.85rem 0.5rem 0.5rem;
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(180%);
+  animation: materializar 620ms var(--ease-salida) both;
+}
+
+@keyframes materializar {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+    transform: translateY(12px) scale(0.94);
+  }
+}
+
+.aviso-flotante-icono {
+  display: flex;
+  height: 2rem;
+  width: 2rem;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.65rem;
+}
+
+.aviso-verde {
+  background: color-mix(in srgb, var(--verde-ganancia) 13%, transparent);
+  color: var(--verde-ganancia);
+}
+
+.aviso-ambar {
+  background: color-mix(in srgb, var(--ambar) 18%, transparent);
+  color: #9a5b08;
+}
+
+.aviso-rojo {
+  background: color-mix(in srgb, var(--rojo-perdida) 13%, transparent);
+  color: var(--rojo-perdida);
+}
+
+/* --- Secciones ------------------------------------------------------------ */
+
+.landing-seccion {
+  padding: 4.5rem 0;
+}
+
+@media (min-width: 1024px) {
+  .landing-seccion {
+    padding: 6.5rem 0;
+  }
+}
+
+.landing-cabecera {
+  max-width: 40rem;
+  margin-bottom: 2.5rem;
+}
+
+.landing-titulo {
+  color: var(--tinta);
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4.6vw, 3.3rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.052em;
+}
+
+.landing-bajada {
+  margin-top: 1rem;
+  color: var(--tinta-suave);
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
+
+/* Aparece al entrar en pantalla (revelar.tsx). */
+.revelar {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 700ms var(--ease-salida),
+    transform 950ms var(--ease-salida);
+  transition-delay: var(--retraso, 0ms);
+}
+
+.revelar[data-visible='true'] {
+  opacity: 1;
+  transform: none;
+}
+
+@media (scripting: none) {
+  .revelar {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* --- Carrusel ------------------------------------------------------------- */
+
+.carrusel-barra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.carrusel-pestanas {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--papel-linea);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--superficie) 85%, transparent);
+  box-shadow: 0 6px 18px rgba(28, 43, 58, 0.05);
+  padding: 4px;
+  scrollbar-width: none;
+}
+
+.carrusel-pestanas::-webkit-scrollbar {
+  display: none;
+}
+
+/* La pastilla sigue al dedo: se mueve y se estira entre pestañas
+   mientras se arrastra (la posiciona carrusel.tsx en cada cuadro). */
+.carrusel-indicador {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  border-radius: 999px;
+  background: var(--tinta);
+  box-shadow: 0 6px 14px rgba(28, 43, 58, 0.22);
+  will-change: transform, width;
+}
+
+.carrusel-pestana {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  border-radius: 999px;
+  padding: 0.55rem 1rem;
+  color: var(--tinta-suave);
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    color 220ms ease,
+    transform 100ms ease-out;
+}
+
+.carrusel-pestana:hover {
+  color: var(--tinta);
+}
+
+@media (max-width: 479px) {
+  .carrusel-pestana {
+    padding: 0.5rem 0.7rem;
+    font-size: 0.8rem;
+  }
+}
+
+.carrusel-pestana[data-cercana='true'] {
+  color: var(--papel);
+}
+
+.carrusel-pestana:active {
+  transform: scale(0.95);
+}
+
+.carrusel-flechas {
+  display: none;
+  gap: 0.5rem;
+}
+
+@media (min-width: 640px) {
+  .carrusel-flechas {
+    display: flex;
+  }
+}
+
+.carrusel-flecha {
+  display: flex;
+  height: 2.6rem;
+  width: 2.6rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--papel-linea);
+  border-radius: 999px;
+  background: var(--superficie);
+  color: var(--tinta);
+  transition:
+    transform 100ms ease-out,
+    opacity 200ms ease,
+    border-color 160ms ease;
+}
+
+.carrusel-flecha:hover:not([aria-disabled='true']) {
+  border-color: #cfc3a6;
+}
+
+.carrusel-flecha:active:not([aria-disabled='true']) {
+  transform: scale(0.92);
+}
+
+.carrusel-flecha[aria-disabled='true'] {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.carrusel-ventana {
+  /* Visible hacia los costados: la diapositiva siguiente se asoma. */
+  overflow: visible;
+  cursor: grab;
+  touch-action: pan-y;
+}
+
+.carrusel-ventana[data-arrastrando='true'] {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.carrusel-pista {
+  display: flex;
+  gap: 1.25rem;
+  will-change: transform;
+}
+
+.carrusel-diapositiva {
+  flex: 0 0 88%;
+  opacity: 0.45;
+  transform: scale(0.965);
+  transition:
+    opacity 450ms var(--ease-salida),
+    transform 600ms var(--ease-salida);
+}
+
+@media (min-width: 640px) {
+  .carrusel-diapositiva {
+    flex-basis: 100%;
+  }
+}
+
+.carrusel-diapositiva[data-activa='true'] {
+  opacity: 1;
+  transform: none;
+}
+
+.diapositiva-tarjeta {
+  display: grid;
+  gap: 2rem;
+  height: 100%;
+  border: 1px solid var(--papel-linea);
+  border-radius: 1.75rem;
+  background: color-mix(in srgb, var(--superficie) 90%, transparent);
+  box-shadow: var(--sombra);
+  padding: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .diapositiva-tarjeta {
+    grid-template-columns: 0.9fr 1.1fr;
+    align-items: center;
+    padding: 2.5rem;
+  }
+}
+
+.diapositiva-escena {
+  position: relative;
+  display: flex;
+  min-height: 22rem;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--papel-linea);
+  border-radius: 1.3rem;
+  background:
+    radial-gradient(circle at 25% 15%, rgba(217, 140, 43, 0.16), transparent 55%),
+    radial-gradient(circle at 85% 90%, rgba(47, 111, 79, 0.12), transparent 55%),
+    var(--superficie-suave);
+  padding: 1.5rem 1rem;
+}
+
+.carrusel-tiempo {
+  width: 7rem;
+  height: 3px;
+  margin: 1.25rem auto 0;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--papel-linea);
+}
+
+.carrusel-tiempo-barra {
+  display: block;
+  height: 100%;
+  background: var(--tinta);
+  transform-origin: left;
+  animation-name: crecer-horizontal;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+
+.carrusel-tiempo-barra[data-en-pausa='true'] {
+  animation-play-state: paused;
+}
+
+/* --- Cómo funciona -------------------------------------------------------- */
+
+.pasos {
+  display: grid;
+  gap: 2rem;
+}
+
+@media (min-width: 768px) {
+  .pasos {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+  }
+}
+
+.paso-numero {
+  color: var(--ambar);
+  font-family: var(--font-ticket);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* La línea se dibuja después de que aparece el paso. */
+.paso-linea {
+  display: block;
+  height: 1px;
+  margin-top: 0.9rem;
+  background: linear-gradient(90deg, var(--tinta), var(--papel-linea));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 1100ms var(--ease-salida);
+  transition-delay: calc(var(--retraso, 0ms) + 250ms);
+}
+
+.revelar[data-visible='true'] .paso-linea {
+  transform: none;
+}
+
+/* --- Detalles --------------------------------------------------------------- */
+
+.detalle {
+  height: 100%;
+  border: 1px solid var(--papel-linea);
+  border-radius: 1.4rem;
+  background: color-mix(in srgb, var(--superficie) 88%, transparent);
+  padding: 1.5rem;
+  transition:
+    transform 260ms var(--ease-salida),
+    box-shadow 260ms var(--ease-salida),
+    border-color 200ms ease;
+}
+
+.detalle:hover {
+  transform: translateY(-3px);
+  border-color: #d8ccb0;
+  box-shadow: var(--sombra);
+}
+
+.detalle-icono {
+  display: flex;
+  height: 2.6rem;
+  width: 2.6rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.85rem;
+  background: var(--tinta);
+  color: var(--ambar);
+}
+
+/* --- Descargar ------------------------------------------------------------- */
+
+.descarga {
+  position: relative;
+  overflow: hidden;
+  border-radius: 2rem;
+  background: var(--tinta);
+  padding: 2.25rem 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .descarga {
+    padding: 3.5rem;
+  }
+}
+
+.descarga-brillo {
+  position: absolute;
+  height: 22rem;
+  width: 22rem;
+  border-radius: 50%;
+  filter: blur(70px);
+}
+
+.descarga-brillo-ambar {
+  top: -8rem;
+  right: -6rem;
+  background: rgba(217, 140, 43, 0.3);
+}
+
+.descarga-brillo-verde {
+  bottom: -10rem;
+  left: -8rem;
+  background: rgba(47, 111, 79, 0.35);
+}
+
+.descarga-celular {
+  width: 15rem;
+  rotate: 4deg;
+  margin: -1rem 0 -6rem;
+}
+
+.boton-tienda {
+  display: inline-flex;
+  min-height: 3.5rem;
+  align-items: center;
+  gap: 0.7rem;
+  border: 1px solid rgba(246, 243, 236, 0.18);
+  border-radius: 1rem;
+  background: var(--papel);
+  padding: 0.55rem 1.2rem 0.55rem 0.8rem;
+  color: var(--tinta);
+  transition:
+    transform 100ms ease-out,
+    box-shadow 200ms ease;
+}
+
+a.boton-tienda:hover {
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.25);
+}
+
+a.boton-tienda:active {
+  transform: scale(0.97);
+}
+
+.boton-tienda[data-pronto='true'] {
+  background: rgba(246, 243, 236, 0.08);
+  color: rgba(246, 243, 236, 0.75);
+  cursor: default;
+}
+
+.boton-tienda-icono {
+  display: flex;
+  height: 2.2rem;
+  width: 2.2rem;
+  align-items: center;
+  justify-content: center;
+}
+
+/* --- Preguntas ---------------------------------------------------------------- */
+
+.preguntas {
+  border-top: 1px solid var(--papel-linea);
+}
+
+.pregunta {
+  border-bottom: 1px solid var(--papel-linea);
+}
+
+.pregunta summary {
+  display: flex;
+  cursor: pointer;
+  list-style: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.2rem 0;
+  color: var(--tinta);
+  font-family: var(--font-display);
+  font-size: 1.08rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.pregunta summary::-webkit-details-marker {
+  display: none;
+}
+
+.pregunta p {
+  max-width: 38rem;
+  padding-bottom: 1.3rem;
+  color: var(--tinta-suave);
+  line-height: 1.75;
+}
+
+/* Abre y cierra deslizando, donde el navegador lo permite. */
+.pregunta::details-content {
+  block-size: 0;
+  overflow: clip;
+  transition:
+    block-size 380ms var(--ease-deslizar),
+    content-visibility 380ms allow-discrete;
+}
+
+.pregunta[open]::details-content {
+  block-size: auto;
+}
+
+/* Un "+" que se vuelve "−". */
+.pregunta-signo {
+  position: relative;
+  height: 1.8rem;
+  width: 1.8rem;
+  flex: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--papel-linea) 60%, transparent);
+}
+
+.pregunta-signo::before,
+.pregunta-signo::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  height: 1.5px;
+  width: 0.7rem;
+  background: var(--tinta);
+  content: '';
+  translate: -50% -50%;
+  transition: rotate 300ms var(--ease-salida);
+}
+
+.pregunta-signo::after {
+  rotate: 90deg;
+}
+
+.pregunta[open] .pregunta-signo::after {
+  rotate: 0deg;
+}
+
+/* --- Cierre y pie ------------------------------------------------------------- */
+
+.cierre {
+  border: 1px solid var(--papel-linea);
+  border-radius: 2rem;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(217, 140, 43, 0.14), transparent 60%),
+    color-mix(in srgb, var(--superficie) 80%, transparent);
+  padding: 4rem 1.5rem;
+  text-align: center;
+}
+
+.landing-pie {
+  border-top: 1px solid var(--papel-linea);
+  padding: 2rem 0 2.5rem;
+}
+
+.landing-enlace-pie {
+  color: var(--tinta-suave);
+  transition: color 160ms ease;
+}
+
+.landing-enlace-pie:hover {
+  color: var(--tinta);
+}
+
+/* ===================================================================
+   Maquetas (maquetas.tsx)
+   =================================================================== */
+
+.maq-navegador {
+  overflow: hidden;
+  border: 1px solid var(--papel-linea);
+  border-radius: 1.1rem;
+  background: var(--superficie);
+  box-shadow:
+    0 40px 80px rgba(28, 43, 58, 0.16),
+    0 8px 20px rgba(28, 43, 58, 0.06);
+  user-select: none;
+}
+
+.maq-navegador-escena {
+  width: 100%;
+  max-width: 25rem;
+}
+
+.maq-navegador-barra {
+  display: flex;
+  height: 2rem;
+  align-items: center;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--papel-linea);
+  padding: 0 0.75rem;
+}
+
+.maq-punto {
+  display: block;
+  height: 0.5rem;
+  width: 0.5rem;
+  border-radius: 999px;
+  background: var(--papel-linea);
+}
+
+.maq-direccion {
+  flex: 1;
+  border-radius: 0.4rem;
+  background: var(--superficie-suave);
+  padding: 0.2rem 0.6rem;
+  color: var(--tinta-suave);
+  font-family: var(--font-ticket);
+  font-size: 0.6rem;
+  text-align: center;
+}
+
+.maq-navegador-cuerpo {
+  background: var(--papel);
+}
+
+.maq-menu {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--papel-linea);
+  background: var(--superficie);
+  padding: 0.45rem 0.75rem;
+}
+
+.maq-menu-item {
+  border-radius: 999px;
+  padding: 0.2rem 0.5rem;
+  color: var(--tinta-suave);
+  font-size: 0.58rem;
+  font-weight: 600;
+}
+
+.maq-menu-activo {
+  background: var(--tinta);
+  color: var(--papel);
+}
+
+@media (max-width: 479px) {
+  .maq-menu-item:not(.maq-menu-activo) {
+    display: none;
+  }
+}
+
+.maq-franja {
+  background: var(--tinta);
+  padding: 1rem 1rem 1.7rem;
+  color: var(--papel);
+}
+
+.maq-franja-compacta {
+  padding: 2.1rem 0.9rem 1.5rem;
+}
+
+.maq-franja-eyebrow {
+  color: var(--ambar);
+  font-family: var(--font-ticket);
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.maq-franja-titulo {
+  margin-top: 0.2rem;
+  color: rgba(246, 243, 236, 0.7);
+  font-size: 0.72rem;
+}
+
+.maq-franja-valor {
+  font-family: var(--font-display);
+  font-size: 2.1rem;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.05em;
+}
+
+.maq-franja-compacta .maq-franja-valor {
+  font-size: 1.6rem;
+}
+
+.maq-franja-detalle {
+  margin-top: 0.15rem;
+  color: rgba(246, 243, 236, 0.6);
+  font-size: 0.65rem;
+}
+
+.maq-hoja {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.45rem;
+  margin-top: -0.85rem;
+  border-radius: 0.9rem 0.9rem 0 0;
+  background: var(--papel);
+  padding: 0.6rem;
+}
+
+.maq-pieza {
+  border: 1px solid var(--papel-linea);
+  border-radius: 0.7rem;
+  background: var(--superficie);
+  padding: 0.55rem 0.6rem;
+}
+
+.maq-etiqueta {
+  color: var(--tinta-suave);
+  font-family: var(--font-ticket);
+  font-size: 0.52rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.maq-dato {
+  margin-top: 0.15rem;
+  color: var(--tinta);
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.maq-detalle {
+  color: var(--tinta-suave);
+  font-size: 0.6rem;
+}
+
+.maq-barras {
+  display: flex;
+  height: 4.2rem;
+  align-items: flex-end;
+  gap: 3px;
+  margin-top: 0.45rem;
+}
+
+.maq-barras-semana {
+  height: 6.5rem;
+  gap: 0.4rem;
+  margin-top: 0;
+}
+
+.maq-barra {
+  display: block;
+  flex: 1;
+  border-radius: 3px 3px 1px 1px;
+  background: color-mix(in srgb, var(--tinta) 16%, transparent);
+  transform-origin: bottom;
+}
+
+/* En la semana cada barra va en su columna, con el día debajo. */
+.maq-barras-semana .maq-barra {
+  flex: none;
+}
+
+.maq-barra-pico {
+  background: var(--ambar);
+}
+
+.maq-barra-h {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transform-origin: left;
+}
+
+/* Celular */
+.maq-celular {
+  width: 13rem;
+  aspect-ratio: 9 / 19;
+  border-radius: 2.3rem;
+  background: #111c26;
+  box-shadow:
+    0 40px 80px rgba(28, 43, 58, 0.3),
+    0 10px 24px rgba(28, 43, 58, 0.18),
+    inset 0 0 0 1.5px rgba(255, 255, 255, 0.08);
+  padding: 7px;
+  user-select: none;
+}
+
+.maq-celular-escena {
+  width: 12.5rem;
+}
+
+.maq-celular-pantalla {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 1.85rem;
+  background: var(--papel);
+}
+
+.maq-celular-isla {
+  position: absolute;
+  top: 0.45rem;
+  left: 50%;
+  z-index: 5;
+  height: 1.1rem;
+  width: 32%;
+  border-radius: 999px;
+  background: #05090d;
+  translate: -50% 0;
+}
+
+.maq-cel-cabecera {
+  background: var(--tinta);
+  padding: 2.2rem 0.9rem 0.8rem;
+}
+
+.maq-escaner {
+  position: relative;
+  display: flex;
+  height: 3.2rem;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0.7rem 0.75rem 0;
+  overflow: hidden;
+  border-radius: 0.8rem;
+  background: #22364a;
+  padding: 0 0.8rem;
+}
+
+/* Un código de barras hecho con rayas. */
+.maq-codigo {
+  display: block;
+  height: 1.55rem;
+  flex: 1;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(246, 243, 236, 0.85) 0 2px,
+    transparent 2px 4px,
+    rgba(246, 243, 236, 0.85) 4px 5px,
+    transparent 5px 8px,
+    rgba(246, 243, 236, 0.85) 8px 11px,
+    transparent 11px 13px
+  );
+}
+
+.maq-escaner-linea {
+  position: absolute;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  left: 2.4rem;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--ambar);
+  box-shadow: 0 0 10px 2px rgba(217, 140, 43, 0.7);
+  animation: escanear 2.6s var(--ease-deslizar) infinite alternate;
+}
+
+@keyframes escanear {
+  to {
+    left: calc(100% - 1rem);
+  }
+}
+
+.maq-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--papel-linea);
+  border-radius: 0.6rem;
+  background: var(--superficie);
+  padding: 0.45rem 0.55rem;
+  color: var(--tinta);
+  font-size: 0.7rem;
+}
+
+.maq-cantidad {
+  display: flex;
+  height: 1.2rem;
+  min-width: 1.2rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.35rem;
+  background: color-mix(in srgb, var(--tinta) 8%, transparent);
+  font-family: var(--font-ticket);
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+.maq-cobrar {
+  margin: 0.75rem;
+  border: 1px solid var(--papel-linea);
+  border-radius: 0.9rem;
+  background: var(--superficie);
+  padding: 0.65rem 0.7rem;
+}
+
+.maq-boton-cobrar {
+  display: block;
+  margin-top: 0.5rem;
+  border-radius: 0.6rem;
+  background: var(--verde-ganancia);
+  padding: 0.5rem;
+  color: white;
+  font-size: 0.72rem;
+  font-weight: 650;
+  text-align: center;
+}
+
+/* Tarjetas sueltas (caja, inventario, equipo) */
+.maq-tarjeta {
+  width: 100%;
+  max-width: 23rem;
+  border: 1px solid var(--papel-linea);
+  border-radius: 1.1rem;
+  background: var(--superficie);
+  box-shadow: 0 30px 60px rgba(28, 43, 58, 0.12);
+  padding: 1.1rem;
+  user-select: none;
+}
+
+.maq-fila {
+  display: flex;
+  justify-content: space-between;
+  color: var(--tinta);
+  font-size: 0.78rem;
+}
+
+.maq-fila-total {
+  border-top: 1px dashed var(--papel-linea);
+  padding-top: 0.45rem;
+  font-weight: 650;
+}
+
+.maq-cuadra {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--verde-ganancia) 10%, transparent);
+  padding: 0.6rem 0.75rem;
+  color: var(--verde-ganancia);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.maq-check {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 16;
+}
+
+.maq-alerta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border: 1px solid var(--papel-linea);
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--papel) 60%, transparent);
+  padding: 0.5rem 0.6rem;
+}
+
+.maq-alerta-punto {
+  height: 0.5rem;
+  width: 0.5rem;
+  flex: none;
+  border-radius: 999px;
+}
+
+.maq-ambar {
+  background: var(--ambar);
+}
+
+.maq-rojo {
+  background: var(--rojo-perdida);
+}
+
+.maq-pastilla {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+}
+
+.maq-pastilla-ambar {
+  background: color-mix(in srgb, var(--ambar) 16%, transparent);
+  color: #9a5b08;
+}
+
+.maq-pastilla-rojo {
+  background: color-mix(in srgb, var(--rojo-perdida) 12%, transparent);
+  color: var(--rojo-perdida);
+}
+
+.maq-lote {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--tinta);
+}
+
+.maq-lote-pista {
+  display: block;
+  height: 0.45rem;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tinta) 8%, transparent);
+}
+
+.maq-actividad {
+  margin-top: 0.9rem;
+  border: 1px solid var(--papel-linea);
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--papel) 60%, transparent);
+  padding: 0.7rem;
+}
+
+.maq-boton-secundario {
+  display: block;
+  margin-top: 0.65rem;
+  border: 1px solid var(--papel-linea);
+  border-radius: 0.55rem;
+  background: var(--superficie);
+  padding: 0.4rem;
+  color: var(--tinta);
+  font-size: 0.66rem;
+  font-weight: 650;
+  text-align: center;
+}
+
+/* --- Cuándo se animan las maquetas ----------------------------------------
+   Al cargar (hero), cuando su diapositiva pasa a ser la activa, o cuando
+   su sección aparece al scrollear. Cada vez que una diapositiva vuelve a
+   estar activa, la animación arranca de nuevo. */
+
+.landing-hero .maq-entra,
+.carrusel-diapositiva[data-activa='true'] .maq-entra,
+.revelar[data-visible='true'] .maq-entra {
+  animation: entrar 560ms var(--ease-salida) both;
+  animation-delay: calc(var(--i, 0) * 75ms + var(--base, 160ms));
+}
+
+.landing-hero .maq-barra,
+.carrusel-diapositiva[data-activa='true'] .maq-barra {
+  animation: crecer-vertical 800ms var(--ease-salida) both;
+  animation-delay: calc(var(--i, 0) * 40ms + var(--base, 160ms) + 250ms);
+}
+
+.carrusel-diapositiva[data-activa='true'] .maq-barra-h {
+  animation: crecer-horizontal 900ms var(--ease-salida) both;
+  animation-delay: calc(var(--i, 0) * 75ms + 300ms);
+}
+
+.carrusel-diapositiva[data-activa='true'] .maq-check {
+  stroke-dashoffset: 16;
+  animation: dibujar 500ms var(--ease-salida) 850ms forwards;
+}
+
+/* En el hero todo espera a que llegue la escena. */
+.landing-hero {
+  --base: 650ms;
+}
+
+/* --- Accesibilidad ------------------------------------------------------------ */
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .landing-encabezado[data-scrolleado='true'],
+  .aviso-flotante {
+    background: var(--papel);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .aviso-flotante,
+  .detalle,
+  .diapositiva-tarjeta {
+    border-color: var(--tinta);
+  }
+}

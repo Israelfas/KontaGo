@@ -69,6 +69,9 @@ body {
     radial-gradient(circle at 8% -12%, rgba(217, 140, 43, 0.16), transparent 30rem),
     radial-gradient(circle at 96% 18%, rgba(47, 111, 79, 0.1), transparent 28rem),
     var(--background);
+  /* <html> mide una pantalla (h-full): sin esto, en las páginas largas los
+     brillos se repetían como mosaico cada 100vh y se veían los cortes. */
+  background-repeat: no-repeat;
 }
 
 button,

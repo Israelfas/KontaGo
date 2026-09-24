@@ -103,6 +103,10 @@ Además:
   IP real.
 - Correr `npm run migration:run` antes de cada versión nueva.
 - Web: `NEXT_PUBLIC_API_URL` con la dirección del backend.
+- Web, página de inicio: `NEXT_PUBLIC_APP_ANDROID_URL` y
+  `NEXT_PUBLIC_APP_IOS_URL` con el enlace de la tienda (o del `.apk`). Si
+  están, los botones de descarga se activan y aparece el QR; si no, dicen
+  "Muy pronto". Se leen al compilar la web.
 - App: `EXPO_PUBLIC_API_URL`, y el contacto de soporte
   (`EXPO_PUBLIC_SOPORTE_CORREO` / `_WHATSAPP`, ver `mobile/.env.example`).
 

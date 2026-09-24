@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import Link from 'next/link';
 import { CheckIcon, ReceiptIcon, SparklesIcon } from './icons';
 import { AppLogo } from './ui';
 
@@ -23,6 +24,13 @@ export function AuthShell({
           <div className="absolute -bottom-28 -left-24 h-72 w-72 rounded-full bg-verde-ganancia/30 blur-3xl" />
 
           <div className="relative">
+            <Link
+              href="/"
+              className="mb-8 inline-flex items-center gap-1.5 text-sm font-medium text-papel/60 transition-colors hover:text-papel"
+            >
+              <span aria-hidden="true">←</span> Conocé KontaGo
+            </Link>
+            <br />
             <span className="inline-flex items-center gap-2 rounded-full border border-papel/15 bg-papel/10 px-3 py-1.5 font-ticket text-[0.68rem] font-medium uppercase tracking-[0.14em] text-papel/80">
               <SparklesIcon className="h-3.5 w-3.5 text-ambar" />
               Tu caja, siempre lista
@@ -60,9 +68,9 @@ export function AuthShell({
 
         <section className="flex min-h-full items-center justify-center p-6 sm:p-10 lg:p-14">
           <div className="w-full max-w-md">
-            <div className="lg:hidden">
+            <Link href="/" className="inline-block lg:hidden" aria-label="KontaGo, inicio">
               <AppLogo />
-            </div>
+            </Link>
             <p className="eyebrow mt-8 lg:mt-0">{eyebrow}</p>
             <h2 className="font-display text-3xl font-bold tracking-[-0.055em] text-tinta sm:text-4xl">
               {title}
