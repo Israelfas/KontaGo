@@ -5,7 +5,9 @@ import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
 import { AvisoDeCampo, Button, ErrorState, LoadingState } from '@/components/ui';
 import { Banda, Hoja } from '@/components/banda';
-import { PencilIcon, PlusIcon, UsersIcon } from '@/components/icons';
+import { ActivityIcon, LockIcon, PencilIcon, PlusIcon, UsersIcon } from '@/components/icons';
+import { ActividadDeLaCuenta } from '@/components/actividad-cuenta';
+import { haceCuanto } from '@/lib/actividad';
 import { Ventana, VentanaPie, useVentana } from '@/components/ventana';
 import { useAuth } from '@/lib/auth-context';
 import {
@@ -14,6 +16,7 @@ import {
   desactivarUsuario,
   reactivarUsuario,
   cambiarPasswordUsuario,
+  desbloquearUsuario,
   ApiError,
 } from '@/lib/api';
 import type { UsuarioEquipo } from '@/lib/tipos';
@@ -262,6 +265,7 @@ function ContenidoEquipo() {
   const [aviso, setAviso] = useState<string | null>(null);
   const [agregando, setAgregando] = useState(false);
   const [cambiandoPassword, setCambiandoPassword] = useState<UsuarioEquipo | null>(null);
+  const [viendoActividad, setViendoActividad] = useState<UsuarioEquipo | null>(null);
   const [procesandoId, setProcesandoId] = useState<string | null>(null);
 
   function cargar() {
@@ -282,8 +286,24 @@ function ContenidoEquipo() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
+  // Las respuestas de una sola persona no traen el último ingreso: se
+  // conserva el que ya estaba en la lista.
   function reemplazar(actualizado: UsuarioEquipo) {
-    setEquipo((prev) => prev.map((u) => (u.id === actualizado.id ? actualizado : u)));
+    setEquipo((prev) => prev.map((u) => (u.id === actualizado.id ? { ...u, ...actualizado } : u)));
+  }
+
+  async function desbloquear(persona: UsuarioEquipo) {
+    if (!token) return;
+    setErrorAccion(null);
+    setProcesandoId(persona.id);
+    try {
+      reemplazar(await desbloquearUsuario(token, persona.id));
+      setAviso(`${persona.nombre} ya puede volver a entrar.`);
+    } catch (err) {
+      setErrorAccion(err instanceof ApiError ? err.message : 'No se pudo desbloquear');
+    } finally {
+      setProcesandoId(null);
+    }
   }
 
   async function alternarActivo(persona: UsuarioEquipo) {
@@ -333,6 +353,24 @@ function ContenidoEquipo() {
               onCerrar={() => setAgregando(false)}
             >
               <FormularioNuevaPersona onCreado={(u) => setEquipo((prev) => [...prev, u])} />
+            </Ventana>
+          )}
+
+          {viendoActividad && (
+            <Ventana
+              titulo={
+                viendoActividad.id === usuario?.sub
+                  ? 'Tu actividad'
+                  : `Actividad de ${viendoActividad.nombre}`
+              }
+              descripcion={`${viendoActividad.email} · dónde tiene la sesión abierta y lo último que pasó con la cuenta.`}
+              icono={<ActivityIcon className="h-5 w-5" />}
+              onCerrar={() => setViendoActividad(null)}
+            >
+              <ActividadDeLaCuenta
+                persona={viendoActividad}
+                esVos={viendoActividad.id === usuario?.sub}
+              />
             </Ventana>
           )}
 
@@ -397,15 +435,44 @@ function ContenidoEquipo() {
                           {esVos && <span className="ml-1 text-xs text-tinta-suave">(vos)</span>}
                         </p>
                         <p className="break-all text-xs text-tinta-suave">{persona.email}</p>
+                        <p className="mt-1 text-xs text-tinta-suave">
+                          {persona.ultimoIngreso
+                            ? `Entró ${haceCuanto(persona.ultimoIngreso)}`
+                            : 'Todavía no entró'}
+                        </p>
                         {!persona.activo && (
                           <p className="mt-1 text-xs text-rojo-perdida">Desactivado</p>
+                        )}
+                        {persona.bloqueadoHasta && (
+                          <p className="mt-1 text-xs font-medium text-rojo-perdida">
+                            Bloqueada por intentos fallidos
+                          </p>
                         )}
                       </div>
                       <span className={`status-pill ${CLASE_ROL[persona.rol]} shrink-0 text-xs`}>
                         {ETIQUETA_ROL[persona.rol]}
                       </span>
                     </div>
-                    <div className="mt-3 flex gap-4">
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setViendoActividad(persona)}
+                        className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10 disabled:opacity-50"
+                      >
+                        <ActivityIcon className="h-3 w-3" />
+                        Actividad
+                      </button>
+                      {persona.bloqueadoHasta && (
+                        <button
+                          type="button"
+                          disabled={procesandoId !== null}
+                          onClick={() => desbloquear(persona)}
+                          className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10 disabled:opacity-50 !bg-rojo-perdida/10 !text-rojo-perdida"
+                        >
+                          <LockIcon className="h-3 w-3" />
+                          Desbloquear
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => {
@@ -446,6 +513,7 @@ function ContenidoEquipo() {
                     <th className="px-4 py-3">Nombre</th>
                     <th className="px-4 py-3">Email</th>
                     <th className="px-4 py-3">Rol</th>
+                    <th className="px-4 py-3">Último ingreso</th>
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>
@@ -463,6 +531,11 @@ function ContenidoEquipo() {
                           {!persona.activo && (
                             <span className="ml-2 text-xs text-rojo-perdida">Desactivado</span>
                           )}
+                          {persona.bloqueadoHasta && (
+                            <span className="status-pill status-pill-danger ml-2 text-[0.65rem]">
+                              Bloqueada
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-tinta-suave">{persona.email}</td>
                         <td className="px-4 py-3">
@@ -470,8 +543,30 @@ function ContenidoEquipo() {
                             {ETIQUETA_ROL[persona.rol]}
                           </span>
                         </td>
+                        <td className="px-4 py-3 text-xs text-tinta-suave">
+                          {persona.ultimoIngreso ? haceCuanto(persona.ultimoIngreso) : 'Nunca'}
+                        </td>
                         <td className="px-4 py-3 text-right">
-                          <div className="flex justify-end gap-3">
+                          <div className="flex flex-wrap justify-end gap-2">
+                            {persona.bloqueadoHasta && (
+                              <button
+                                type="button"
+                                disabled={procesandoId !== null}
+                                onClick={() => desbloquear(persona)}
+                                className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10 disabled:opacity-50 !bg-rojo-perdida/10 !text-rojo-perdida"
+                              >
+                                <LockIcon className="h-3 w-3" />
+                                Desbloquear
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setViendoActividad(persona)}
+                              className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10 disabled:opacity-50"
+                            >
+                              <ActivityIcon className="h-3 w-3" />
+                              Actividad
+                            </button>
                             <button
                               type="button"
                               onClick={() => {

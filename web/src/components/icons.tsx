@@ -234,3 +234,11 @@ export function LockIcon(props: IconProps) {
     </IconBase>
   );
 }
+
+export function ActivityIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M3 12h4l3-8 4 16 3-8h4" />
+    </IconBase>
+  );
+}

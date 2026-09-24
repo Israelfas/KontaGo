@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { limiteDeIntentos } from '../../common/seguridad/limite-de-intentos';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegistroDto } from './dto/registro.dto';
@@ -67,7 +68,7 @@ export class AuthController {
    * manda un email.
    */
   @Post('olvide-password')
-  @Throttle({ default: { limit: 5, ttl: 15 * 60_000 } })
+  @Throttle({ default: { limit: limiteDeIntentos(5), ttl: 15 * 60_000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   async pedirRecuperacion(
     @Body() dto: PedirRecuperacionDto,
@@ -82,7 +83,7 @@ export class AuthController {
 
   /** 204 si el enlace del email todavía sirve; 400 si venció o ya se usó. */
   @Post('restablecer-password/verificar')
-  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Throttle({ default: { limit: limiteDeIntentos(20), ttl: 60_000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   async verificarRecuperacion(@Body() dto: VerificarRecuperacionDto) {
     await this.authService.verificarRecuperacion(dto.token);
@@ -90,7 +91,7 @@ export class AuthController {
 
   /** Contraseña nueva con el enlace del email. Cierra todas las sesiones. */
   @Post('restablecer-password')
-  @Throttle({ default: { limit: 10, ttl: 15 * 60_000 } })
+  @Throttle({ default: { limit: limiteDeIntentos(10), ttl: 15 * 60_000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   async restablecerPassword(
     @Body() dto: RestablecerPasswordDto,
@@ -132,7 +133,7 @@ export class AuthController {
   // Más holgado: lo dispara la app sola, y varios dispositivos de la
   // misma tienda comparten IP.
   @Post('refresh')
-  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Throttle({ default: { limit: limiteDeIntentos(30), ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   refrescar(@Body() dto: RefreshDto) {
     return this.authService.refrescar(dto.refreshToken);
@@ -144,7 +145,7 @@ export class AuthController {
    * una sesión cerrada).
    */
   @Post('logout')
-  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Throttle({ default: { limit: limiteDeIntentos(30), ttl: 60_000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   async cerrarSesion(
     @Body() dto: RefreshDto,
@@ -153,6 +154,22 @@ export class AuthController {
   ) {
     await this.authService.cerrarSesion(
       dto.refreshToken,
+      this.contexto(ip, userAgent),
+    );
+  }
+
+  /** Cierra la sesión en todos los dispositivos de quien lo pide (también este). */
+  @Post('cerrar-sesiones')
+  @SkipThrottle()
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async cerrarTodasLasSesiones(
+    @CurrentUser() user: AuthenticatedUser,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    await this.authService.cerrarTodasLasSesiones(
+      { id: user.usuarioId, tenantId: user.tenantId },
       this.contexto(ip, userAgent),
     );
   }

@@ -21,6 +21,10 @@ export interface UsuarioPublico {
   rol: Rol;
   activo: boolean;
   createdAt: Date;
+  // Bloqueada por intentos fallidos hasta esta hora (null si no lo está).
+  bloqueadoHasta: Date | null;
+  // Solo en la lista (las respuestas de una sola persona no lo traen).
+  ultimoIngreso?: Date | null;
 }
 
 function aPublico(u: Usuario): UsuarioPublico {
@@ -31,6 +35,10 @@ function aPublico(u: Usuario): UsuarioPublico {
     rol: u.rol,
     activo: u.activo,
     createdAt: u.createdAt,
+    bloqueadoHasta:
+      u.bloqueadoHasta && u.bloqueadoHasta > new Date()
+        ? u.bloqueadoHasta
+        : null,
   };
 }
 
@@ -50,11 +58,45 @@ export class UsuariosService {
   ) {}
 
   async listar(tenantId: string): Promise<UsuarioPublico[]> {
-    const usuarios = await this.usuarioRepo.find({
-      where: { tenantId },
-      order: { activo: 'DESC', createdAt: 'ASC' },
+    const [usuarios, ingresos] = await Promise.all([
+      this.usuarioRepo.find({
+        where: { tenantId },
+        order: { activo: 'DESC', createdAt: 'ASC' },
+      }),
+      this.seguridad.ultimosIngresos(tenantId),
+    ]);
+    return usuarios.map((u) => ({
+      ...aPublico(u),
+      ultimoIngreso: ingresos.get(u.id) ?? null,
+    }));
+  }
+
+  /** Dónde tiene la sesión abierta y qué pasó con su cuenta. */
+  async actividad(tenantId: string, id: string, sesionActualId?: string) {
+    const usuario = await this.buscar(tenantId, id);
+    return this.seguridad.actividadDe(usuario.id, sesionActualId);
+  }
+
+  /**
+   * Cierra la sesión de alguien del equipo en todos sus dispositivos
+   * (perdió el celular, dejó la caja abierta en otra compu).
+   */
+  async cerrarSesiones(tenantId: string, id: string): Promise<void> {
+    const usuario = await this.buscar(tenantId, id);
+    await this.authService.revocarSesionesDe(usuario.id, 'cerradas_por_admin');
+    await this.seguridad.registrar('sesiones_cerradas', { usuario });
+  }
+
+  /** Levanta el bloqueo por intentos fallidos antes de que venza solo. */
+  async desbloquear(tenantId: string, id: string): Promise<UsuarioPublico> {
+    const usuario = await this.buscar(tenantId, id);
+    usuario.intentosFallidos = 0;
+    usuario.bloqueadoHasta = null;
+    const guardado = await this.usuarioRepo.save(usuario);
+    await this.seguridad.registrar('cuenta_desbloqueada', {
+      usuario: guardado,
     });
-    return usuarios.map(aPublico);
+    return aPublico(guardado);
   }
 
   async crear(tenantId: string, dto: CrearUsuarioDto): Promise<UsuarioPublico> {

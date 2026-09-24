@@ -19,7 +19,9 @@ export type TipoEventoSeguridad =
   | 'password_restablecida'
   | 'password_cambiada_por_admin'
   | 'usuario_desactivado'
-  | 'usuario_reactivado';
+  | 'usuario_reactivado'
+  | 'sesiones_cerradas'
+  | 'cuenta_desbloqueada';
 
 /**
  * Registro de eventos de seguridad (ISO/IEC 27002:2022, control 8.15):

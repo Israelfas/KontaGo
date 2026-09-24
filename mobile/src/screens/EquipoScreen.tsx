@@ -10,6 +10,7 @@ import {
   desactivarUsuario,
   reactivarUsuario,
   cambiarPasswordUsuario,
+  desbloquearUsuario,
   ApiError,
 } from '../lib/api';
 import {
@@ -27,7 +28,10 @@ import { vibrar } from '../components/movimiento';
 import type { UsuarioEquipo } from '../lib/tipos';
 import { Banda, LabioHoja } from '../components/banda';
 import { useCamposTocados } from '../lib/use-campos-tocados';
+import { ActividadDeLaCuenta } from '../components/actividad-cuenta';
+import { haceCuanto } from '../lib/actividad';
 import {
+  LARGO_MINIMO_CONTRASENA,
   ayudaDeLaContrasena,
   problemaDeLaContrasena,
   problemaDelEmail,
@@ -103,7 +107,7 @@ function FormularioNuevaPersona({ onCreado }: { onCreado: (u: UsuarioEquipo) => 
         autoCorrect={false}
       />
       <AvisoDeCampo error={errores.email} />
-      <Etiqueta>Contraseña inicial (mínimo 6)</Etiqueta>
+      <Etiqueta>{`Contraseña inicial (mínimo ${LARGO_MINIMO_CONTRASENA})`}</Etiqueta>
       <TextInput
         value={password}
         onChangeText={setPassword}
@@ -149,19 +153,28 @@ function FormularioNuevaPersona({ onCreado }: { onCreado: (u: UsuarioEquipo) => 
   );
 }
 
+/** Bloqueada por intentos fallidos, y el bloqueo todavía no venció. */
+const estaBloqueada = (p: UsuarioEquipo) =>
+  !!p.bloqueadoHasta && new Date(p.bloqueadoHasta).getTime() > Date.now();
+
 function FilaPersona({
   persona,
   esVos,
   procesando,
   onAlternarActivo,
   onCambiarPassword,
+  onActividad,
+  onDesbloquear,
 }: {
   persona: UsuarioEquipo;
   esVos: boolean;
   procesando: boolean;
   onAlternarActivo: () => void;
   onCambiarPassword: () => void;
+  onActividad: () => void;
+  onDesbloquear: () => void;
 }) {
+  const bloqueada = estaBloqueada(persona);
   return (
     <Tarjeta style={[styles.filaTarjeta, !persona.activo && { opacity: 0.6 }]}>
       <View style={styles.filaCabecera}>
@@ -173,7 +186,13 @@ function FilaPersona({
           <Text style={styles.filaEmail} numberOfLines={1}>
             {persona.email}
           </Text>
+          <Text style={styles.filaIngreso}>
+            Último ingreso: {persona.ultimoIngreso ? haceCuanto(persona.ultimoIngreso) : 'nunca'}
+          </Text>
           {!persona.activo && <Text style={styles.filaDesactivado}>Desactivado</Text>}
+          {bloqueada && (
+            <Text style={styles.filaDesactivado}>Bloqueada por intentos fallidos</Text>
+          )}
         </View>
         <View style={styles.rolPill}>
           <Text style={styles.rolPillTexto}>{ETIQUETA_ROL[persona.rol]}</Text>
@@ -181,13 +200,36 @@ function FilaPersona({
       </View>
 
       <View style={styles.acciones}>
+        {bloqueada && (
+          <Pressable
+            onPress={onDesbloquear}
+            disabled={procesando}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.pildoraAccion,
+              styles.pildoraDesbloquear,
+              (pressed || procesando) && { opacity: 0.6 },
+            ]}
+          >
+            <Ionicons name="lock-open-outline" size={12} color={colores.papel} />
+            <Text style={[styles.pildoraAccionTexto, { color: colores.papel }]}>Desbloquear</Text>
+          </Pressable>
+        )}
+        <Pressable
+          onPress={onActividad}
+          hitSlop={8}
+          style={({ pressed }) => [styles.pildoraAccion, pressed && { opacity: 0.7 }]}
+        >
+          <Ionicons name="pulse-outline" size={12} color={colores.tinta} />
+          <Text style={styles.pildoraAccionTexto}>Actividad</Text>
+        </Pressable>
         <Pressable
           onPress={onCambiarPassword}
           hitSlop={8}
           style={({ pressed }) => [styles.pildoraAccion, pressed && { opacity: 0.7 }]}
         >
           <Ionicons name="key-outline" size={12} color={colores.tinta} />
-          <Text style={styles.pildoraAccionTexto}>Cambiar contraseña</Text>
+          <Text style={styles.pildoraAccionTexto}>Contraseña</Text>
         </Pressable>
         {/* Uno no puede desactivarse a sí mismo: la tienda podría quedar
             sin nadie que la administre. */}
@@ -247,7 +289,7 @@ function FormularioCambiarPassword({
         value={password}
         onChangeText={setPassword}
         style={estilosCampo.input}
-        placeholder="Mínimo 6 caracteres"
+        placeholder={`Mínimo ${LARGO_MINIMO_CONTRASENA} caracteres`}
         autoCapitalize="none"
         autoCorrect={false}
         autoFocus
@@ -280,6 +322,7 @@ export function EquipoScreen() {
   const [aviso, setAviso] = useState<string | null>(null);
   const [agregando, setAgregando] = useState(false);
   const [cambiandoPassword, setCambiandoPassword] = useState<UsuarioEquipo | null>(null);
+  const [viendoActividad, setViendoActividad] = useState<UsuarioEquipo | null>(null);
   const [procesandoId, setProcesandoId] = useState<string | null>(null);
 
   const cargar = useCallback(() => {
@@ -307,9 +350,29 @@ export function EquipoScreen() {
       const actualizado = persona.activo
         ? await desactivarUsuario(token, persona.id)
         : await reactivarUsuario(token, persona.id);
-      setEquipo((prev) => prev.map((u) => (u.id === actualizado.id ? actualizado : u)));
+      reemplazar(actualizado);
     } catch (err) {
       setErrorAccion(err instanceof ApiError ? err.message : 'No se pudo actualizar la cuenta');
+    } finally {
+      setProcesandoId(null);
+    }
+  }
+
+  // La respuesta no trae el último ingreso: se conserva el que ya estaba.
+  const reemplazar = (actualizado: UsuarioEquipo) =>
+    setEquipo((prev) => prev.map((u) => (u.id === actualizado.id ? { ...u, ...actualizado } : u)));
+
+  async function desbloquear(persona: UsuarioEquipo) {
+    if (!token) return;
+    setErrorAccion(null);
+    setAviso(null);
+    setProcesandoId(persona.id);
+    try {
+      reemplazar(await desbloquearUsuario(token, persona.id));
+      vibrar.exito();
+      setAviso(`${persona.nombre} ya puede volver a entrar.`);
+    } catch (err) {
+      setErrorAccion(err instanceof ApiError ? err.message : 'No se pudo desbloquear la cuenta');
     } finally {
       setProcesandoId(null);
     }
@@ -341,6 +404,11 @@ export function EquipoScreen() {
               setAviso(null);
               setCambiandoPassword(item);
             }}
+            onActividad={() => {
+              setAviso(null);
+              setViendoActividad(item);
+            }}
+            onDesbloquear={() => desbloquear(item)}
           />
         )}
         ItemSeparatorComponent={() => <View style={{ height: espaciado.sm }} />}
@@ -365,6 +433,26 @@ export function EquipoScreen() {
           onCerrar={() => setAgregando(false)}
         >
           <FormularioNuevaPersona onCreado={(u) => setEquipo((prev) => [...prev, u])} />
+        </HojaModal>
+      )}
+      {viendoActividad && (
+        <HojaModal
+          titulo={
+            viendoActividad.id === usuario?.sub
+              ? 'Tu actividad'
+              : `Actividad de ${viendoActividad.nombre}`
+          }
+          descripcion="Dónde tiene la sesión abierta y lo último que pasó con la cuenta."
+          icono="pulse-outline"
+          onCerrar={() => setViendoActividad(null)}
+        >
+          <ActividadDeLaCuenta
+            persona={viendoActividad}
+            esVos={viendoActividad.id === usuario?.sub}
+            onSesionesCerradas={() =>
+              setAviso(`Se cerraron las sesiones de ${viendoActividad.nombre}.`)
+            }
+          />
         </HojaModal>
       )}
       {cambiandoPassword && (
@@ -423,6 +511,8 @@ const styles = StyleSheet.create({
   filaCabecera: { flexDirection: 'row', alignItems: 'center', gap: espaciado.sm },
   filaNombre: { fontSize: 14, color: colores.tinta, fontWeight: '600' },
   filaEmail: { fontSize: 12, color: colores.tintaSuave, marginTop: 2 },
+  filaIngreso: { fontSize: 11, color: colores.tintaSuave, marginTop: 2 },
+  pildoraDesbloquear: { backgroundColor: colores.tinta },
   filaDesactivado: { fontSize: 11, color: colores.rojoPerdida, marginTop: 2, fontWeight: '600' },
   rolPill: {
     backgroundColor: 'rgba(217,140,43,0.14)',
@@ -431,6 +521,6 @@ const styles = StyleSheet.create({
     borderRadius: radios.full,
   },
   rolPillTexto: { fontSize: 11, fontWeight: '700', color: '#9a5b08', textTransform: 'uppercase' },
-  acciones: { flexDirection: 'row', gap: espaciado.sm, marginTop: espaciado.sm },
+  acciones: { flexDirection: 'row', flexWrap: 'wrap', gap: espaciado.sm, marginTop: espaciado.sm },
   accionTexto: { fontSize: 13, color: colores.tintaSuave, fontWeight: '600', textDecorationLine: 'underline' },
 });

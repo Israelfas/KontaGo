@@ -39,6 +39,10 @@ export interface UsuarioEquipo {
   rol: 'admin' | 'cajero';
   activo: boolean;
   createdAt: string;
+  // Bloqueada por intentos fallidos hasta esta hora (null si no lo está).
+  bloqueadoHasta: string | null;
+  // Solo viene en la lista del equipo.
+  ultimoIngreso?: string | null;
 }
 
 export interface VentaItem {

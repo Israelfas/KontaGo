@@ -1,0 +1,195 @@
+# En cada push y pull request: tipos, lint y pruebas del backend, la web y la
+# app, y al final las pruebas de punta a punta de la web en un navegador.
+#
+# Para el job "e2e" hacen falta dos secretos del repo (Settings → Secrets and
+# variables → Actions), los mismos de web/.env.local:
+#   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY y CLERK_SECRET_KEY
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 22
+  # Backend: base y Redis de los servicios de abajo. Los secretos JWT quedan
+  # en sus valores de desarrollo (solo sirven para esta corrida).
+  NODE_ENV: development
+  TZ: America/Guayaquil
+  DB_HOST: localhost
+  DB_PORT: 5432
+  DB_USER: kontago
+  DB_PASSWORD: kontago
+  DB_NAME: kontago
+  DB_NAME_TEST: kontago_test
+  DB_SYNCHRONIZE: 'false'
+  REDIS_HOST: localhost
+  REDIS_PORT: 6379
+  SMTP_HOST: ''
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kontago
+          POSTGRES_PASSWORD: kontago
+          POSTGRES_DB: kontago
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U kontago" --health-interval 5s --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Lint
+        run: npx eslint "{src,apps,libs,test}/**/*.ts"
+      - name: Compilar
+        run: npm run build
+      - name: Pruebas unitarias
+        run: npm test
+      - name: Pruebas de la API (e2e)
+        run: npm run test:e2e
+
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Tipos
+        run: npx tsc --noEmit
+      - name: Lint
+        run: npm run lint
+
+  mobile:
+    name: App móvil
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - name: Tipos
+        run: npx tsc --noEmit
+
+  e2e:
+    name: Web en el navegador (Playwright)
+    needs: [backend, web]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kontago
+          POSTGRES_PASSWORD: kontago
+          POSTGRES_DB: kontago
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U kontago" --health-interval 5s --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+    env:
+      # Todas las pruebas entran desde la misma IP.
+      LIMITE_INTENTOS_AUTH: 1000
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            web/package-lock.json
+
+      - name: Revisar las claves de Clerk
+        run: |
+          if [ -z "$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" ]; then
+            echo "::error::Faltan los secretos NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY y CLERK_SECRET_KEY del repo (ver arriba de ci.yml)."
+            exit 1
+          fi
+
+      - name: Levantar el backend
+        working-directory: backend
+        run: |
+          npm ci
+          npm run migration:run
+          npm run build
+          nohup node dist/main > ../backend.log 2>&1 &
+
+      - name: Levantar la web
+        working-directory: web
+        # next build y next start esperan NODE_ENV=production (npm ci no: se
+        # saltearía las devDependencies).
+        run: |
+          npm ci
+          NODE_ENV=production npm run build
+          NODE_ENV=production nohup npx next start -p 3001 > ../web.log 2>&1 &
+
+      - name: Esperar a que respondan
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3000/health > /dev/null && curl -sf -o /dev/null http://localhost:3001/login; then
+              echo "Listos"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::El backend o la web no arrancaron"; tail -50 backend.log web.log; exit 1
+
+      - name: Instalar Chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      - name: Pruebas
+        working-directory: web
+        run: npm run test:e2e
+
+      - name: Guardar el reporte
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-playwright
+          path: |
+            web/playwright-report/
+            web/test-results/
+            backend.log
+            web.log
+          retention-days: 7

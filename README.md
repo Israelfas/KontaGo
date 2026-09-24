@@ -64,6 +64,29 @@ migraciones y prueban sesiones, aislamiento entre tiendas, ventas,
 anulaciones, lotes e historial. **Borran esa base en cada corrida**:
 nunca apuntar `DB_NAME_TEST` a la de desarrollo ni a la de producción.
 
+### La web en un navegador (Playwright)
+
+Con el backend (:3000) y la web (:3001) levantados:
+
+```bash
+cd web
+npx playwright install chromium   # solo la primera vez (en la PC usa el Chrome instalado)
+npm run test:e2e                  # recarga la tienda demo y corre todo
+E2E_SIN_SEED=1 npm run test:e2e   # sin recargar la demo (más rápido)
+```
+
+Todas las pruebas entran desde la misma IP y el backend limita los logins
+por IP, así que en `backend/.env` va `LIMITE_INTENTOS_AUTH=1000` (se ignora
+en producción y en los tests del backend).
+
+### CI
+
+`.github/workflows/ci.yml` corre en cada push a `main` y en cada pull
+request: lint y tests del backend, tipos y lint de la web y de la app, y al
+final las pruebas en el navegador. Para ese último paso el repo necesita
+los secretos `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` y `CLERK_SECRET_KEY`
+(Settings → Secrets and variables → Actions).
+
 ## Producción
 
 El backend no arranca si falta algo de esto (con `NODE_ENV=production`):

@@ -79,7 +79,12 @@ const hashDeToken = (token: string) =>
   createHash('sha256').update(token).digest('hex');
 
 export type MotivoRevocacion =
-  'cierre' | 'reuso' | 'usuario_desactivado' | 'password_cambiada';
+  | 'cierre'
+  | 'reuso'
+  | 'usuario_desactivado'
+  | 'password_cambiada'
+  | 'cerradas_por_el_usuario'
+  | 'cerradas_por_admin';
 
 @Injectable()
 export class AuthService {
@@ -154,7 +159,7 @@ export class AuthService {
     });
 
     await this.seguridad.registrar('cuenta_creada', { usuario, contexto });
-    return this.emitirTokens(usuario);
+    return this.emitirTokens(usuario, contexto);
   }
 
   async login(
@@ -206,7 +211,7 @@ export class AuthService {
     }
 
     await this.seguridad.registrar('ingreso', { usuario, contexto });
-    return this.emitirTokens(usuario);
+    return this.emitirTokens(usuario, contexto);
   }
 
   private async anotarIntentoFallido(
@@ -505,7 +510,7 @@ export class AuthService {
     }
 
     await this.seguridad.registrar('ingreso_google', { usuario, contexto });
-    return this.emitirTokens(usuario);
+    return this.emitirTokens(usuario, contexto);
   }
 
   /**
@@ -617,6 +622,22 @@ export class AuthService {
   }
 
   /**
+   * "Cerrar sesión en todos mis dispositivos": la persona corta todas sus
+   * sesiones (también la de este dispositivo). Por ejemplo, si perdió el
+   * celular o entró desde una computadora ajena.
+   */
+  async cerrarTodasLasSesiones(
+    usuario: { id: string; tenantId: string },
+    contexto: ContextoPedido = {},
+  ): Promise<void> {
+    await this.revocarSesionesDe(usuario.id, 'cerradas_por_el_usuario');
+    await this.seguridad.registrar('sesiones_cerradas', {
+      usuario: { ...usuario, email: '' },
+      contexto,
+    });
+  }
+
+  /**
    * Corta todas las sesiones de un usuario (lo desactivaron, le cambiaron
    * la contraseña). Sus tokens dejan de servir en el próximo pedido.
    */
@@ -655,7 +676,10 @@ export class AuthService {
   }
 
   /** Inicio de sesión: una sesión nueva y su primer par de tokens. */
-  private async emitirTokens(usuario: Usuario): Promise<TokenPair> {
+  private async emitirTokens(
+    usuario: Usuario,
+    contexto: ContextoPedido = {},
+  ): Promise<TokenPair> {
     const sesionRepo = this.dataSource.getRepository(Sesion);
     const sesion = await sesionRepo.save(
       sesionRepo.create({
@@ -663,6 +687,8 @@ export class AuthService {
         tenantId: usuario.tenantId,
         jtiActual: randomUUID(),
         expiraEn: this.vencimientoDeSesion(),
+        ip: contexto.ip?.slice(0, 64) ?? null,
+        userAgent: contexto.userAgent?.slice(0, 200) ?? null,
       }),
     );
     return this.firmarTokens(usuario, sesion);

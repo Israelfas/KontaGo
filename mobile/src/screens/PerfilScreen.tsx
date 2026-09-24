@@ -5,7 +5,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../lib/auth-context';
-import { obtenerPerfil, ApiError, type Perfil } from '../lib/api';
+import { cerrarMisSesiones, obtenerPerfil, ApiError, type Perfil } from '../lib/api';
 import { Boton, EstadoCargando, EstadoError, Tarjeta } from '../components/ui';
 import { colores, espaciado, radios } from '../theme/colores';
 import type { RootStackParamList } from '../navigation/RootNavigator';
@@ -59,6 +59,34 @@ export function PerfilScreen() {
       cargar();
     }, [cargar]),
   );
+
+  // Si perdió el celular o entró en una computadora ajena: se cierran todas,
+  // también esta, y hay que volver a entrar.
+  function confirmarCierreEnTodos() {
+    Alert.alert(
+      'Cerrar sesión en todos lados',
+      'Se cierra tu sesión en todos tus dispositivos, también en este celular. Vas a tener que volver a entrar.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Cerrar en todos',
+          style: 'destructive',
+          onPress: async () => {
+            if (!token) return;
+            try {
+              await cerrarMisSesiones(token);
+              await cerrarSesion();
+            } catch (err) {
+              Alert.alert(
+                'No se pudo',
+                err instanceof ApiError ? err.message : 'Revisá tu conexión y probá de nuevo.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  }
 
   function confirmarCierreSesion() {
     Alert.alert('Cerrar sesión', '¿Querés cerrar sesión?', [
@@ -157,6 +185,15 @@ export function PerfilScreen() {
                 icono="document-text-outline"
                 titulo="Términos y condiciones"
                 onPress={() => navigation.navigate('Terminos')}
+              />
+            </Tarjeta>
+
+            <Text style={styles.seccionTitulo}>Seguridad</Text>
+            <Tarjeta style={styles.grupoOpciones}>
+              <FilaOpcion
+                icono="phone-portrait-outline"
+                titulo="Cerrar sesión en todos mis dispositivos"
+                onPress={confirmarCierreEnTodos}
               />
             </Tarjeta>
 

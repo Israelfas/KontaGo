@@ -66,6 +66,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       usuarioId: usuario.id,
       tenantId: usuario.tenantId,
       rol: usuario.rol,
+      sesionId: payload.sid,
     };
   }
 }

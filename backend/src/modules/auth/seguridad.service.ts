@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, MoreThan, Repository } from 'typeorm';
+import { Sesion } from './entities/sesion.entity';
+import { describirDispositivo } from '../../common/seguridad/dispositivo';
 import {
   EventoSeguridad,
   type TipoEventoSeguridad,
@@ -24,7 +26,63 @@ export class SeguridadService {
   constructor(
     @InjectRepository(EventoSeguridad)
     private readonly eventoRepo: Repository<EventoSeguridad>,
+    @InjectRepository(Sesion)
+    private readonly sesionRepo: Repository<Sesion>,
   ) {}
+
+  /**
+   * Actividad de una cuenta: dónde tiene la sesión abierta y sus últimos
+   * eventos (ingresos, fallos, bloqueos, cambios de contraseña).
+   */
+  async actividadDe(usuarioId: string, sesionActualId?: string) {
+    const [sesiones, eventos] = await Promise.all([
+      this.sesionRepo.find({
+        where: {
+          usuarioId,
+          revocadaEn: IsNull(),
+          expiraEn: MoreThan(new Date()),
+        },
+        order: { createdAt: 'DESC' },
+      }),
+      this.eventoRepo.find({
+        where: { usuarioId },
+        order: { createdAt: 'DESC' },
+        take: 30,
+      }),
+    ]);
+    return {
+      sesiones: sesiones
+        .map((s) => ({
+          id: s.id,
+          dispositivo: describirDispositivo(s.userAgent),
+          ip: s.ip,
+          abiertaEn: s.createdAt,
+          // Se renueva sola mientras se usa: la última renovación es el último uso.
+          ultimoUso: s.rotadaEn ?? s.createdAt,
+          esEsta: s.id === sesionActualId,
+        }))
+        .sort((a, b) => b.ultimoUso.getTime() - a.ultimoUso.getTime()),
+      eventos: eventos.map((e) => ({
+        tipo: e.tipo,
+        dispositivo: e.userAgent ? describirDispositivo(e.userAgent) : null,
+        ip: e.ip,
+        fecha: e.createdAt,
+      })),
+    };
+  }
+
+  /** Último ingreso de cada persona de la tienda (para la lista de Equipo). */
+  async ultimosIngresos(tenantId: string): Promise<Map<string, Date>> {
+    const filas = await this.eventoRepo.query<
+      { usuario_id: string; ultimo: Date }[]
+    >(
+      `SELECT usuario_id, max(created_at) AS ultimo FROM eventos_seguridad
+       WHERE tenant_id = $1 AND tipo IN ('ingreso', 'ingreso_google') AND usuario_id IS NOT NULL
+       GROUP BY usuario_id`,
+      [tenantId],
+    );
+    return new Map(filas.map((f) => [f.usuario_id, f.ultimo]));
+  }
 
   async registrar(
     tipo: TipoEventoSeguridad,

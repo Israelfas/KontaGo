@@ -20,6 +20,7 @@ import type {
   Venta,
   VentaDelHistorial,
 } from './tipos';
+import type { ActividadDeCuenta } from './actividad';
 
 // El celular no puede usar "localhost" — eso apuntaría al propio
 // celular, no a la PC. Antes esto se configuraba a mano en
@@ -652,3 +653,24 @@ export function obtenerResumenInventario(
   const q = consulta({ desde: rango.desde, hasta: rango.hasta });
   return apiFetch<ResumenInventarioPeriodo>(`/inventario/resumen?${q}`, { token });
 }
+
+// --- Actividad de seguridad (solo admin, salvo cerrar las propias) ---
+
+export function obtenerActividad(token: string, id: string): Promise<ActividadDeCuenta> {
+  return apiFetch<ActividadDeCuenta>(`/usuarios/${id}/actividad`, { token });
+}
+
+/** Cierra la sesión de alguien del equipo en todos sus dispositivos. */
+export function cerrarSesionesDe(token: string, id: string): Promise<void> {
+  return apiFetch<void>(`/usuarios/${id}/cerrar-sesiones`, { method: 'POST', token });
+}
+
+export function desbloquearUsuario(token: string, id: string): Promise<UsuarioEquipo> {
+  return apiFetch<UsuarioEquipo>(`/usuarios/${id}/desbloquear`, { method: 'PATCH', token });
+}
+
+/** Cierra la sesión propia en todos los dispositivos (también este). */
+export function cerrarMisSesiones(token: string): Promise<void> {
+  return apiFetch<void>('/auth/cerrar-sesiones', { method: 'POST', token });
+}
+

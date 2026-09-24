@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -49,6 +51,31 @@ export class UsuariosController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.usuariosService.reactivar(user.tenantId, id);
+  }
+
+  @Get(':id/actividad')
+  actividad(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.usuariosService.actividad(user.tenantId, id, user.sesionId);
+  }
+
+  @Post(':id/cerrar-sesiones')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async cerrarSesiones(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    await this.usuariosService.cerrarSesiones(user.tenantId, id);
+  }
+
+  @Patch(':id/desbloquear')
+  desbloquear(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.usuariosService.desbloquear(user.tenantId, id);
   }
 
   @Patch(':id/password')

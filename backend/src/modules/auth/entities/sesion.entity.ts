@@ -56,6 +56,14 @@ export class Sesion {
   @Column({ name: 'revocada_en', type: 'timestamptz', nullable: true })
   revocadaEn: Date | null;
 
+  // Desde dónde se abrió: para que el dueño reconozca sus dispositivos
+  // (y detecte uno que no es suyo).
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  ip: string | null;
+
+  @Column({ name: 'user_agent', type: 'varchar', length: 200, nullable: true })
+  userAgent: string | null;
+
   // 'cierre' | 'reuso' | 'usuario_desactivado' | 'password_cambiada'
   @Column({
     name: 'motivo_revocacion',

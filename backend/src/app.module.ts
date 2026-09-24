@@ -14,6 +14,7 @@ import { UsuariosModule } from './modules/usuarios/usuarios.module';
 import { CajaModule } from './modules/caja/caja.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { limiteDeIntentos } from './common/seguridad/limite-de-intentos';
 
 @Module({
   imports: [
@@ -27,7 +28,7 @@ import { AppService } from './app.service';
     // escaneo en caja. En memoria alcanza mientras haya una sola
     // instancia del backend.
     ThrottlerModule.forRoot({
-      throttlers: [{ ttl: 60_000, limit: 10 }],
+      throttlers: [{ ttl: 60_000, limit: limiteDeIntentos(10) }],
       // En español: este texto le llega a la persona en el login.
       errorMessage:
         'Demasiados intentos seguidos desde esta conexión. Esperá un minuto y probá de nuevo.',

@@ -17,4 +17,6 @@ export interface AuthenticatedUser {
   usuarioId: string;
   tenantId: string;
   rol: Rol;
+  // La sesión del pedido (para marcar "este dispositivo").
+  sesionId?: string;
 }
