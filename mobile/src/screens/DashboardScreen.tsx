@@ -11,6 +11,7 @@ import { formatearCentavos } from '../lib/formato';
 import { EstadoCargando, EstadoError } from '../components/ui';
 import { Banda, Hoja, Mosaico, Pieza } from '../components/banda';
 import { SelectorPeriodo } from '../components/selector-periodo';
+import { BotonExcel } from '../components/boton-excel';
 import { GraficoIngreso, GraficoTopProductos } from '../components/graficos';
 import { colores, espaciado, radios } from '../theme/colores';
 import {
@@ -129,6 +130,7 @@ export function DashboardScreen() {
                   : 'No hubo ventas en estas fechas.'
               : undefined
           }
+          accion={<BotonExcel periodo={periodo} />}
         >
           <SelectorPeriodo periodo={periodo} onCambiar={setPeriodo} />
         </Banda>

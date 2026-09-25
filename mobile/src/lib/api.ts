@@ -21,6 +21,7 @@ import type {
   VentaDelHistorial,
 } from './tipos';
 import type { ActividadDeCuenta } from './actividad';
+import { Directory, File, Paths } from 'expo-file-system';
 
 // El celular no puede usar "localhost" — eso apuntaría al propio
 // celular, no a la PC. Antes esto se configuraba a mano en
@@ -98,6 +99,34 @@ function refrescarUnaVez(): Promise<string | null> {
 }
 
 /**
+ * No hubo conexión (o no respondió a tiempo): el pedido no llegó al
+ * servidor, o no se sabe si llegó. La caja lo usa para seguir vendiendo
+ * sin internet.
+ */
+export class SinConexionError extends Error {
+  constructor() {
+    super('Sin conexión a internet.');
+    this.name = 'SinConexionError';
+  }
+}
+
+/**
+ * El servidor respondió bien pero la respuesta llegó cortada: lo pedido SÍ
+ * se hizo, solo que no se sabe el resultado. Una venta con clave se puede
+ * mandar de nuevo sin riesgo (el servidor devuelve la misma).
+ */
+export class RespuestaIncompletaError extends ApiError {}
+
+/** fetch, pero sin red avisa con SinConexionError (y no un TypeError suelto). */
+async function pedir(url: string, opciones: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, opciones);
+  } catch {
+    throw new SinConexionError();
+  }
+}
+
+/**
  * Wrapper central de fetch. Todas las llamadas al backend pasan por acá,
  * así el manejo de errores, el header de auth y la base URL están en un
  * solo lugar. Idéntico en espíritu al de web/src/lib/api.ts.
@@ -118,7 +147,7 @@ async function apiFetch<T>(
   });
 
   let fetchOptions = construirOpciones(token);
-  let response = await fetch(`${API_URL}${path}`, fetchOptions);
+  let response = await pedir(`${API_URL}${path}`, fetchOptions);
 
   // Reintentar tras un 401 es seguro incluso en POST: el guard JWT
   // rechaza la petición antes de que el controller haga nada.
@@ -126,7 +155,7 @@ async function apiFetch<T>(
     const nuevoToken = await refrescarUnaVez();
     if (nuevoToken) {
       fetchOptions = construirOpciones(nuevoToken);
-      response = await fetch(`${API_URL}${path}`, fetchOptions);
+      response = await pedir(`${API_URL}${path}`, fetchOptions);
     }
   }
 
@@ -162,7 +191,7 @@ async function apiFetch<T>(
     // barras único, un 409 confuso sobre algo que en realidad sí
     // funcionó la primera vez. Mejor avisar y dejar que la persona
     // confirme mirando la lista, que resubmitir a ciegas.
-    throw new ApiError(
+    throw new RespuestaIncompletaError(
       'Es posible que esto sí se haya guardado, pero no pudimos confirmarlo por un corte de conexión. Revisa la lista antes de intentar de nuevo.',
       response.status,
     );
@@ -171,7 +200,7 @@ async function apiFetch<T>(
   // Para GET (leer datos) reintentar es seguro: no hay efecto secundario
   // que duplicar. Si el segundo intento también llega vacío, ahí sí lo
   // tratamos como falla real en vez de inventar un resultado.
-  const reintento = await fetch(`${API_URL}${path}`, fetchOptions);
+  const reintento = await pedir(`${API_URL}${path}`, fetchOptions);
   if (!reintento.ok) {
     throw new ApiError(`Error ${reintento.status}`, reintento.status);
   }
@@ -381,18 +410,25 @@ export function listarProductosDadosDeBaja(token: string): Promise<Producto[]> {
 
 // null = el código no está en el catálogo (el backend responde 404), para
 // que la caja ofrezca darlo de alta en vez de mostrar un error.
+// Con red lenta no se queda esperando: pasado el límite avisa
+// SinConexionError y la caja busca en el catálogo guardado.
 export async function buscarPorCodigoBarras(
   token: string,
   codigoBarras: string,
+  limiteMs = 5_000,
 ): Promise<Producto | null> {
+  const control = new AbortController();
+  const reloj = setTimeout(() => control.abort(), limiteMs);
   try {
     return await apiFetch<Producto>(
       `/productos/escanear/${encodeURIComponent(codigoBarras)}`,
-      { token },
+      { token, signal: control.signal },
     );
   } catch (err) {
     if (err instanceof ApiError && err.statusCode === 404) return null;
     throw err;
+  } finally {
+    clearTimeout(reloj);
   }
 }
 
@@ -403,14 +439,26 @@ export interface CrearVentaInput {
   metodoPago: MetodoPago;
   // Solo en efectivo (en transferencia se paga el total exacto).
   montoRecibidoCentavos?: number;
+  // La genera el celular: si la venta llega dos veces, se cobra una.
+  claveIdempotencia?: string;
+  // Cuándo se cobró, si se manda después (se hizo sin conexión).
+  vendidaEn?: string;
 }
 
-export function crearVenta(token: string, dto: CrearVentaInput): Promise<Venta> {
+/**
+ * Registra una venta. Con red lenta no espera para siempre: pasado el
+ * límite avisa SinConexionError y la caja la guarda para mandarla
+ * después (con la clave, si al final sí llegó, no se duplica).
+ */
+export function crearVenta(token: string, dto: CrearVentaInput, limiteMs = 12_000): Promise<Venta> {
+  const control = new AbortController();
+  const reloj = setTimeout(() => control.abort(), limiteMs);
   return apiFetch<Venta>('/ventas', {
     method: 'POST',
     token,
     body: JSON.stringify(dto),
-  });
+    signal: control.signal,
+  }).finally(() => clearTimeout(reloj));
 }
 
 export function obtenerVentasDeHoy(token: string): Promise<VentaDelHistorial[]> {
@@ -449,6 +497,46 @@ function query(valores: Record<string, string | number>): string {
   return Object.entries(valores)
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
     .join('&');
+}
+
+// --- Reporte en Excel (solo admin) ---
+
+const TIPO_EXCEL = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+/** downloadFileAsync solo trae el código HTTP en el mensaje: se traduce acá. */
+function errorDeDescarga(err: unknown): ApiError {
+  const codigo = Number(/\b([45]\d\d)\b/.exec(String(err))?.[1] ?? 0);
+  if (codigo === 400) return new ApiError('Se pueden bajar hasta 92 días de una vez.', 400);
+  if (codigo === 403) return new ApiError('Solo el administrador puede bajar el reporte.', 403);
+  return new ApiError('No se pudo preparar el Excel. Revisa tu conexión y prueba de nuevo.', codigo);
+}
+
+/**
+ * Baja el reporte del período (ventas, productos vendidos, caja, compras y
+ * mermas, stock) a la caché del celular y devuelve el archivo, listo para
+ * compartir. Lo descarga el sistema, sin pasar el binario por JavaScript,
+ * y el nombre lo pone el backend. Si el token venció, renueva y reintenta.
+ */
+export async function descargarReporteExcel(token: string, rango: RangoDeFechas): Promise<File> {
+  const url = `${API_URL}/reportes/excel?${query({ desde: rango.desde, hasta: rango.hasta })}`;
+  const bajar = (tokenActual: string) =>
+    File.downloadFileAsync(url, new Directory(Paths.cache), {
+      headers: { Authorization: `Bearer ${tokenActual}`, Accept: TIPO_EXCEL },
+      // Si ya se bajó el mismo período, se reemplaza.
+      idempotent: true,
+    });
+  try {
+    return await bajar(token);
+  } catch (err) {
+    if (!/\b401\b/.test(String(err))) throw errorDeDescarga(err);
+    const nuevoToken = await refrescarUnaVez();
+    if (!nuevoToken) throw new ApiError('Tu sesión venció. Vuelve a entrar.', 401);
+    try {
+      return await bajar(nuevoToken);
+    } catch (reintento) {
+      throw errorDeDescarga(reintento);
+    }
+  }
 }
 
 // Resumen de un período (hasta 92 días). Solo admin.

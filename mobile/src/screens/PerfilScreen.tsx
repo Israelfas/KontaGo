@@ -10,6 +10,7 @@ import { Boton, EstadoCargando, EstadoError, Tarjeta } from '../components/ui';
 import { colores, espaciado, radios } from '../theme/colores';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { HAY_SOPORTE, MOSTRAR_SUSCRIPCION } from '../lib/config-app';
+import { useSinConexion } from '../lib/sin-conexion';
 
 const ETIQUETAS_PLAN: Record<NonNullable<Perfil['plan']>, string> = {
   gratuito: 'Gratis',
@@ -39,6 +40,7 @@ function FilaOpcion({
 
 export function PerfilScreen() {
   const { token, cerrarSesion } = useAuth();
+  const { pendientes } = useSinConexion();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [perfil, setPerfil] = useState<Perfil | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -89,10 +91,17 @@ export function PerfilScreen() {
   }
 
   function confirmarCierreSesion() {
-    Alert.alert('Cerrar sesión', '¿Quieres cerrar sesión?', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Cerrar sesión', style: 'destructive', onPress: () => cerrarSesion() },
-    ]);
+    const n = pendientes.length;
+    Alert.alert(
+      'Cerrar sesión',
+      n > 0
+        ? `Tienes ${n === 1 ? 'una venta cobrada' : `${n} ventas cobradas`} sin conexión que todavía no se ${n === 1 ? 'envió' : 'enviaron'}. Quedan guardadas en este celular y se envían cuando vuelvas a entrar con tu cuenta. ¿Cerrar sesión igual?`
+        : '¿Quieres cerrar sesión?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Cerrar sesión', style: 'destructive', onPress: () => cerrarSesion() },
+      ],
+    );
   }
 
   return (

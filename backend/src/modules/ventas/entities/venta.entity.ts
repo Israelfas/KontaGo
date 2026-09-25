@@ -24,6 +24,10 @@ import { MetodoPago } from '../../../common/enums/metodo-pago.enum';
 @Entity('ventas')
 @Index(['tenantId', 'createdAt'])
 @Index('IDX_ventas_tenant_numero', ['tenantId', 'numero'], { unique: true })
+@Index('IDX_ventas_tenant_clave', ['tenantId', 'claveIdempotencia'], {
+  unique: true,
+  where: '"clave_idempotencia" IS NOT NULL',
+})
 export class Venta {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -83,6 +87,11 @@ export class Venta {
 
   @OneToMany(() => AnulacionVenta, (anulacion) => anulacion.venta)
   anulaciones: AnulacionVenta[];
+
+  // La genera el celular: si la misma venta llega dos veces (se mandó sin
+  // conexión, o se cortó la respuesta), la segunda no cobra de nuevo.
+  @Column({ name: 'clave_idempotencia', type: 'uuid', nullable: true })
+  claveIdempotencia: string | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;

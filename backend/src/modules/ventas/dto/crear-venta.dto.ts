@@ -4,6 +4,7 @@ import {
   IsArray,
   IsEnum,
   IsInt,
+  IsISO8601,
   IsOptional,
   IsUUID,
   Min,
@@ -38,4 +39,16 @@ export class CrearVentaDto {
   @IsInt()
   @Min(0)
   montoRecibidoCentavos?: number;
+
+  // La genera el celular. Si una venta con esta clave ya existe, se
+  // devuelve esa en vez de cobrar otra vez.
+  @IsOptional()
+  @IsUUID()
+  claveIdempotencia?: string;
+
+  // Cuándo se cobró, si fue sin conexión y llega después. Se respeta, pero
+  // nunca antes de abrir la caja ni en el futuro.
+  @IsOptional()
+  @IsISO8601()
+  vendidaEn?: string;
 }

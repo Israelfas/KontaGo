@@ -16,7 +16,8 @@
           "cameraPermission": "KontaGo usa la cámara para escanear códigos de barras de productos."
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-sharing"
     ],
     "ios": {
       "supportsTablet": true

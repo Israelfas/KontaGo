@@ -20,6 +20,7 @@ import {
 import { colores, espaciado, radios } from '../theme/colores';
 import { HojaModal } from '../components/hoja-modal';
 import type { TurnoCaja } from '../lib/tipos';
+import { useSinConexion } from '../lib/sin-conexion';
 
 const PERIODOS = [
   { clave: 'hoy', texto: 'Hoy' },
@@ -192,6 +193,10 @@ function CajasDelEquipo({ usuarioId, version }: { usuarioId: string; version: nu
 
 export function CajaScreen() {
   const { token, usuario } = useAuth();
+  // Ventas cobradas sin conexión que todavía no llegaron: con la caja
+  // cerrada, al llegar ya no tendrían turno y el arqueo no cuadraría.
+  const { pendientes } = useSinConexion();
+  const sinEnviar = pendientes.length;
   const esAdmin = usuario?.rol === 'admin';
   const [turno, setTurno] = useState<TurnoCaja | null | undefined>(undefined);
   const [cierre, setCierre] = useState<TurnoCaja | null>(null);
@@ -312,7 +317,14 @@ export function CajaScreen() {
                 </Boton>
               </Tarjeta>
 
-              <Boton onPress={() => setAccion('cerrar')}>Cerrar la caja</Boton>
+              {sinEnviar > 0 && (
+                <Text style={styles.ayuda}>
+                  {`Antes de cerrar hay que enviar ${sinEnviar === 1 ? 'la venta cobrada' : `las ${sinEnviar} ventas cobradas`} sin conexión (se envían solas al volver internet; las que tengan problema, revísalas en Vender).`}
+                </Text>
+              )}
+              <Boton onPress={() => setAccion('cerrar')} disabled={sinEnviar > 0}>
+                Cerrar la caja
+              </Boton>
             </>
           )}
 

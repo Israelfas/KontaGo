@@ -108,6 +108,52 @@ export class VentasService {
       throw new FaltaMontoRecibidoError();
     }
 
+    // Ya llegó antes (la app la reenvía si no supo si se guardó): la misma.
+    if (dto.claveIdempotencia) {
+      const previa = await this.ventaConClave(tenantId, dto.claveIdempotencia);
+      if (previa) return previa;
+    }
+
+    try {
+      return await this.registrarVenta(tenantId, usuarioId, dto, metodoPago);
+    } catch (err) {
+      // Dos envíos de la misma venta al mismo tiempo: gana uno, y el otro
+      // devuelve lo que guardó el primero.
+      if (dto.claveIdempotencia && esClaveRepetida(err)) {
+        const previa = await this.ventaConClave(
+          tenantId,
+          dto.claveIdempotencia,
+        );
+        if (previa) return previa;
+      }
+      throw err;
+    }
+  }
+
+  /** La venta que ya se registró con esa clave, con su desglose. */
+  private async ventaConClave(
+    tenantId: string,
+    claveIdempotencia: string,
+  ): Promise<VentaConDesglose | null> {
+    const venta = await this.dataSource.getRepository(Venta).findOne({
+      where: { tenantId, claveIdempotencia },
+      relations: { items: true },
+    });
+    if (!venta) return null;
+    const ivaCentavos = this.calcularIvaCentavos(venta);
+    return {
+      ...venta,
+      ivaCentavos,
+      subtotalCentavos: venta.totalCentavos - ivaCentavos,
+    };
+  }
+
+  private registrarVenta(
+    tenantId: string,
+    usuarioId: string,
+    dto: CrearVentaDto,
+    metodoPago: MetodoPago,
+  ): Promise<VentaConDesglose> {
     return this.dataSource.transaction(async (manager) => {
       // Sin caja abierta no se cobra: toda venta tiene que caer en un
       // turno, si no el arqueo no cuadra. Bloqueo compartido: el cierre
@@ -209,6 +255,10 @@ export class VentasService {
       venta.montoRecibidoCentavos = montoRecibidoCentavos;
       venta.vueltoCentavos = montoRecibidoCentavos - totalCentavos;
       venta.items = items;
+      venta.claveIdempotencia = dto.claveIdempotencia ?? null;
+      // Cobrada sin conexión: vale la hora en que se cobró, no la de ahora.
+      const cuando = momentoDeLaVenta(dto.vendidaEn, turno.abiertoEn);
+      if (cuando) venta.createdAt = cuando;
 
       // El número de ticket va al final, justo antes de guardar: el contador
       // de la tienda queda bloqueado hasta el commit, así que cuanto menos
@@ -812,4 +862,34 @@ function aVentaDelHistorial(venta: Venta): VentaDelHistorialDto {
       montoDevueltoCentavos: anulacion.montoDevueltoCentavos,
     })),
   };
+}
+
+/**
+ * Cuándo se cobró una venta que llega tarde (se hizo sin conexión): la
+ * hora del celular, pero nunca antes de abrir la caja (un reloj atrasado
+ * la sacaría del turno) ni en el futuro (un reloj adelantado).
+ */
+function momentoDeLaVenta(
+  vendidaEn: string | undefined,
+  abiertoEn: Date,
+): Date | undefined {
+  if (!vendidaEn) return undefined;
+  const ahora = new Date();
+  const cuando = new Date(vendidaEn);
+  if (cuando > ahora) return ahora;
+  if (cuando < abiertoEn) return abiertoEn;
+  return cuando;
+}
+
+/** El índice único de la clave de la venta (dos envíos simultáneos). */
+function esClaveRepetida(err: unknown): boolean {
+  const e = err as {
+    code?: string;
+    constraint?: string;
+    driverError?: { constraint?: string };
+  };
+  return (
+    e.code === '23505' &&
+    (e.constraint ?? e.driverError?.constraint) === 'IDX_ventas_tenant_clave'
+  );
 }

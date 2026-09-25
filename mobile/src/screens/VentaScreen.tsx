@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -42,6 +42,13 @@ import type { MetodoPago, Producto, TurnoCaja, Venta } from '../lib/tipos';
 import { EscanerCamara } from '../components/escaner-camara';
 import { CheckAnimado, CifraAnimada, Entrada, vibrar } from '../components/movimiento';
 import { Banda, LabioHoja } from '../components/banda';
+import { AvisoSinConexion } from '../components/aviso-sin-conexion';
+import {
+  esFaltaDeConexion,
+  nuevaClave,
+  useSinConexion,
+  type VentaPendiente,
+} from '../lib/sin-conexion';
 
 interface ItemCarrito {
   producto: Producto;
@@ -168,6 +175,18 @@ export function VentaScreen() {
   const [errorVenta, setErrorVenta] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
   const [ventaConfirmada, setVentaConfirmada] = useState<Venta | null>(null);
+  // Cobrada sin conexión: guardada en el celular, se manda sola después.
+  const [ventaGuardada, setVentaGuardada] = useState<VentaPendiente | null>(null);
+  const {
+    sinConexion,
+    ultimaCaja,
+    marcarSinConexion,
+    recordarCaja,
+    actualizarCatalogo,
+    buscarEnCatalogo,
+    descontarDelCatalogo,
+    guardarVenta,
+  } = useSinConexion();
 
   const totalCentavos = carrito.reduce(
     (acc, item) => acc + item.producto.precioVentaCentavos * item.cantidad,
@@ -182,14 +201,50 @@ export function VentaScreen() {
 
   // Cada vez que se vuelve a esta pestaña: la caja pudo cerrarse desde la
   // pantalla Caja (o el admin).
+  // Por ref: revisar la caja la vuelve a recordar, y si esto fuera
+  // dependencia de revisarCaja, cada revisión dispararía otra.
+  const ultimaCajaRef = useRef(ultimaCaja);
+  useEffect(() => {
+    ultimaCajaRef.current = ultimaCaja;
+  }, [ultimaCaja]);
+
+  // Sin conexión se sigue con la caja como se vio la última vez, y con el
+  // catálogo guardado.
   const revisarCaja = useCallback(() => {
     if (!token) return;
     setErrorCaja(null);
     obtenerCajaActual(token)
-      .then(setCaja)
-      .catch((err) => setErrorCaja(err instanceof ApiError ? err.message : 'No se pudo revisar la caja'));
-  }, [token]);
+      .then((turno) => {
+        setCaja(turno);
+        recordarCaja(turno);
+        marcarSinConexion(false);
+        // Con conexión, el catálogo guardado se pone al día.
+        void actualizarCatalogo();
+      })
+      .catch((err) => {
+        if (esFaltaDeConexion(err)) {
+          marcarSinConexion(true);
+          if (ultimaCajaRef.current !== undefined) {
+            setCaja(ultimaCajaRef.current);
+            return;
+          }
+          setErrorCaja(
+            'Sin conexión, y todavía no se sabe si tu caja está abierta. Conéctate una vez para empezar.',
+          );
+          return;
+        }
+        setErrorCaja(err instanceof ApiError ? err.message : 'No se pudo revisar la caja');
+      });
+  }, [token, recordarCaja, marcarSinConexion, actualizarCatalogo]);
   useFocusEffect(revisarCaja);
+
+  // Si se cortó con la caja todavía sin saber, al llegar lo guardado se usa.
+  useEffect(() => {
+    if (sinConexion && caja === undefined && ultimaCaja !== undefined) {
+      setCaja(ultimaCaja);
+      setErrorCaja(null);
+    }
+  }, [sinConexion, caja, ultimaCaja]);
 
   function agregarAlCarrito(producto: Producto) {
     setCarrito((prev) => {
@@ -203,10 +258,46 @@ export function VentaScreen() {
     });
   }
 
+  /** Sin conexión: busca en el catálogo guardado y cuida el stock guardado. */
+  function agregarDelCatalogoGuardado(codigo: string) {
+    const producto = buscarEnCatalogo(codigo);
+    if (!producto) {
+      setCamaraActiva(false);
+      setErrorBusqueda(
+        `Sin conexión: el código ${codigo} no está en el catálogo guardado en este celular.`,
+      );
+      return;
+    }
+    const enCarrito = carrito.find((i) => i.producto.id === producto.id)?.cantidad ?? 0;
+    if (enCarrito + 1 > producto.stock) {
+      setCamaraActiva(false);
+      setErrorBusqueda(
+        producto.stock === 0
+          ? `Según el último stock guardado, no queda ${producto.nombre}.`
+          : `Según el último stock guardado, quedan ${producto.stock} de ${producto.nombre}.`,
+      );
+      return;
+    }
+    confirmarAgregado(producto);
+  }
+
+  function confirmarAgregado(producto: Producto) {
+    agregarAlCarrito(producto);
+    setCodigoInput('');
+    setConfirmacionEscaneo(producto.nombre);
+    if (confirmacionTimeoutRef.current) clearTimeout(confirmacionTimeoutRef.current);
+    confirmacionTimeoutRef.current = setTimeout(() => setConfirmacionEscaneo(null), 1200);
+  }
+
   async function buscarYAgregar(codigo: string) {
     if (!token || !codigo.trim()) return;
     setErrorBusqueda(null);
     setCodigoNoEncontrado(null);
+    // Ya se sabe que no hay red: directo a lo guardado, sin esperar.
+    if (sinConexion) {
+      agregarDelCatalogoGuardado(codigo.trim());
+      return;
+    }
     try {
       const producto = await buscarPorCodigoBarras(token, codigo.trim());
       if (!producto) {
@@ -231,12 +322,13 @@ export function VentaScreen() {
       // escanear varios productos seguidos sin reabrir la cámara cada
       // vez. El destello de confirmación es la única señal visible de
       // que el escaneo funcionó (mismo patrón que ya usa el web).
-      agregarAlCarrito(producto);
-      setCodigoInput('');
-      setConfirmacionEscaneo(producto.nombre);
-      if (confirmacionTimeoutRef.current) clearTimeout(confirmacionTimeoutRef.current);
-      confirmacionTimeoutRef.current = setTimeout(() => setConfirmacionEscaneo(null), 1200);
+      confirmarAgregado(producto);
     } catch (err) {
+      if (esFaltaDeConexion(err)) {
+        marcarSinConexion(true);
+        agregarDelCatalogoGuardado(codigo.trim());
+        return;
+      }
       // Un error sí amerita cerrar la cámara: el usuario necesita ver el
       // mensaje para decidir qué hacer, y ese mensaje vive fuera de la
       // vista de cámara.
@@ -262,19 +354,64 @@ export function VentaScreen() {
   async function confirmarVenta() {
     if (!token || !puedeCobrar) return;
     setErrorVenta(null);
-    setProcesando(true);
-    try {
-      const venta = await crearVenta(token, {
-        items: carrito.map((i) => ({ productoId: i.producto.id, cantidad: i.cantidad })),
-        metodoPago,
-        ...(efectivo ? { montoRecibidoCentavos: montoRecibidoCentavos! } : {}),
-      });
-      setVentaConfirmada(venta);
-      vibrar.exito();
+    // La clave y la hora se fijan ahora: si hay que mandarla después, es
+    // la misma venta, cobrada en este momento.
+    const clave = nuevaClave();
+    const vendidaEn = new Date().toISOString();
+    const items = carrito.map((i) => ({ productoId: i.producto.id, cantidad: i.cantidad }));
+
+    const limpiar = () => {
       setCarrito([]);
       setMontoRecibido('');
       setMetodoPago('efectivo');
+    };
+    const guardarParaDespues = () => {
+      const pendiente: VentaPendiente = {
+        clave,
+        vendidaEn,
+        items: carrito.map((i) => ({
+          productoId: i.producto.id,
+          nombre: i.producto.nombre,
+          cantidad: i.cantidad,
+          precioVentaCentavos: i.producto.precioVentaCentavos,
+        })),
+        metodoPago,
+        ...(efectivo ? { montoRecibidoCentavos: montoRecibidoCentavos! } : {}),
+        totalCentavos,
+      };
+      guardarVenta(pendiente);
+      descontarDelCatalogo(items);
+      setVentaGuardada(pendiente);
+      vibrar.exito();
+      limpiar();
+    };
+
+    if (sinConexion) {
+      guardarParaDespues();
+      return;
+    }
+
+    setProcesando(true);
+    try {
+      const venta = await crearVenta(token, {
+        items,
+        metodoPago,
+        ...(efectivo ? { montoRecibidoCentavos: montoRecibidoCentavos! } : {}),
+        claveIdempotencia: clave,
+        vendidaEn,
+      });
+      setVentaConfirmada(venta);
+      descontarDelCatalogo(items);
+      vibrar.exito();
+      limpiar();
     } catch (err) {
+      // Se cortó (o no respondió a tiempo): queda guardada y se manda
+      // sola. Si en realidad sí llegó, la clave evita cobrarla dos veces.
+      if (esFaltaDeConexion(err)) {
+        marcarSinConexion(true);
+        guardarParaDespues();
+        return;
+      }
       // La caja se cerró mientras tanto: volver a pedir que se abra.
       if (err instanceof ApiError && err.statusCode === 409) {
         setCaja(null);
@@ -355,6 +492,62 @@ export function VentaScreen() {
     );
   }
 
+  if (ventaGuardada) {
+    const vuelto =
+      ventaGuardada.montoRecibidoCentavos !== undefined
+        ? ventaGuardada.montoRecibidoCentavos - ventaGuardada.totalCentavos
+        : null;
+    return (
+      <SafeAreaView style={styles.contenedor} edges={[]}>
+        <View style={styles.confirmacionContenedor}>
+          <CheckAnimado color={colores.ambar} />
+          <Text style={styles.confirmacionEtiqueta}>VENTA GUARDADA SIN CONEXIÓN</Text>
+          <CifraAnimada
+            texto={formatearCentavos(ventaGuardada.totalCentavos)}
+            style={styles.confirmacionTotal}
+          />
+
+          <Entrada orden={3} style={styles.confirmacionTarjeta}>
+            {vuelto === null ? (
+              <Text style={[styles.confirmacionLabel, { fontWeight: '700', color: colores.tinta }]}>
+                Pagado por transferencia
+              </Text>
+            ) : (
+              <>
+                <View style={styles.confirmacionFila}>
+                  <Text style={styles.confirmacionLabel}>Recibido</Text>
+                  <Text style={styles.confirmacionValor}>
+                    {formatearCentavos(ventaGuardada.montoRecibidoCentavos!)}
+                  </Text>
+                </View>
+                <View style={styles.confirmacionFila}>
+                  <Text style={[styles.confirmacionLabel, { fontWeight: '700', color: colores.tinta }]}>
+                    Vuelto
+                  </Text>
+                  <CifraAnimada
+                    texto={formatearCentavos(vuelto)}
+                    style={[styles.confirmacionValor, { color: colores.ambar, fontSize: 19, fontWeight: '800' }]}
+                  />
+                </View>
+              </>
+            )}
+            <View style={styles.confirmacionDivisor} />
+            <Text style={styles.confirmacionLabel}>
+              Se envía sola cuando vuelva internet, con la hora de ahora. El número de ticket se le
+              asigna al enviarla.
+            </Text>
+          </Entrada>
+
+          <Entrada orden={5} style={{ width: '100%' }}>
+            <Boton onPress={() => setVentaGuardada(null)} style={{ marginTop: espaciado.lg, width: '100%' }}>
+              Nueva venta
+            </Boton>
+          </Entrada>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (!caja) {
     return (
       <SafeAreaView style={styles.contenedor} edges={[]}>
@@ -367,7 +560,15 @@ export function VentaScreen() {
         <View style={{ paddingHorizontal: espaciado.lg }}>
           {errorCaja && <EstadoError mensaje={errorCaja} onReintentar={revisarCaja} />}
           {caja === undefined && !errorCaja && <EstadoCargando texto="Revisando la caja…" />}
-          {caja === null && <FormularioAbrirCaja onAbierta={setCaja} />}
+          {caja === null && (
+            <FormularioAbrirCaja
+              onAbierta={(turno) => {
+                setCaja(turno);
+                // Así, si se corta enseguida, se sabe que está abierta.
+                recordarCaja(turno);
+              }}
+            />
+          )}
         </View>
       </SafeAreaView>
     );
@@ -409,6 +610,7 @@ export function VentaScreen() {
         }
       />
       <LabioHoja />
+      <AvisoSinConexion />
 
       {camaraActiva ? (
         <EscanerCamara
