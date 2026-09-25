@@ -29,6 +29,14 @@ import {
   type Periodo,
 } from '@/lib/periodo';
 import type { PaginaDeVentas, ResumenPeriodo, VentaDelHistorial } from '@/lib/tipos';
+import {
+  formatearCantidad,
+  importeCentavos,
+  importeDelTramo,
+  pasoDe,
+  porPeso,
+  redondear,
+} from '@/lib/cantidad';
 
 // De a cuántas ventas se traen en el historial (un mes pasa de mil).
 const POR_PAGINA = 50;
@@ -56,7 +64,7 @@ function PanelAnulacion({
 }) {
   const { token } = useAuth();
   const pendientes = venta.items
-    .map((item) => ({ ...item, pendiente: item.cantidad - item.cantidadAnulada }))
+    .map((item) => ({ ...item, pendiente: redondear(item.cantidad - item.cantidadAnulada) }))
     .filter((item) => item.pendiente > 0);
   const [cantidades, setCantidades] = useState<Record<string, number>>(() =>
     Object.fromEntries(pendientes.map((item) => [item.id, item.pendiente])),
@@ -65,8 +73,11 @@ function PanelAnulacion({
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
+  // Por tramos, como el backend: anular todo en partes devuelve lo cobrado.
   const aDevolverCentavos = pendientes.reduce(
-    (acc, item) => acc + item.precioVentaCentavos * (cantidades[item.id] ?? 0),
+    (acc, item) =>
+      acc +
+      importeDelTramo(item.precioVentaCentavos, item.cantidadAnulada, cantidades[item.id] ?? 0),
     0,
   );
   const anulaTodo = pendientes.every((item) => cantidades[item.id] === item.pendiente);
@@ -105,19 +116,23 @@ function PanelAnulacion({
           <div key={item.id} className="flex items-center justify-between gap-3 text-sm">
             <label htmlFor={`anular-${item.id}`} className="text-tinta">
               {item.nombre}
-              <span className="ml-1 text-xs text-tinta-suave">(de {item.pendiente})</span>
+              <span className="ml-1 text-xs text-tinta-suave">
+                (de {formatearCantidad(item.pendiente, item.unidad)})
+              </span>
             </label>
             <input
               id={`anular-${item.id}`}
               type="number"
               min={0}
               max={item.pendiente}
+              step={pasoDe(item.unidad)}
               value={cantidades[item.id] ?? 0}
               onChange={(e) => {
-                const valor = Math.max(
-                  0,
-                  Math.min(item.pendiente, parseInt(e.target.value, 10) || 0),
-                );
+                // Por unidad, enteros; por peso, hasta milésimas.
+                const leido = porPeso(item.unidad)
+                  ? redondear(parseFloat(e.target.value) || 0)
+                  : parseInt(e.target.value, 10) || 0;
+                const valor = Math.max(0, Math.min(item.pendiente, leido));
                 setCantidades((prev) => ({ ...prev, [item.id]: valor }));
               }}
               className="field font-ticket !mb-0 w-20 !py-1.5 text-right"
@@ -208,19 +223,21 @@ function TarjetaVenta({
         {venta.items.map((item) => (
           <li key={item.id} className="flex justify-between gap-3">
             <span className="text-tinta">
-              {item.cantidad} × {item.nombre}
+              {formatearCantidad(item.cantidad, item.unidad)} × {item.nombre}
               {item.cantidadAnulada > 0 && (
                 <span className="ml-1 text-xs text-rojo-perdida">
                   (
                   {item.cantidadAnulada === item.cantidad
                     ? 'anulado'
-                    : `${item.cantidadAnulada} anulado${item.cantidadAnulada === 1 ? '' : 's'}`}
+                    : porPeso(item.unidad)
+                      ? `${formatearCantidad(item.cantidadAnulada, item.unidad)} anuladas`
+                      : `${item.cantidadAnulada} anulado${item.cantidadAnulada === 1 ? '' : 's'}`}
                   )
                 </span>
               )}
             </span>
             <span className="font-ticket text-tinta-suave">
-              {formatearCentavos(item.precioVentaCentavos * item.cantidad)}
+              {formatearCentavos(importeCentavos(item.precioVentaCentavos, item.cantidad))}
             </span>
           </li>
         ))}
@@ -229,6 +246,8 @@ function TarjetaVenta({
       <p className="mt-2 font-ticket text-xs text-tinta-suave">
         {venta.metodoPago === 'transferencia' ? (
           'Pagado por transferencia'
+        ) : venta.metodoPago === 'fiado' ? (
+          `Al fiado · ${venta.cliente?.nombre ?? 'cliente'}`
         ) : (
           <>
             Efectivo · recibido {formatearCentavos(venta.montoRecibidoCentavos)} · vuelto{' '}

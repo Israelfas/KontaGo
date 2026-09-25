@@ -131,7 +131,9 @@ function ListaDeProblemas() {
               <p className="text-xs text-tinta-suave">Cobrada a las {hora(venta.vendidaEn)}</p>
             </div>
             <p className="mt-0.5 line-clamp-2 text-xs text-tinta-suave">
-              {venta.items.map((i) => `${i.cantidad} × ${i.nombre}`).join(', ')}
+              {venta.items
+                .map((i) => `${i.cantidad.toLocaleString('es-EC')} × ${i.nombre}`)
+                .join(', ')}
             </p>
             <p className="mt-1.5 text-sm font-medium text-rojo-perdida">{venta.problema}</p>
             <div className="mt-3 flex gap-2">

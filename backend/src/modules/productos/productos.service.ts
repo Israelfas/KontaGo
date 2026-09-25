@@ -10,6 +10,7 @@ import {
   CodigoBarrasDuplicadoError,
   CodigoBarrasEnUsoAlReactivarError,
   FechaSinStockError,
+  UnidadConStockDecimalError,
   VariosLotesError,
 } from './productos.errors';
 import {
@@ -19,6 +20,9 @@ import {
   ordenFEFO,
 } from '../inventario/lotes';
 import { Lote } from '../inventario/entities/lote.entity';
+import { generarCodigoInterno } from './codigo-interno';
+import { revisarCantidad } from './cantidad-del-producto';
+import { UnidadDeVenta } from '../../common/cantidad';
 
 /** Deja en `lotes` solo los que tienen unidades, del que vence antes al último. */
 function conLotesVigentes(producto: Producto): Producto {
@@ -71,7 +75,20 @@ export class ProductosService {
         producto.precioVentaCentavos = dto.precioVentaCentavos;
       if (dto.costoUnitarioCentavos !== undefined)
         producto.costoUnitarioCentavos = dto.costoUnitarioCentavos;
-      if (dto.stockMinimo !== undefined) producto.stockMinimo = dto.stockMinimo;
+      if (dto.unidad !== undefined && dto.unidad !== producto.unidad) {
+        // A "por unidad" solo si lo que hay se puede contar en enteros.
+        if (
+          dto.unidad === UnidadDeVenta.UNIDAD &&
+          !Number.isInteger(producto.stock)
+        ) {
+          throw new UnidadConStockDecimalError(producto.stock);
+        }
+        producto.unidad = dto.unidad;
+      }
+      if (dto.stockMinimo !== undefined) {
+        revisarCantidad(producto, dto.stockMinimo);
+        producto.stockMinimo = dto.stockMinimo;
+      }
       if (dto.ivaExento !== undefined) producto.ivaExento = dto.ivaExento;
 
       if (dto.quitarFechaVencimiento) {
@@ -124,14 +141,40 @@ export class ProductosService {
   }
 
   async crear(tenantId: string, dto: CrearProductoDto): Promise<Producto> {
-    const stockInicial = dto.stockInicial ?? 0;
-    if (dto.fechaVencimiento && stockInicial <= 0) {
+    if (dto.fechaVencimiento && (dto.stockInicial ?? 0) <= 0) {
       throw new FechaSinStockError();
     }
+    const comoSeVende = {
+      nombre: dto.nombre,
+      unidad: dto.unidad ?? UnidadDeVenta.UNIDAD,
+    };
+    revisarCantidad(comoSeVende, dto.stockInicial ?? 0);
+    revisarCantidad(comoSeVende, dto.stockMinimo ?? 0);
+    const codigo = dto.codigoBarras?.trim();
+    if (codigo) return this.crearConCodigo(tenantId, dto, codigo);
 
+    // Sin código de barras: uno interno. Chocar con otro es casi imposible
+    // (10 dígitos al azar), pero si pasa se prueba con otro.
+    for (let intento = 1; ; intento++) {
+      try {
+        return await this.crearConCodigo(tenantId, dto, generarCodigoInterno());
+      } catch (error) {
+        if (!(error instanceof CodigoBarrasDuplicadoError) || intento >= 5) {
+          throw error;
+        }
+      }
+    }
+  }
+
+  private async crearConCodigo(
+    tenantId: string,
+    dto: CrearProductoDto,
+    codigoBarras: string,
+  ): Promise<Producto> {
+    const stockInicial = dto.stockInicial ?? 0;
     const producto = this.productoRepo.create({
       tenantId,
-      codigoBarras: dto.codigoBarras,
+      codigoBarras,
       nombre: dto.nombre,
       categoria: dto.categoria,
       proveedor: dto.proveedor,
@@ -139,6 +182,7 @@ export class ProductosService {
       costoUnitarioCentavos: dto.costoUnitarioCentavos ?? 0,
       stock: 0,
       stockMinimo: dto.stockMinimo ?? 0,
+      unidad: dto.unidad ?? UnidadDeVenta.UNIDAD,
       fechaVencimiento: null,
       ivaExento: dto.ivaExento ?? false,
     });
@@ -167,7 +211,7 @@ export class ProductosService {
       // luego crear"), y solo traducimos el error crudo de Postgres a un
       // mensaje entendible para el cliente.
       if (esViolacionDeUnicidad(error)) {
-        throw new CodigoBarrasDuplicadoError(dto.codigoBarras);
+        throw new CodigoBarrasDuplicadoError(codigoBarras);
       }
       throw error;
     }

@@ -2,14 +2,13 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
-  IsInt,
   IsOptional,
   IsUUID,
   Matches,
-  Min,
   ValidateNested,
 } from 'class-validator';
 import { FORMATO_FECHA } from '../../../common/formato-fecha';
+import { EsCantidad } from '../../../common/validacion/es-cantidad';
 
 export class FilaLoteDto {
   // Con id: se corrige ese lote. Sin id: es un lote nuevo.
@@ -24,8 +23,7 @@ export class FilaLoteDto {
   })
   fechaVencimiento?: string | null;
 
-  @IsInt()
-  @Min(0)
+  @EsCantidad({ positiva: false })
   cantidad: number;
 }
 

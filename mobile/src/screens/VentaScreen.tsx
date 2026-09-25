@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -23,6 +23,9 @@ import {
   obtenerCajaActual,
   ApiError,
 } from '../lib/api';
+import { buscarPorNombre, esCodigoInterno } from '../lib/filtro-productos';
+import { formatearCantidad, importeCentavos, porPeso, precioPor, redondear } from '../lib/cantidad';
+import { HojaPeso } from '../components/hoja-peso';
 import { formatearCentavos, numeroDeTicket } from '../lib/formato';
 import { compartirTicket } from '../lib/ticket-texto';
 import { centavosATexto, montosRapidos } from '../lib/montos-rapidos';
@@ -38,7 +41,7 @@ import {
 import { aCentavos, avisoDelMargen } from '../lib/validacion';
 import { FormularioAbrirCaja } from '../components/caja';
 import { colores, espaciado, radios } from '../theme/colores';
-import type { MetodoPago, Producto, TurnoCaja, Venta } from '../lib/tipos';
+import type { ClienteFiado, MetodoPago, Producto, TurnoCaja, Venta } from '../lib/tipos';
 import { EscanerCamara } from '../components/escaner-camara';
 import { CheckAnimado, CifraAnimada, Entrada, vibrar } from '../components/movimiento';
 import { Banda, LabioHoja } from '../components/banda';
@@ -49,6 +52,7 @@ import {
   useSinConexion,
   type VentaPendiente,
 } from '../lib/sin-conexion';
+import { SelectorCliente } from '../components/selector-cliente';
 
 interface ItemCarrito {
   producto: Producto;
@@ -59,15 +63,18 @@ interface ItemCarrito {
 
 function FormularioProductoNuevo({
   codigoBarras,
+  nombreInicial = '',
   onCreado,
   onCancelar,
 }: {
-  codigoBarras: string;
+  // null: se buscó por nombre y no está (pan, huevos): va sin código.
+  codigoBarras: string | null;
+  nombreInicial?: string;
   onCreado: (producto: Producto) => void;
   onCancelar: () => void;
 }) {
   const { token } = useAuth();
-  const [nombre, setNombre] = useState('');
+  const [nombre, setNombre] = useState(nombreInicial);
   const [precioVenta, setPrecioVenta] = useState('');
   const [costoUnitario, setCostoUnitario] = useState('');
   const [stockInicial, setStockInicial] = useState('');
@@ -81,7 +88,7 @@ function FormularioProductoNuevo({
     setEnviando(true);
     try {
       const producto = await crearProducto(token, {
-        codigoBarras,
+        codigoBarras: codigoBarras ?? undefined,
         nombre,
         precioVentaCentavos: Math.round(parseFloat(precioVenta || '0') * 100),
         costoUnitarioCentavos: costoUnitario ? Math.round(parseFloat(costoUnitario) * 100) : undefined,
@@ -98,9 +105,11 @@ function FormularioProductoNuevo({
   return (
     <View style={styles.formularioNuevo}>
       <Text style={styles.formularioNuevoTitulo}>Producto nuevo</Text>
-      <Text style={styles.formularioNuevoCodigo}>{codigoBarras}</Text>
+      <Text style={styles.formularioNuevoCodigo}>{codigoBarras ?? 'Sin código'}</Text>
       <Text style={styles.formularioNuevoSubtitulo}>
-        Ese código no está en tu catálogo. Cárgalo y se agrega a la venta al instante.
+        {codigoBarras
+          ? 'Ese código no está en tu catálogo. Cárgalo y se agrega a la venta al instante.'
+          : 'No hay ningún producto con ese nombre. Cárgalo sin código (la próxima vez lo encuentras por su nombre) y se agrega a la venta al instante.'}
       </Text>
 
       <Etiqueta>Nombre</Etiqueta>
@@ -162,7 +171,10 @@ export function VentaScreen() {
   const [codigoInput, setCodigoInput] = useState('');
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
   const [errorBusqueda, setErrorBusqueda] = useState<string | null>(null);
-  const [codigoNoEncontrado, setCodigoNoEncontrado] = useState<string | null>(null);
+  // Lo que se buscó y no está: el admin lo puede cargar ahí mismo.
+  const [noEncontrado, setNoEncontrado] = useState<{ codigoBarras: string | null; nombre: string } | null>(null);
+  // Algo que va por peso: se pregunta cuánto (o se cambia lo del carrito).
+  const [pesando, setPesando] = useState<{ producto: Producto; cambiando: boolean } | null>(null);
   const [camaraActiva, setCamaraActiva] = useState(false);
   const [confirmacionEscaneo, setConfirmacionEscaneo] = useState<string | null>(null);
   const confirmacionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -171,6 +183,10 @@ export function VentaScreen() {
   const [caja, setCaja] = useState<TurnoCaja | null | undefined>(undefined);
   const [errorCaja, setErrorCaja] = useState<string | null>(null);
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
+  // Al fiado: a quién (se elige al cobrar).
+  const [clienteFiado, setClienteFiado] = useState<ClienteFiado | null>(null);
+  // Para la confirmación: a quién se le fió la última venta.
+  const [fiadoA, setFiadoA] = useState<string | null>(null);
   const [montoRecibido, setMontoRecibido] = useState('');
   const [errorVenta, setErrorVenta] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
@@ -180,6 +196,7 @@ export function VentaScreen() {
   const {
     sinConexion,
     ultimaCaja,
+    catalogo,
     marcarSinConexion,
     recordarCaja,
     actualizarCatalogo,
@@ -189,15 +206,36 @@ export function VentaScreen() {
   } = useSinConexion();
 
   const totalCentavos = carrito.reduce(
-    (acc, item) => acc + item.producto.precioVentaCentavos * item.cantidad,
+    (acc, item) => acc + importeCentavos(item.producto.precioVentaCentavos, item.cantidad),
     0,
   );
   const montoRecibidoCentavos = montoRecibido ? Math.round(parseFloat(montoRecibido) * 100) : null;
+
+  // Solo números: un código. Con letras: un nombre, buscado en el catálogo
+  // guardado (anda también sin conexión).
+  const textoBuscado = codigoInput.trim();
+  const buscaNombre = textoBuscado.length >= 2 && !/^\d+$/.test(textoBuscado);
+  const sugerencias = buscaNombre && catalogo ? buscarPorNombre(catalogo.productos, textoBuscado, 6) : [];
+
+  // Lo que no trae código (pan, huevos, lo suelto), a un toque.
+  const sinCodigo = useMemo(
+    () =>
+      (catalogo?.productos ?? [])
+        .filter((p) => esCodigoInterno(p.codigoBarras))
+        .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+        .slice(0, 12),
+    [catalogo],
+  );
   const vueltoCentavos = montoRecibidoCentavos !== null ? montoRecibidoCentavos - totalCentavos : null;
+  // Lo que va por peso cuenta como una unidad.
+  const unidadesEnCarrito = carrito.reduce((acc, i) => acc + (porPeso(i.producto.unidad) ? 1 : i.cantidad), 0);
   const efectivo = metodoPago === 'efectivo';
+  const fiado = metodoPago === 'fiado';
   const puedeCobrar =
     carrito.length > 0 &&
-    (!efectivo || (montoRecibidoCentavos !== null && vueltoCentavos !== null && vueltoCentavos >= 0));
+    (fiado
+      ? clienteFiado !== null
+      : !efectivo || (montoRecibidoCentavos !== null && vueltoCentavos !== null && vueltoCentavos >= 0));
 
   // Cada vez que se vuelve a esta pestaña: la caja pudo cerrarse desde la
   // pantalla Caja (o el admin).
@@ -246,16 +284,34 @@ export function VentaScreen() {
     }
   }, [sinConexion, caja, ultimaCaja]);
 
-  function agregarAlCarrito(producto: Producto) {
+  function agregarAlCarrito(producto: Producto, cantidad = 1) {
     setCarrito((prev) => {
       const existente = prev.find((i) => i.producto.id === producto.id);
       if (existente) {
         return prev.map((i) =>
-          i.producto.id === producto.id ? { ...i, cantidad: i.cantidad + 1 } : i,
+          i.producto.id === producto.id ? { ...i, cantidad: redondear(i.cantidad + cantidad) } : i,
         );
       }
-      return [...prev, { producto, cantidad: 1 }];
+      return [...prev, { producto, cantidad }];
     });
+  }
+
+  function listoElPeso(cantidad: number) {
+    if (!pesando) return;
+    const { producto, cambiando } = pesando;
+    if (cambiando) {
+      setCarrito((prev) => prev.map((i) => (i.producto.id === producto.id ? { ...i, cantidad } : i)));
+    } else {
+      agregarAlCarrito(producto, cantidad);
+      vibrar.toque();
+    }
+    setPesando(null);
+  }
+
+  /** Sin conexión: lo que queda del producto según el stock guardado. */
+  function disponibleSinConexion(producto: Producto, sinContarElCarrito = false): number {
+    const enCarrito = sinContarElCarrito ? 0 : (carrito.find((i) => i.producto.id === producto.id)?.cantidad ?? 0);
+    return redondear(producto.stock - enCarrito);
   }
 
   /** Sin conexión: busca en el catálogo guardado y cuida el stock guardado. */
@@ -268,13 +324,29 @@ export function VentaScreen() {
       );
       return;
     }
-    const enCarrito = carrito.find((i) => i.producto.id === producto.id)?.cantidad ?? 0;
-    if (enCarrito + 1 > producto.stock) {
+    agregarDelCatalogo(producto);
+  }
+
+  /**
+   * Un producto elegido del catálogo (por nombre, o sin código). Sin
+   * conexión, el stock guardado es lo único que se sabe: se cuida acá.
+   */
+  function agregarDelCatalogo(producto: Producto) {
+    setErrorBusqueda(null);
+    setNoEncontrado(null);
+    if (!sinConexion) {
+      confirmarAgregado(producto);
+      return;
+    }
+    // Por unidad, que alcance una más; por peso, que quede algo (cuánto se
+    // revisa al poner la cantidad).
+    const queda = disponibleSinConexion(producto);
+    if (porPeso(producto.unidad) ? queda <= 0 : queda < 1) {
       setCamaraActiva(false);
       setErrorBusqueda(
         producto.stock === 0
           ? `Según el último stock guardado, no queda ${producto.nombre}.`
-          : `Según el último stock guardado, quedan ${producto.stock} de ${producto.nombre}.`,
+          : `Según el último stock guardado, quedan ${formatearCantidad(producto.stock, producto.unidad)} de ${producto.nombre}.`,
       );
       return;
     }
@@ -282,6 +354,13 @@ export function VentaScreen() {
   }
 
   function confirmarAgregado(producto: Producto) {
+    // Por peso: primero cuánto (la cámara se cierra para ver la hoja).
+    if (porPeso(producto.unidad)) {
+      setCamaraActiva(false);
+      setCodigoInput('');
+      setPesando({ producto, cambiando: false });
+      return;
+    }
     agregarAlCarrito(producto);
     setCodigoInput('');
     setConfirmacionEscaneo(producto.nombre);
@@ -292,7 +371,12 @@ export function VentaScreen() {
   async function buscarYAgregar(codigo: string) {
     if (!token || !codigo.trim()) return;
     setErrorBusqueda(null);
-    setCodigoNoEncontrado(null);
+    setNoEncontrado(null);
+    // Un nombre con una sola coincidencia: esa. Con varias, se elige de la lista.
+    if (buscaNombre && codigo === codigoInput && sugerencias.length > 0) {
+      if (sugerencias.length === 1) agregarDelCatalogo(sugerencias[0]);
+      return;
+    }
     // Ya se sabe que no hay red: directo a lo guardado, sin esperar.
     if (sinConexion) {
       agregarDelCatalogoGuardado(codigo.trim());
@@ -309,11 +393,17 @@ export function VentaScreen() {
         setCamaraActiva(false);
         // Crear productos es del admin (el backend responde 403 a un
         // cajero): al cajero solo se le avisa.
+        // Con letras se buscaba un nombre: el producto nuevo va sin código.
+        const esNombre = !/^\d+$/.test(codigo.trim());
         if (usuario?.rol === 'admin') {
-          setCodigoNoEncontrado(codigo.trim());
+          setNoEncontrado(
+            esNombre ? { codigoBarras: null, nombre: codigo.trim() } : { codigoBarras: codigo.trim(), nombre: '' },
+          );
         } else {
           setErrorBusqueda(
-            `El código ${codigo.trim()} no está en el catálogo. Pídele al administrador que lo cargue.`,
+            esNombre
+              ? `No hay ningún producto que se llame “${codigo.trim()}”. Pídele al administrador que lo cargue.`
+              : `El código ${codigo.trim()} no está en el catálogo. Pídele al administrador que lo cargue.`,
           );
         }
         return;
@@ -339,8 +429,10 @@ export function VentaScreen() {
 
   function manejarProductoNuevoCreado(producto: Producto) {
     agregarAlCarrito(producto);
-    setCodigoNoEncontrado(null);
+    setNoEncontrado(null);
     setCodigoInput('');
+    // Al catálogo guardado: así se lo encuentra por nombre ya mismo.
+    void actualizarCatalogo();
   }
 
   function cambiarCantidad(productoId: string, delta: number) {
@@ -364,6 +456,8 @@ export function VentaScreen() {
       setCarrito([]);
       setMontoRecibido('');
       setMetodoPago('efectivo');
+      setFiadoA(clienteFiado?.nombre ?? null);
+      setClienteFiado(null);
     };
     const guardarParaDespues = () => {
       const pendiente: VentaPendiente = {
@@ -377,6 +471,7 @@ export function VentaScreen() {
         })),
         metodoPago,
         ...(efectivo ? { montoRecibidoCentavos: montoRecibidoCentavos! } : {}),
+        ...(fiado && clienteFiado ? { clienteId: clienteFiado.id, clienteNombre: clienteFiado.nombre } : {}),
         totalCentavos,
       };
       guardarVenta(pendiente);
@@ -397,6 +492,7 @@ export function VentaScreen() {
         items,
         metodoPago,
         ...(efectivo ? { montoRecibidoCentavos: montoRecibidoCentavos! } : {}),
+        ...(fiado && clienteFiado ? { clienteId: clienteFiado.id } : {}),
         claveIdempotencia: clave,
         vendidaEn,
       });
@@ -450,7 +546,11 @@ export function VentaScreen() {
               </Text>
             </View>
             <View style={styles.confirmacionDivisor} />
-            {ventaConfirmada.metodoPago === 'transferencia' ? (
+            {ventaConfirmada.metodoPago === 'fiado' ? (
+              <Text style={[styles.confirmacionLabel, { fontWeight: '700', color: colores.tinta }]}>
+                Anotado al fiado de {fiadoA ?? 'el cliente'}. Queda en su cuenta, en Fiados.
+              </Text>
+            ) : ventaConfirmada.metodoPago === 'transferencia' ? (
               <Text style={[styles.confirmacionLabel, { fontWeight: '700', color: colores.tinta }]}>
                 Pagado por transferencia
               </Text>
@@ -508,7 +608,11 @@ export function VentaScreen() {
           />
 
           <Entrada orden={3} style={styles.confirmacionTarjeta}>
-            {vuelto === null ? (
+            {ventaGuardada.metodoPago === 'fiado' ? (
+              <Text style={[styles.confirmacionLabel, { fontWeight: '700', color: colores.tinta }]}>
+                Al fiado · {ventaGuardada.clienteNombre}
+              </Text>
+            ) : vuelto === null ? (
               <Text style={[styles.confirmacionLabel, { fontWeight: '700', color: colores.tinta }]}>
                 Pagado por transferencia
               </Text>
@@ -583,9 +687,7 @@ export function VentaScreen() {
         detalle={
           carrito.length === 0
             ? 'Escanea un producto para empezar el ticket.'
-            : `Total a cobrar · ${carrito.reduce((acc, i) => acc + i.cantidad, 0)} unidad${
-                carrito.reduce((acc, i) => acc + i.cantidad, 0) === 1 ? '' : 'es'
-              }`
+            : `Total a cobrar · ${unidadesEnCarrito} unidad${unidadesEnCarrito === 1 ? '' : 'es'}`
         }
         accion={
           <View style={{ flexDirection: 'row', gap: espaciado.xs }}>
@@ -605,6 +707,14 @@ export function VentaScreen() {
             >
               <Ionicons name="receipt-outline" size={18} color={colores.papel} />
               <Text style={styles.botonVentasHoyTexto}>Hoy</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => navigation.navigate('Fiados')}
+              style={styles.botonVentasHoy}
+              hitSlop={8}
+            >
+              <Ionicons name="book-outline" size={18} color={colores.papel} />
+              <Text style={styles.botonVentasHoyTexto}>Fiados</Text>
             </Pressable>
           </View>
         }
@@ -627,7 +737,7 @@ export function VentaScreen() {
 
           <View style={styles.separadorO}>
             <View style={styles.separadorLinea} />
-            <Text style={styles.separadorTexto}>o escribe el código</Text>
+            <Text style={styles.separadorTexto}>o busca por código o nombre</Text>
             <View style={styles.separadorLinea} />
           </View>
 
@@ -637,8 +747,8 @@ export function VentaScreen() {
               onChangeText={setCodigoInput}
               onSubmitEditing={() => buscarYAgregar(codigoInput)}
               style={[estilosCampo.input, { flex: 1, marginBottom: 0 }]}
-              placeholder="7861001234567"
-              keyboardType="number-pad"
+              placeholder="7861001234567 o pan"
+              autoCorrect={false}
               returnKeyType="search"
             />
             <Boton
@@ -650,14 +760,59 @@ export function VentaScreen() {
               Agregar
             </Boton>
           </View>
+          {sugerencias.length > 0 && (
+            <View style={styles.sugerencias} accessibilityLabel="Productos que coinciden">
+              {sugerencias.map((p, i) => (
+                <Pressable
+                  key={p.id}
+                  onPress={() => agregarDelCatalogo(p)}
+                  style={({ pressed }) => [
+                    styles.sugerencia,
+                    i > 0 && styles.sugerenciaBorde,
+                    pressed && { backgroundColor: colores.papel },
+                  ]}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.sugerenciaNombre} numberOfLines={1}>
+                    {p.nombre}
+                  </Text>
+                  <Text style={styles.sugerenciaDetalle}>
+                    {formatearCentavos(p.precioVentaCentavos)} · stock {p.stock}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
           {errorBusqueda && <Text style={[styles.error, { marginTop: espaciado.sm }]}>{errorBusqueda}</Text>}
 
-          {codigoNoEncontrado && (
+          {noEncontrado && (
             <FormularioProductoNuevo
-              codigoBarras={codigoNoEncontrado}
+              // Otro producto no encontrado: el formulario empieza de cero.
+              key={`${noEncontrado.codigoBarras}-${noEncontrado.nombre}`}
+              codigoBarras={noEncontrado.codigoBarras}
+              nombreInicial={noEncontrado.nombre}
               onCreado={manejarProductoNuevoCreado}
-              onCancelar={() => setCodigoNoEncontrado(null)}
+              onCancelar={() => setNoEncontrado(null)}
             />
+          )}
+
+          {sinCodigo.length > 0 && !noEncontrado && (
+            <View style={{ marginTop: espaciado.md }}>
+              <Etiqueta>Sin código de barras</Etiqueta>
+              <View style={styles.chipsSinCodigo}>
+                {sinCodigo.map((p) => (
+                  <Pressable
+                    key={p.id}
+                    onPress={() => agregarDelCatalogo(p)}
+                    style={({ pressed }) => [styles.chipSinCodigo, pressed && { borderColor: colores.tinta }]}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.chipSinCodigoNombre}>{p.nombre}</Text>
+                    <Text style={styles.chipSinCodigoPrecio}>{formatearCentavos(p.precioVentaCentavos)}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
           )}
         </View>
       )}
@@ -673,6 +828,7 @@ export function VentaScreen() {
             [
               ['efectivo', 'Efectivo'],
               ['transferencia', 'Transferencia'],
+              ['fiado', 'Fiado'],
             ] as const
           ).map(([valor, texto]) => (
             <Pressable
@@ -690,7 +846,18 @@ export function VentaScreen() {
           ))}
         </View>
 
-        {!efectivo && (
+        {fiado && (
+          <View style={{ marginBottom: espaciado.sm }}>
+            <SelectorCliente elegido={clienteFiado} onElegir={setClienteFiado} />
+            {clienteFiado && (
+              <Text style={styles.avisoTransferencia}>
+                {formatearCentavos(totalCentavos)} se anotan en su cuenta. No entra nada al cajón.
+              </Text>
+            )}
+          </View>
+        )}
+
+        {metodoPago === 'transferencia' && (
           <Text style={styles.avisoTransferencia}>
             Confirma en el celular que llegó la transferencia de {formatearCentavos(totalCentavos)} antes de
             entregar. No entra al cajón.
@@ -759,7 +926,7 @@ export function VentaScreen() {
           disabled={!puedeCobrar}
           style={{ marginTop: espaciado.sm }}
         >
-          {efectivo ? 'Confirmar venta' : 'Cobrar por transferencia'}
+          {efectivo ? 'Confirmar venta' : fiado ? 'Anotar al fiado' : 'Cobrar por transferencia'}
         </Boton>
 
         <Pressable
@@ -823,9 +990,20 @@ export function VentaScreen() {
                   {item.producto.nombre}
                 </Text>
                 <Text style={styles.itemPrecioUnitario}>
-                  {formatearCentavos(item.producto.precioVentaCentavos)} c/u
+                  {formatearCentavos(item.producto.precioVentaCentavos)}
+                  {porPeso(item.producto.unidad) ? precioPor(item.producto.unidad) : ' c/u'}
                 </Text>
               </View>
+              {porPeso(item.producto.unidad) ? (
+                <Pressable
+                  onPress={() => setPesando({ producto: item.producto, cambiando: true })}
+                  style={styles.botonPeso}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Cambiar cuánto de ${item.producto.nombre}`}
+                >
+                  <Text style={styles.cantidadTexto}>{formatearCantidad(item.cantidad, item.producto.unidad)}</Text>
+                </Pressable>
+              ) : (
               <View style={styles.contadorCantidad}>
                 <Pressable
                   onPress={() => cambiarCantidad(item.producto.id, -1)}
@@ -845,18 +1023,74 @@ export function VentaScreen() {
                   <Ionicons name="add" size={18} color={colores.tinta} />
                 </Pressable>
               </View>
+              )}
               <Text style={styles.subtotalTexto}>
-                {formatearCentavos(item.producto.precioVentaCentavos * item.cantidad)}
+                {formatearCentavos(importeCentavos(item.producto.precioVentaCentavos, item.cantidad))}
               </Text>
             </View>
           )}
         />
       </KeyboardAvoidingView>
+
+      {pesando && (
+        <HojaPeso
+          // Otro producto: la hoja empieza de cero.
+          key={`${pesando.producto.id}-${pesando.cambiando}`}
+          producto={pesando.producto}
+          inicial={
+            pesando.cambiando ? carrito.find((i) => i.producto.id === pesando.producto.id)?.cantidad : undefined
+          }
+          maximo={sinConexion ? disponibleSinConexion(pesando.producto, pesando.cambiando) : undefined}
+          onListo={listoElPeso}
+          onCerrar={() => setPesando(null)}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  botonPeso: {
+    borderWidth: 1,
+    borderColor: colores.papelLinea,
+    borderRadius: 999,
+    backgroundColor: '#fff',
+    paddingHorizontal: espaciado.md,
+    paddingVertical: espaciado.sm,
+  },
+  sugerencias: {
+    marginTop: espaciado.sm,
+    borderWidth: 1,
+    borderColor: colores.papelLinea,
+    borderRadius: radios.md,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+  },
+  sugerencia: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: espaciado.sm,
+    paddingHorizontal: espaciado.md,
+    paddingVertical: espaciado.sm + 4,
+  },
+  sugerenciaBorde: { borderTopWidth: 1, borderTopColor: colores.papelLinea },
+  sugerenciaNombre: { flex: 1, fontSize: 14, color: colores.tinta, fontWeight: '600' },
+  sugerenciaDetalle: { fontSize: 12, color: colores.tintaSuave, fontVariant: ['tabular-nums'] },
+  chipsSinCodigo: { flexDirection: 'row', flexWrap: 'wrap', gap: espaciado.sm },
+  chipSinCodigo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: colores.papelLinea,
+    borderRadius: 999,
+    backgroundColor: '#fff',
+    paddingHorizontal: espaciado.md,
+    paddingVertical: espaciado.sm,
+  },
+  chipSinCodigoNombre: { fontSize: 13, fontWeight: '700', color: colores.tinta },
+  chipSinCodigoPrecio: { fontSize: 12, color: colores.tintaSuave, fontVariant: ['tabular-nums'] },
   metodos: { flexDirection: 'row', gap: espaciado.sm, marginBottom: espaciado.md },
   metodo: {
     flex: 1,

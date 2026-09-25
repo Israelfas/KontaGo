@@ -21,7 +21,7 @@ function enDias(dias: number): string {
 }
 
 export function unidades(n: number): string {
-  return `${n} u.`;
+  return `${n.toLocaleString('es-EC', { maximumFractionDigits: 3 })} u.`;
 }
 
 /** "vence 24 sept", "venció 22 sept", "sin fecha". */

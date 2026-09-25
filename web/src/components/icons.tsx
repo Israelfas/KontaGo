@@ -252,3 +252,15 @@ export function DownloadIcon(props: IconProps) {
     </IconBase>
   );
 }
+
+// La libreta del fiado.
+export function NotebookIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <rect x="5" y="3" width="14" height="18" rx="2" />
+      <path d="M9 3v18" />
+      <path d="M12 8h4" />
+      <path d="M12 12h4" />
+    </IconBase>
+  );
+}

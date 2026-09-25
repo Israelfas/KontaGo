@@ -1,4 +1,7 @@
 import type {
+  ClienteFiado,
+  DetalleClienteFiado,
+  MetodoDeAbono,
   AlertasProductos,
   MetodoPago,
   MotivoMerma,
@@ -18,6 +21,7 @@ import type {
   Venta,
   VentaDelHistorial,
 } from './tipos';
+import type { UnidadDeVenta } from './cantidad';
 import type { ActividadDeCuenta } from './actividad';
 
 // Si NEXT_PUBLIC_API_URL está seteado, gana siempre (útil para producción,
@@ -380,7 +384,10 @@ export function listarProductos(token: string): Promise<Producto[]> {
 }
 
 export interface CrearProductoInput {
-  codigoBarras: string;
+  // Sin código (pan, huevos, lo suelto): el backend le asigna uno interno.
+  codigoBarras?: string;
+  // Por unidad si se omite.
+  unidad?: UnidadDeVenta;
   nombre: string;
   precioVentaCentavos: number;
   costoUnitarioCentavos?: number;
@@ -407,6 +414,7 @@ export interface ActualizarProductoInput {
   precioVentaCentavos?: number;
   costoUnitarioCentavos?: number;
   stockMinimo?: number;
+  unidad?: UnidadDeVenta;
   fechaVencimiento?: string;
   quitarFechaVencimiento?: boolean;
   ivaExento?: boolean;
@@ -472,6 +480,8 @@ export interface CrearVentaInput {
   metodoPago: MetodoPago;
   // Solo en efectivo (en transferencia se paga el total exacto).
   montoRecibidoCentavos?: number;
+  // Al fiado: a quién.
+  clienteId?: string;
   // La genera el navegador: si la venta llega dos veces, se cobra una.
   claveIdempotencia?: string;
   // Cuándo se cobró, si se manda después (se hizo sin conexión).
@@ -819,4 +829,46 @@ export function desbloquearUsuario(token: string, id: string): Promise<UsuarioEq
 export function cerrarMisSesiones(token: string): Promise<void> {
   // Con la cookie: el backend también la borra.
   return apiFetch<void>('/auth/cerrar-sesiones', { method: 'POST', token, conCookie: true });
+}
+
+// --- Fiado ---
+
+export function listarClientes(token: string): Promise<ClienteFiado[]> {
+  return apiFetch<ClienteFiado[]>('/clientes', { token });
+}
+
+export function crearCliente(
+  token: string,
+  dto: { nombre: string; telefono?: string },
+): Promise<ClienteFiado> {
+  return apiFetch<ClienteFiado>('/clientes', { method: 'POST', token, body: JSON.stringify(dto) });
+}
+
+export function obtenerCliente(token: string, id: string): Promise<DetalleClienteFiado> {
+  return apiFetch<DetalleClienteFiado>(`/clientes/${id}`, { token });
+}
+
+export function actualizarCliente(
+  token: string,
+  id: string,
+  dto: { nombre?: string; telefono?: string; activo?: boolean },
+): Promise<ClienteFiado> {
+  return apiFetch<ClienteFiado>(`/clientes/${id}`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(dto),
+  });
+}
+
+/** El cliente paga (todo o una parte). En efectivo entra a tu caja. */
+export function abonarCliente(
+  token: string,
+  id: string,
+  dto: { montoCentavos: number; metodoPago: MetodoDeAbono; nota?: string },
+): Promise<ClienteFiado> {
+  return apiFetch<ClienteFiado>(`/clientes/${id}/abonos`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(dto),
+  });
 }

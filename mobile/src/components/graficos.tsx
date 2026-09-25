@@ -5,6 +5,7 @@ import { colores, espaciado } from '../theme/colores';
 import { formatearCentavos } from '../lib/formato';
 import { aFecha, fechaLarga } from '../lib/periodo';
 import type { ProductoVendido, PuntoSerie } from '../lib/tipos';
+import { formatearCantidad, porPeso } from '../lib/cantidad';
 
 /**
  * Gráficos del resumen, armados con Views (sin librería de SVG: son barras
@@ -135,13 +136,13 @@ export function GraficoTopProductos({ datos }: { datos: ProductoVendido[] }) {
         <View
           key={d.nombre}
           accessible
-          accessibilityLabel={`${d.nombre}: ${d.unidades} unidades, ${formatearCentavos(d.centavos)}`}
+          accessibilityLabel={`${d.nombre}: ${porPeso(d.unidad) ? formatearCantidad(d.unidades, d.unidad) : `${d.unidades} unidades`}, ${formatearCentavos(d.centavos)}`}
         >
           <View style={styles.productoFila}>
             <Text style={styles.productoNombre} numberOfLines={1}>
               {d.nombre}
             </Text>
-            <Text style={styles.productoUnidades}>{d.unidades}</Text>
+            <Text style={styles.productoUnidades}>{formatearCantidad(d.unidades, d.unidad)}</Text>
           </View>
           <BarraQueCrece
             horizontal

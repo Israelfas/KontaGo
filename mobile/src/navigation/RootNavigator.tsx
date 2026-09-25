@@ -14,6 +14,7 @@ import { VentasHoyScreen } from '../screens/VentasHoyScreen';
 import { CajaScreen } from '../screens/CajaScreen';
 import { TiendaScreen } from '../screens/TiendaScreen';
 import { HistorialInventarioScreen } from '../screens/HistorialInventarioScreen';
+import { FiadosScreen } from '../screens/FiadosScreen';
 import { colores } from '../theme/colores';
 import type { Perfil } from '../lib/api';
 
@@ -30,6 +31,7 @@ export type RootStackParamList = {
   Caja: undefined;
   Tienda: undefined;
   HistorialInventario: undefined;
+  Fiados: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -65,6 +67,7 @@ export function RootNavigator() {
           <Stack.Screen name="Equipo" component={EquipoScreen} options={{ title: 'Equipo' }} />
           <Stack.Screen name="VentasHoy" component={VentasHoyScreen} options={{ title: 'Ventas' }} />
           <Stack.Screen name="Caja" component={CajaScreen} options={{ title: 'Caja' }} />
+          <Stack.Screen name="Fiados" component={FiadosScreen} options={{ title: 'Fiados' }} />
           <Stack.Screen name="Tienda" component={TiendaScreen} options={{ title: 'Datos de la tienda' }} />
           <Stack.Screen
             name="HistorialInventario"

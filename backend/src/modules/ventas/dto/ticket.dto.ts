@@ -1,5 +1,6 @@
 import { MetodoPago } from '../../../common/enums/metodo-pago.enum';
 import type { TiendaDto } from '../../tenants/dto/tienda.dto';
+import type { UnidadDeVenta } from '../../../common/cantidad';
 
 /**
  * Lo que va impreso (o compartido) en el ticket de una venta. Muestra la
@@ -15,8 +16,12 @@ export interface TicketDto {
   fecha: Date;
   cajero: string;
   metodoPago: MetodoPago;
+  // Al fiado: a quién se le fió.
+  cliente: string | null;
   lineas: {
     nombre: string;
+    // La cantidad está en esta unidad (libras si se vende por peso).
+    unidad: UnidadDeVenta;
     cantidad: number;
     precioUnitarioCentavos: number;
     totalCentavos: number;

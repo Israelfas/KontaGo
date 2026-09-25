@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../lib/auth-context';
-import { ApiError, WEB_URL } from '../lib/api';
+import { ApiError, urlDeLaWeb } from '../lib/api';
 import { CampoContrasena, MedidorDeFuerza } from '../components/campo-contrasena';
 import { AuthFrame } from '../components/auth-frame';
 import { AvisoDeCampo, Boton, Etiqueta, estilosCampo } from '../components/ui';
@@ -158,11 +158,11 @@ export function RegistroScreen({ navigation }: Props) {
           </Pressable>
           <Text style={styles.terminosTexto}>
             Acepto los{' '}
-            <Text style={styles.enlace} onPress={() => WebBrowser.openBrowserAsync(`${WEB_URL}/terminos`)}>
+            <Text style={styles.enlace} onPress={() => WebBrowser.openBrowserAsync(`${urlDeLaWeb()}/terminos`)}>
               términos y condiciones
             </Text>{' '}
             y la{' '}
-            <Text style={styles.enlace} onPress={() => WebBrowser.openBrowserAsync(`${WEB_URL}/privacidad`)}>
+            <Text style={styles.enlace} onPress={() => WebBrowser.openBrowserAsync(`${urlDeLaWeb()}/privacidad`)}>
               política de privacidad
             </Text>
             .

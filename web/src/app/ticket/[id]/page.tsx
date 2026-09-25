@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth-context';
 import { obtenerTicket, ApiError } from '@/lib/api';
 import { formatearCentavos, numeroDeTicket } from '@/lib/formato';
 import type { Ticket } from '@/lib/tipos';
+import { formatearCantidad, precioPor } from '@/lib/cantidad';
 
 // Ancho del papel de la impresora térmica. 80 mm es el más común en
 // minimarkets; 58 mm, el de las impresoras chicas (y las Bluetooth).
@@ -157,10 +158,12 @@ function ContenidoTicket() {
             <p>{linea.nombre}</p>
             <div className="pl-3">
               <Fila
-                izquierda={`${linea.cantidad} x ${formatearCentavos(linea.precioUnitarioCentavos)}`}
+                izquierda={`${formatearCantidad(linea.cantidad, linea.unidad)} x ${formatearCentavos(linea.precioUnitarioCentavos)}${precioPor(linea.unidad)}`}
                 derecha={formatearCentavos(linea.totalCentavos)}
               />
-              {linea.cantidadAnulada > 0 && <p>(anulado: {linea.cantidadAnulada})</p>}
+              {linea.cantidadAnulada > 0 && (
+                <p>(anulado: {formatearCantidad(linea.cantidadAnulada, linea.unidad)})</p>
+              )}
             </div>
           </div>
         ))}
@@ -189,6 +192,8 @@ function ContenidoTicket() {
 
         {ticket.metodoPago === 'transferencia' ? (
           <p>Pagado por transferencia</p>
+        ) : ticket.metodoPago === 'fiado' ? (
+          <p>Al fiado · {ticket.cliente ?? 'cliente'}</p>
         ) : (
           <>
             <Fila izquierda="Efectivo" derecha={formatearCentavos(ticket.montoRecibidoCentavos)} />

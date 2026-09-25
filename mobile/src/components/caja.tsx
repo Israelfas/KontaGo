@@ -350,6 +350,12 @@ export function ResultadoArqueo({ turno }: { turno: TurnoCaja }) {
           <Text style={styles.desgloseMonto}>{formatearCentavos(turno.ventasTransferenciaCentavos)}</Text>
         </View>
       )}
+      {turno.ventasFiadoCentavos > 0 && (
+        <View style={styles.desglose}>
+          <Text style={styles.desgloseTexto}>Al fiado (no está en el cajón)</Text>
+          <Text style={styles.desgloseMonto}>{formatearCentavos(turno.ventasFiadoCentavos)}</Text>
+        </View>
+      )}
       {turno.nota && <Text style={styles.ayuda}>Nota: “{turno.nota}”</Text>}
     </View>
   );

@@ -8,6 +8,7 @@ import { formatearCentavos } from '@/lib/formato';
 import { aFecha, fechaLarga } from '@/lib/periodo';
 import { usePantallaChica } from '@/lib/use-pantalla-chica';
 import type { PuntoSerie } from '@/lib/tipos';
+import { formatearCantidad, porPeso, type UnidadDeVenta } from '@/lib/cantidad';
 
 /**
  * Gráficos del resumen, en SVG a mano (sin librería: son dos
@@ -258,6 +259,8 @@ export function GraficoIngreso({
 
 export interface PuntoProducto {
   nombre: string;
+  // unidades está en esta unidad (libras si se vende por peso).
+  unidad?: UnidadDeVenta;
   unidades: number;
   centavos: number;
 }
@@ -316,7 +319,9 @@ export function GraficoTopProductos({
                 opacity={activo === null || activo === i ? 1 : 0.55}
               />
             </svg>
-            <span className="text-right font-ticket text-sm text-tinta">{d.unidades}</span>
+            <span className="text-right font-ticket text-sm text-tinta">
+              {formatearCantidad(d.unidades, d.unidad)}
+            </span>
           </li>
         ))}
       </ul>
@@ -326,8 +331,11 @@ export function GraficoTopProductos({
           <span className="font-ticket font-semibold text-tinta">
             {formatearCentavos(datos[activo].centavos)}
           </span>{' '}
-          cobrados en {datos[activo].unidades} unidad
-          {datos[activo].unidades === 1 ? '' : 'es'} de {datos[activo].nombre}
+          cobrados en{' '}
+          {porPeso(datos[activo].unidad)
+            ? formatearCantidad(datos[activo].unidades, datos[activo].unidad)
+            : `${datos[activo].unidades} unidad${datos[activo].unidades === 1 ? '' : 'es'}`}{' '}
+          de {datos[activo].nombre}
         </div>
       )}
     </div>

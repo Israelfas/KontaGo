@@ -2,6 +2,7 @@ import { Alert, Share } from 'react-native';
 import { obtenerTicket, ApiError } from './api';
 import { formatearCentavos, numeroDeTicket } from './formato';
 import type { Ticket } from './tipos';
+import { formatearCantidad } from './cantidad';
 
 /**
  * El ticket como texto, para compartirlo por WhatsApp (o lo que elija el
@@ -32,8 +33,8 @@ export function textoDelTicket(ticket: Ticket): string {
   );
   for (const linea of ticket.lineas) {
     lineas.push(
-      `${linea.cantidad} x ${linea.nombre} — ${formatearCentavos(linea.totalCentavos)}` +
-        (linea.cantidadAnulada > 0 ? ` (anulado: ${linea.cantidadAnulada})` : ''),
+      `${formatearCantidad(linea.cantidad, linea.unidad)} x ${linea.nombre} — ${formatearCentavos(linea.totalCentavos)}` +
+        (linea.cantidadAnulada > 0 ? ` (anulado: ${formatearCantidad(linea.cantidadAnulada, linea.unidad)})` : ''),
     );
   }
   lineas.push('');
@@ -48,7 +49,9 @@ export function textoDelTicket(ticket: Ticket): string {
   lineas.push(
     ticket.metodoPago === 'transferencia'
       ? 'Pagado por transferencia'
-      : `Efectivo: ${formatearCentavos(ticket.montoRecibidoCentavos)} · Vuelto: ${formatearCentavos(ticket.vueltoCentavos)}`,
+      : ticket.metodoPago === 'fiado'
+        ? `Al fiado · ${ticket.cliente ?? 'cliente'}`
+        : `Efectivo: ${formatearCentavos(ticket.montoRecibidoCentavos)} · Vuelto: ${formatearCentavos(ticket.vueltoCentavos)}`,
   );
   if (ticket.anuladoCentavos > 0) {
     lineas.push(`Devuelto (anulación): -${formatearCentavos(ticket.anuladoCentavos)}`);

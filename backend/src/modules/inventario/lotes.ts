@@ -7,6 +7,7 @@ import {
   LotesNoSumanElStockError,
   StockDelLoteInsuficienteError,
 } from './inventario.errors';
+import { restar, sumar } from '../../common/cantidad';
 
 /**
  * Lotes por fecha de vencimiento. Todo lo de acá se llama DENTRO de una
@@ -56,7 +57,7 @@ export function planDeConsumo(
     const sacar = Math.min(lote.cantidad, falta);
     if (sacar > 0) {
       plan.push({ loteId: lote.id, cantidad: sacar });
-      falta -= sacar;
+      falta = restar(falta, sacar);
     }
   }
   return plan;
@@ -77,12 +78,12 @@ export function planDeDevolucion(
   for (const consumo of [...consumos].reverse()) {
     if (falta === 0) break;
     const devolver = Math.min(
-      consumo.cantidad - consumo.cantidadDevuelta,
+      restar(consumo.cantidad, consumo.cantidadDevuelta),
       falta,
     );
     if (devolver > 0) {
       plan.push({ consumoId: consumo.id, cantidad: devolver });
-      falta -= devolver;
+      falta = restar(falta, devolver);
     }
   }
   return { plan, sinLote: falta };
@@ -151,8 +152,8 @@ export async function agregarAlLote(
 
   let lote = lotes.find((l) => l.fechaVencimiento === fechaVencimiento);
   if (lote) {
-    lote.cantidad += cantidad;
-    lote.cantidadInicial += cantidad;
+    lote.cantidad = sumar(lote.cantidad, cantidad);
+    lote.cantidadInicial = sumar(lote.cantidadInicial, cantidad);
     lote = await repo.save(lote);
   } else {
     lote = await repo.save(
@@ -201,7 +202,10 @@ export async function sacarDeLotes(
   }
 
   const porId = new Map(lotes.map((l) => [l.id, l]));
-  for (const paso of plan) porId.get(paso.loteId)!.cantidad -= paso.cantidad;
+  for (const paso of plan) {
+    const lote = porId.get(paso.loteId)!;
+    lote.cantidad = restar(lote.cantidad, paso.cantidad);
+  }
   await manager
     .getRepository(Lote)
     .save(plan.map((paso) => porId.get(paso.loteId)!));
@@ -233,8 +237,8 @@ export async function devolverALotes(
   const porId = new Map(consumos.map((c) => [c.id, c]));
   for (const paso of plan) {
     const consumo = porId.get(paso.consumoId)!;
-    consumo.cantidadDevuelta += paso.cantidad;
-    consumo.lote.cantidad += paso.cantidad;
+    consumo.cantidadDevuelta = sumar(consumo.cantidadDevuelta, paso.cantidad);
+    consumo.lote.cantidad = sumar(consumo.lote.cantidad, paso.cantidad);
   }
   const tocados = plan.map((paso) => porId.get(paso.consumoId)!);
   await manager.getRepository(Lote).save(tocados.map((c) => c.lote));
@@ -268,7 +272,7 @@ export async function corregirLotes(
   producto: Producto,
   filas: FilaDeLote[],
 ): Promise<void> {
-  const total = filas.reduce((acc, f) => acc + f.cantidad, 0);
+  const total = filas.reduce((acc, f) => sumar(acc, f.cantidad), 0);
   if (total !== producto.stock) {
     throw new LotesNoSumanElStockError(total, producto.stock);
   }

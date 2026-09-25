@@ -1,7 +1,9 @@
 import {
   IsBoolean,
   IsDateString,
+  IsEnum,
   Matches,
+  MaxLength,
   IsInt,
   IsOptional,
   IsString,
@@ -9,11 +11,16 @@ import {
   MinLength,
 } from 'class-validator';
 import { FORMATO_FECHA } from '../../../common/formato-fecha';
+import { UnidadDeVenta } from '../../../common/cantidad';
+import { EsCantidad } from '../../../common/validacion/es-cantidad';
 
 export class CrearProductoDto {
+  // Sin código (pan, huevos, lo suelto): se le asigna uno interno.
+  @IsOptional()
   @IsString()
   @MinLength(1)
-  codigoBarras: string;
+  @MaxLength(64)
+  codigoBarras?: string;
 
   @IsString()
   @MinLength(1)
@@ -38,14 +45,17 @@ export class CrearProductoDto {
   @Min(0)
   costoUnitarioCentavos?: number;
 
+  // Cómo se vende: por unidad (lo de siempre) o por peso (libra, kilo).
   @IsOptional()
-  @IsInt()
-  @Min(0)
+  @IsEnum(UnidadDeVenta)
+  unidad?: UnidadDeVenta;
+
+  @IsOptional()
+  @EsCantidad({ positiva: false })
   stockInicial?: number;
 
   @IsOptional()
-  @IsInt()
-  @Min(0)
+  @EsCantidad({ positiva: false })
   stockMinimo?: number;
 
   // Solo 'AAAA-MM-DD': con hora incluida ('...T05:00:00Z') el día

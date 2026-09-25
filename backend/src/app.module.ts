@@ -16,6 +16,7 @@ import { ReportesModule } from './modules/reportes/reportes.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { limiteDeIntentos } from './common/seguridad/limite-de-intentos';
+import { FiadosModule } from './modules/fiados/fiados.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { limiteDeIntentos } from './common/seguridad/limite-de-intentos';
     UsuariosModule,
     CajaModule,
     ReportesModule,
+    FiadosModule,
   ],
   controllers: [AppController],
   providers: [AppService],

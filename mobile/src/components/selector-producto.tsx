@@ -6,6 +6,8 @@ import { estilosCampo } from './ui';
 import { EscanerCamara } from './escaner-camara';
 import { colores, espaciado, radios } from '../theme/colores';
 import type { Producto } from '../lib/tipos';
+import { textoDelCodigo } from '../lib/filtro-productos';
+import { formatearCantidad } from '../lib/cantidad';
 
 // Sin tildes ni mayúsculas: "yogur" encuentra "Yogurt Toni", "limon" a "Limón".
 function normalizar(texto: string): string {
@@ -72,7 +74,9 @@ export function SelectorProducto({
               <Text style={styles.campoNombre} numberOfLines={1}>
                 {seleccionado.nombre}
               </Text>
-              <Text style={styles.campoDetalle}>Stock actual: {seleccionado.stock}</Text>
+              <Text style={styles.campoDetalle}>
+                Stock actual: {formatearCantidad(seleccionado.stock, seleccionado.unidad)}
+              </Text>
             </>
           ) : (
             <Text style={styles.campoPlaceholder}>Elige un producto…</Text>
@@ -144,7 +148,7 @@ export function SelectorProducto({
                       {item.nombre}
                     </Text>
                     <Text style={styles.filaDetalle}>
-                      {item.codigoBarras} · stock {item.stock}
+                      {textoDelCodigo(item.codigoBarras)} · stock {formatearCantidad(item.stock, item.unidad)}
                     </Text>
                   </View>
                   {activo && (

@@ -18,6 +18,7 @@ import {
   CashIcon,
   DashboardIcon,
   InventoryIcon,
+  NotebookIcon,
   ReceiptIcon,
   UsersIcon,
 } from './icons';
@@ -31,6 +32,8 @@ const ENLACES = [
   { href: '/ventas', etiqueta: 'Ventas', icono: ReceiptIcon, soloAdmin: false },
   // Cada uno abre y cierra su caja; el admin además ve la de todos.
   { href: '/caja', etiqueta: 'Caja', icono: CashIcon, soloAdmin: false },
+  // Lo que se fía y los abonos: los recibe quien atiende la caja.
+  { href: '/fiados', etiqueta: 'Fiados', icono: NotebookIcon, soloAdmin: false },
   {
     href: '/dashboard',
     etiqueta: 'Resumen',

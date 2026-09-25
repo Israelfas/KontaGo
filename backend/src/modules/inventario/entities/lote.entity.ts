@@ -7,6 +7,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { columnaCantidad } from '../../../common/cantidad';
 import { Tenant } from '../../tenants/entities/tenant.entity';
 import { Producto } from '../../productos/entities/producto.entity';
 
@@ -53,11 +54,11 @@ export class Lote {
   fechaVencimiento: string | null;
 
   // Lo que queda del lote.
-  @Column({ type: 'integer' })
+  @Column(columnaCantidad())
   cantidad: number;
 
   // Lo que entró (para mostrar "quedan 4 de 12").
-  @Column({ name: 'cantidad_inicial', type: 'integer' })
+  @Column(columnaCantidad({ name: 'cantidad_inicial' }))
   cantidadInicial: number;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })

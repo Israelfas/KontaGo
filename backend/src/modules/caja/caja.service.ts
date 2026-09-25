@@ -205,6 +205,7 @@ export class CajaService {
       fondoInicialCentavos: turno.fondoInicialCentavos,
       cantidadVentas: cuentas.cantidadVentas,
       ventasTransferenciaCentavos: cuentas.ventasTransferenciaCentavos,
+      ventasFiadoCentavos: cuentas.ventasFiadoCentavos,
       ingresosCentavos: cuentas.ingresosCentavos,
       retirosCentavos: cuentas.retirosCentavos,
       ...(veEsperado

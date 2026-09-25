@@ -37,6 +37,11 @@ const NOMBRES: Record<string, string> = {
   hasta: 'La fecha hasta',
 };
 
+/** Cómo conoce la persona a un campo ("cantidad" → "La cantidad"). */
+export function nombreDelCampo(campo: string): string {
+  return NOMBRES[campo] ?? `El campo "${campo}"`;
+}
+
 const numero = (mensaje: string) => /(\d+)/.exec(mensaje)?.[1];
 
 // "La contraseña" → "Falta la contraseña." (sin pelear con el género).
@@ -44,7 +49,7 @@ const faltaEl = (nombre: string) =>
   `Falta ${nombre.charAt(0).toLowerCase()}${nombre.slice(1)}.`;
 
 function traducir(regla: string, campo: string, original: string): string {
-  const nombre = NOMBRES[campo] ?? `El campo "${campo}"`;
+  const nombre = nombreDelCampo(campo);
   switch (regla) {
     case 'isEmail':
       return 'Revisa el email: no tiene un formato válido.';

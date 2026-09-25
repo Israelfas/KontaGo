@@ -24,6 +24,7 @@ import {
   type ResumenInventarioPeriodo,
   type TipoMovimientoInventario,
 } from '@/lib/tipos';
+import { formatearCantidad, porPeso } from '@/lib/cantidad';
 
 const POR_PAGINA = 50;
 // Mismo color de serie que el resto de los gráficos (ver graficos.tsx).
@@ -101,7 +102,10 @@ function FilaMovimiento({ m }: { m: MovimientoDelHistorial }) {
           <span className="font-medium">{m.producto.nombre}</span>
         </p>
         <p className="mt-0.5 text-xs text-tinta-suave">
-          {m.cantidad} u. × {formatearCentavos(m.costoUnitarioCentavos)}
+          {porPeso(m.producto.unidad)
+            ? formatearCantidad(m.cantidad, m.producto.unidad)
+            : `${m.cantidad} u.`}{' '}
+          × {formatearCentavos(m.costoUnitarioCentavos)}
           {m.proveedor && ` · ${m.proveedor}`}
           {m.vencimientoLote && ` · lote vence ${formatearFechaCorta(m.vencimientoLote)}`}
           {` · ${m.registradoPor}`}

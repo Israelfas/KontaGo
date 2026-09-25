@@ -11,13 +11,13 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { MetodoPago } from '../../../common/enums/metodo-pago.enum';
+import { EsCantidad } from '../../../common/validacion/es-cantidad';
 
 export class VentaItemDto {
   @IsUUID()
   productoId: string;
 
-  @IsInt()
-  @Min(1)
+  @EsCantidad({ positiva: true })
   cantidad: number;
 }
 
@@ -32,6 +32,11 @@ export class CrearVentaDto {
   @IsOptional()
   @IsEnum(MetodoPago)
   metodoPago?: MetodoPago;
+
+  // Al fiado: a quién se le fía (obligatorio en ese caso).
+  @IsOptional()
+  @IsUUID()
+  clienteId?: string;
 
   // Monto recibido en centavos, para calcular el vuelto. Obligatorio en
   // efectivo; en transferencia no se usa (se toma el total exacto).

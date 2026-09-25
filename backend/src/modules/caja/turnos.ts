@@ -77,6 +77,8 @@ export interface CuentasDelTurno {
   // Ya descontado lo anulado.
   ventasEfectivoCentavos: number;
   ventasTransferenciaCentavos: number;
+  // Al fiado: vendido, pero no entra al cajón.
+  ventasFiadoCentavos: number;
   ingresosCentavos: number;
   retirosCentavos: number;
   efectivoEsperadoCentavos: number;
@@ -122,6 +124,7 @@ export async function cuentasDelTurno(
     cantidadVentas: ventas.reduce((acc, v) => acc + v.cantidad, 0),
     ventasEfectivoCentavos,
     ventasTransferenciaCentavos: netoDe(MetodoPago.TRANSFERENCIA),
+    ventasFiadoCentavos: netoDe(MetodoPago.FIADO),
     ingresosCentavos,
     retirosCentavos,
     efectivoEsperadoCentavos:

@@ -19,6 +19,7 @@ import {
   listarProductos,
 } from './api';
 import type { MetodoPago, Producto, TurnoCaja } from './tipos';
+import { redondear } from './cantidad';
 
 /*
  * Vender sin internet.
@@ -53,6 +54,9 @@ export interface VentaPendiente {
   items: LineaPendiente[];
   metodoPago: MetodoPago;
   montoRecibidoCentavos?: number;
+  // Al fiado: a quién.
+  clienteId?: string;
+  clienteNombre?: string;
   totalCentavos: number;
   // El servidor la rechazó: por qué. Mientras tanto no se reintenta sola.
   problema?: string;
@@ -223,7 +227,10 @@ export function SinConexionProvider({ children }: { children: ReactNode }) {
     for (const venta of pendientesRef.current) {
       if (venta.problema) continue;
       for (const linea of venta.items) {
-        cuenta.set(linea.productoId, (cuenta.get(linea.productoId) ?? 0) + linea.cantidad);
+        cuenta.set(
+          linea.productoId,
+          redondear((cuenta.get(linea.productoId) ?? 0) + linea.cantidad),
+        );
       }
     }
     return cuenta;
@@ -239,7 +246,7 @@ export function SinConexionProvider({ children }: { children: ReactNode }) {
         guardadoEn: new Date().toISOString(),
         productos: productos.map((p) => ({
           ...p,
-          stock: Math.max(0, p.stock - (faltan.get(p.id) ?? 0)),
+          stock: Math.max(0, redondear(p.stock - (faltan.get(p.id) ?? 0))),
         })),
       });
       setSinConexion(false);
@@ -262,7 +269,9 @@ export function SinConexionProvider({ children }: { children: ReactNode }) {
       cambiarCatalogo({
         ...actual,
         productos: actual.productos.map((p) =>
-          vendidas.has(p.id) ? { ...p, stock: Math.max(0, p.stock - vendidas.get(p.id)!) } : p,
+          vendidas.has(p.id)
+            ? { ...p, stock: Math.max(0, redondear(p.stock - vendidas.get(p.id)!)) }
+            : p,
         ),
       });
     },
@@ -283,6 +292,7 @@ export function SinConexionProvider({ children }: { children: ReactNode }) {
             ...(venta.montoRecibidoCentavos !== undefined
               ? { montoRecibidoCentavos: venta.montoRecibidoCentavos }
               : {}),
+            ...(venta.clienteId ? { clienteId: venta.clienteId } : {}),
             claveIdempotencia: venta.clave,
             vendidaEn: venta.vendidaEn,
           });

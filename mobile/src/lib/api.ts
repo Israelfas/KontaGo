@@ -1,5 +1,8 @@
 import Constants from 'expo-constants';
 import type {
+  ClienteFiado,
+  DetalleClienteFiado,
+  MetodoDeAbono,
   AlertasProductos,
   MetodoPago,
   MotivoMerma,
@@ -20,6 +23,7 @@ import type {
   Venta,
   VentaDelHistorial,
 } from './tipos';
+import type { UnidadDeVenta } from './cantidad';
 import type { ActividadDeCuenta } from './actividad';
 import { Directory, File, Paths } from 'expo-file-system';
 
@@ -51,18 +55,94 @@ function resolverApiUrl(): string {
   return configurado ?? 'http://localhost:3000';
 }
 
-const API_URL = resolverApiUrl();
+const API_URL_DE_FABRICA = resolverApiUrl();
+
+/*
+ * En un APK de prueba el backend corre en una PC de la red local (http), y
+ * la IP de esa PC cambia con la red: la dirección se puede cambiar desde el
+ * login, sin volver a armar el APK. Con un servidor de verdad (https) no se
+ * ofrece ni se usa lo guardado.
+ */
+export const SERVIDOR_CAMBIABLE = API_URL_DE_FABRICA.startsWith('http://');
+const ARCHIVO_SERVIDOR = 'kontago-servidor.txt';
+
+function servidorGuardado(): string | null {
+  if (!SERVIDOR_CAMBIABLE) return null;
+  try {
+    const archivo = new File(Paths.document, ARCHIVO_SERVIDOR);
+    if (!archivo.exists) return null;
+    return archivo.textSync().trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+let API_URL = servidorGuardado() ?? API_URL_DE_FABRICA;
+
+export function servidorActual(): string {
+  return API_URL;
+}
+
+export function servidorDeFabrica(): string {
+  return API_URL_DE_FABRICA;
+}
+
+/**
+ * Lo que escribe la persona, como dirección completa: "192.168.1.20" pasa a
+ * "http://192.168.1.20:3000". null si no parece una dirección.
+ */
+export function normalizarServidor(texto: string): string | null {
+  // Sin URL(): en React Native no siempre separa host y puerto.
+  const partes = texto
+    .trim()
+    .match(/^(?:(https?):\/\/)?([a-z0-9.-]+)(?::(\d{1,5}))?\/*$/i);
+  if (!partes) return null;
+  const protocolo = (partes[1] ?? 'http').toLowerCase();
+  const puerto = partes[3] ?? (protocolo === 'http' ? '3000' : '');
+  return `${protocolo}://${partes[2].toLowerCase()}${puerto ? `:${puerto}` : ''}`;
+}
+
+/** Contesta el servidor en esa dirección (cualquier respuesta sirve). */
+export async function probarServidor(url: string, limiteMs = 5_000): Promise<boolean> {
+  const control = new AbortController();
+  const reloj = setTimeout(() => control.abort(), limiteMs);
+  try {
+    await fetch(`${url}/auth/perfil`, { signal: control.signal });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(reloj);
+  }
+}
+
+/** Usa otra dirección desde ahora (null: la de fábrica) y la recuerda. */
+export function cambiarServidor(url: string | null) {
+  API_URL = url ?? API_URL_DE_FABRICA;
+  try {
+    const archivo = new File(Paths.document, ARCHIVO_SERVIDOR);
+    if (url) {
+      if (!archivo.exists) archivo.create();
+      archivo.write(url);
+    } else if (archivo.exists) {
+      archivo.delete();
+    }
+  } catch {
+    // Si no se puede guardar, vale hasta cerrar la app.
+  }
+}
 
 /**
  * La web (términos, privacidad, y adonde lleva el enlace de recuperar la
  * contraseña). EXPO_PUBLIC_WEB_URL en producción; en desarrollo, la misma
  * PC que sirve el backend, en el puerto de la web.
  */
-export const WEB_URL = (() => {
+export function urlDeLaWeb(): string {
   const configurada = process.env.EXPO_PUBLIC_WEB_URL?.trim();
-  if (configurada) return configurada.replace(/\/+$/, '');
+  // Si se cambió el servidor, la web está en esa misma PC.
+  if (configurada && API_URL === API_URL_DE_FABRICA) return configurada.replace(/\/+$/, '');
   return API_URL.replace(/:3000$/, ':3001');
-})();
+}
 
 export class ApiError extends Error {
   constructor(
@@ -408,7 +488,10 @@ export function listarProductos(token: string): Promise<Producto[]> {
 }
 
 export interface CrearProductoInput {
-  codigoBarras: string;
+  // Sin código (pan, huevos, lo suelto): el backend le asigna uno interno.
+  codigoBarras?: string;
+  // Por unidad si se omite.
+  unidad?: UnidadDeVenta;
   nombre: string;
   precioVentaCentavos: number;
   costoUnitarioCentavos?: number;
@@ -438,6 +521,7 @@ export interface ActualizarProductoInput {
   precioVentaCentavos?: number;
   costoUnitarioCentavos?: number;
   stockMinimo?: number;
+  unidad?: UnidadDeVenta;
   fechaVencimiento?: string;
   quitarFechaVencimiento?: boolean;
   ivaExento?: boolean;
@@ -503,6 +587,8 @@ export interface CrearVentaInput {
   metodoPago: MetodoPago;
   // Solo en efectivo (en transferencia se paga el total exacto).
   montoRecibidoCentavos?: number;
+  // Al fiado: a quién.
+  clienteId?: string;
   // La genera el celular: si la venta llega dos veces, se cobra una.
   claveIdempotencia?: string;
   // Cuándo se cobró, si se manda después (se hizo sin conexión).
@@ -826,3 +912,44 @@ export function cerrarMisSesiones(token: string): Promise<void> {
   return apiFetch<void>('/auth/cerrar-sesiones', { method: 'POST', token });
 }
 
+// --- Fiado ---
+
+export function listarClientes(token: string): Promise<ClienteFiado[]> {
+  return apiFetch<ClienteFiado[]>('/clientes', { token });
+}
+
+export function crearCliente(
+  token: string,
+  dto: { nombre: string; telefono?: string },
+): Promise<ClienteFiado> {
+  return apiFetch<ClienteFiado>('/clientes', { method: 'POST', token, body: JSON.stringify(dto) });
+}
+
+export function obtenerCliente(token: string, id: string): Promise<DetalleClienteFiado> {
+  return apiFetch<DetalleClienteFiado>(`/clientes/${id}`, { token });
+}
+
+export function actualizarCliente(
+  token: string,
+  id: string,
+  dto: { nombre?: string; telefono?: string; activo?: boolean },
+): Promise<ClienteFiado> {
+  return apiFetch<ClienteFiado>(`/clientes/${id}`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(dto),
+  });
+}
+
+/** El cliente paga (todo o una parte). En efectivo entra a tu caja. */
+export function abonarCliente(
+  token: string,
+  id: string,
+  dto: { montoCentavos: number; metodoPago: MetodoDeAbono; nota?: string },
+): Promise<ClienteFiado> {
+  return apiFetch<ClienteFiado>(`/clientes/${id}/abonos`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(dto),
+  });
+}

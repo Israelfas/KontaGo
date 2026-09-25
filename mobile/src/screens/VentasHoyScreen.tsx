@@ -38,6 +38,7 @@ import {
 import { colores, espaciado, radios } from '../theme/colores';
 import type { PaginaDeVentas, ResumenPeriodo, VentaDelHistorial } from '../lib/tipos';
 import { Banda, LabioHoja } from '../components/banda';
+import { formatearCantidad, importeCentavos, importeDelTramo, porPeso, redondear } from '../lib/cantidad';
 
 const ESTADO: Record<VentaDelHistorial['estado'], { texto: string; color: string; fondo: string }> = {
   completa: { texto: 'Completa', color: colores.verdeGanancia, fondo: 'rgba(47,111,79,0.1)' },
@@ -70,7 +71,7 @@ function PanelAnulacion({
 }) {
   const { token } = useAuth();
   const pendientes = venta.items
-    .map((item) => ({ ...item, pendiente: item.cantidad - item.cantidadAnulada }))
+    .map((item) => ({ ...item, pendiente: redondear(item.cantidad - item.cantidadAnulada) }))
     .filter((item) => item.pendiente > 0);
   const [cantidades, setCantidades] = useState<Record<string, number>>(() =>
     Object.fromEntries(pendientes.map((item) => [item.id, item.pendiente])),
@@ -79,8 +80,9 @@ function PanelAnulacion({
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
+  // Por tramos, como el backend: anular todo en partes devuelve lo cobrado.
   const aDevolverCentavos = pendientes.reduce(
-    (acc, item) => acc + item.precioVentaCentavos * (cantidades[item.id] ?? 0),
+    (acc, item) => acc + importeDelTramo(item.precioVentaCentavos, item.cantidadAnulada, cantidades[item.id] ?? 0),
     0,
   );
   const anulaTodo = pendientes.every((item) => cantidades[item.id] === item.pendiente);
@@ -121,8 +123,21 @@ function PanelAnulacion({
       {pendientes.map((item) => (
         <View key={item.id} style={styles.panelFila}>
           <Text style={styles.panelNombre} numberOfLines={1}>
-            {item.nombre} <Text style={styles.panelDe}>(de {item.pendiente})</Text>
+            {item.nombre} <Text style={styles.panelDe}>(de {formatearCantidad(item.pendiente, item.unidad)})</Text>
           </Text>
+          {porPeso(item.unidad) ? (
+            // Por peso: se escribe cuánto (hasta lo que queda).
+            <TextInput
+              defaultValue={String(item.pendiente)}
+              onChangeText={(t) => {
+                const leido = redondear(parseFloat(t.replace(',', '.')) || 0);
+                setCantidades((prev) => ({ ...prev, [item.id]: Math.max(0, Math.min(item.pendiente, leido)) }));
+              }}
+              keyboardType="decimal-pad"
+              style={[estilosCampo.input, { width: 90, marginBottom: 0, textAlign: 'right' }]}
+              accessibilityLabel={`Cuánto de ${item.nombre} se anula`}
+            />
+          ) : (
           <View style={styles.contador}>
             <Pressable onPress={() => cambiar(item.id, item.pendiente, -1)} hitSlop={6}>
               <Ionicons name="remove-circle-outline" size={24} color={colores.tinta} />
@@ -132,6 +147,7 @@ function PanelAnulacion({
               <Ionicons name="add-circle-outline" size={24} color={colores.tinta} />
             </Pressable>
           </View>
+          )}
         </View>
       ))}
 
@@ -213,18 +229,20 @@ function TarjetaVenta({
         {venta.items.map((item) => (
           <View key={item.id} style={styles.itemFila}>
             <Text style={styles.itemTexto} numberOfLines={1}>
-              {item.cantidad} × {item.nombre}
+              {formatearCantidad(item.cantidad, item.unidad)} × {item.nombre}
               {item.cantidadAnulada > 0 && (
                 <Text style={styles.itemAnulado}>
                   {' '}
                   ({item.cantidadAnulada === item.cantidad
                     ? 'anulado'
-                    : `${item.cantidadAnulada} anulado${item.cantidadAnulada === 1 ? '' : 's'}`})
+                    : porPeso(item.unidad)
+                      ? `${formatearCantidad(item.cantidadAnulada, item.unidad)} anuladas`
+                      : `${item.cantidadAnulada} anulado${item.cantidadAnulada === 1 ? '' : 's'}`})
                 </Text>
               )}
             </Text>
             <Text style={styles.itemPrecio}>
-              {formatearCentavos(item.precioVentaCentavos * item.cantidad)}
+              {formatearCentavos(importeCentavos(item.precioVentaCentavos, item.cantidad))}
             </Text>
           </View>
         ))}
@@ -233,7 +251,9 @@ function TarjetaVenta({
       <Text style={styles.pago}>
         {venta.metodoPago === 'transferencia'
           ? 'Pagado por transferencia'
-          : `Efectivo · recibido ${formatearCentavos(venta.montoRecibidoCentavos)} · vuelto ${formatearCentavos(venta.vueltoCentavos)}`}
+          : venta.metodoPago === 'fiado'
+            ? `Al fiado · ${venta.cliente?.nombre ?? 'cliente'}`
+            : `Efectivo · recibido ${formatearCentavos(venta.montoRecibidoCentavos)} · vuelto ${formatearCentavos(venta.vueltoCentavos)}`}
       </Text>
 
       {venta.anulaciones.length > 0 && (

@@ -9,6 +9,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { UnidadDeVenta, columnaCantidad } from '../../../common/cantidad';
 import { Tenant } from '../../tenants/entities/tenant.entity';
 import { Lote } from '../../inventario/entities/lote.entity';
 
@@ -63,12 +64,22 @@ export class Producto {
   @Column({ name: 'costo_unitario_centavos', type: 'integer', default: 0 })
   costoUnitarioCentavos: number;
 
-  @Column({ type: 'integer', default: 0 })
+  // Unidades, o libras/kilos si se vende por peso (ver unidad).
+  @Column(columnaCantidad({ default: 0 }))
   stock: number;
 
   // Umbral de stock bajo configurable por producto (sección 3.5).
-  @Column({ name: 'stock_minimo', type: 'integer', default: 0 })
+  @Column(columnaCantidad({ name: 'stock_minimo', default: 0 }))
   stockMinimo: number;
+
+  // Cómo se vende: por unidad (cantidades enteras) o por peso (libra,
+  // kilo: hasta 3 decimales). El precio es por esa unidad.
+  @Column({
+    type: 'enum',
+    enum: UnidadDeVenta,
+    default: UnidadDeVenta.UNIDAD,
+  })
+  unidad: UnidadDeVenta;
 
   // Con lotes, es la fecha del lote con unidades que vence antes (se
   // recalcula en cada movimiento, ver inventario/lotes.ts): la muestran

@@ -2,22 +2,20 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
-  IsInt,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
-  Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import { EsCantidad } from '../../../common/validacion/es-cantidad';
 
 export class LineaAnulacionDto {
   @IsUUID()
   ventaItemId: string;
 
-  @IsInt()
-  @Min(1)
+  @EsCantidad({ positiva: true })
   cantidad: number;
 }
 

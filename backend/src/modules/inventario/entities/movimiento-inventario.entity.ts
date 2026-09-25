@@ -7,6 +7,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { columnaCantidad } from '../../../common/cantidad';
 import { Tenant } from '../../tenants/entities/tenant.entity';
 import { Producto } from '../../productos/entities/producto.entity';
 import { Usuario } from '../../auth/entities/usuario.entity';
@@ -62,7 +63,7 @@ export class MovimientoInventario {
   @Column({ type: 'enum', enum: TipoMovimientoInventario })
   tipo: TipoMovimientoInventario;
 
-  @Column({ type: 'integer' })
+  @Column(columnaCantidad())
   cantidad: number;
 
   @Column({ name: 'costo_unitario_centavos', type: 'integer' })

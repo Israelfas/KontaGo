@@ -1,6 +1,7 @@
 import {
   IsBoolean,
   IsDateString,
+  IsEnum,
   Matches,
   IsInt,
   IsOptional,
@@ -9,6 +10,8 @@ import {
   MinLength,
 } from 'class-validator';
 import { FORMATO_FECHA } from '../../../common/formato-fecha';
+import { UnidadDeVenta } from '../../../common/cantidad';
+import { EsCantidad } from '../../../common/validacion/es-cantidad';
 
 // A diferencia de CrearProductoDto, acá TODO es opcional — es un PATCH,
 // el cliente solo manda los campos que quiere cambiar. codigoBarras no
@@ -39,9 +42,13 @@ export class ActualizarProductoDto {
   costoUnitarioCentavos?: number;
 
   @IsOptional()
-  @IsInt()
-  @Min(0)
+  @EsCantidad({ positiva: false })
   stockMinimo?: number;
+
+  // Cómo se vende: por unidad (enteros) o por peso (libra, kilo).
+  @IsOptional()
+  @IsEnum(UnidadDeVenta)
+  unidad?: UnidadDeVenta;
 
   // Solo 'AAAA-MM-DD': con hora incluida ('...T05:00:00Z') el día
   // dependería de la zona horaria.

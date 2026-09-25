@@ -477,6 +477,12 @@ export function ResultadoArqueo({ turno }: { turno: TurnoCaja }) {
             <dd className="font-ticket">{formatearCentavos(turno.ventasTransferenciaCentavos)}</dd>
           </div>
         )}
+        {turno.ventasFiadoCentavos > 0 && (
+          <div className="flex justify-between gap-3 pt-1 text-tinta-suave">
+            <dt>Vendido al fiado (no está en el cajón)</dt>
+            <dd className="font-ticket">{formatearCentavos(turno.ventasFiadoCentavos)}</dd>
+          </div>
+        )}
       </dl>
       {turno.nota && <p className="text-sm text-tinta-suave">Nota: “{turno.nota}”</p>}
     </div>

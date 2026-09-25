@@ -34,6 +34,14 @@ import {
 } from './entities/anulacion-venta.entity';
 import { fechaLocal } from '../../common/formato-fecha';
 import {
+  UnidadDeVenta,
+  importeCentavos,
+  importeDelTramo,
+  restar,
+  sumar,
+} from '../../common/cantidad';
+import { revisarCantidad } from '../productos/cantidad-del-producto';
+import {
   CantidadAAnularInvalidaError,
   FaltaMontoRecibidoError,
   LineaDeOtraVentaError,
@@ -44,6 +52,8 @@ import {
   VentaNoEncontradaError,
   VentaYaAnuladaError,
 } from './ventas.errors';
+import { clienteParaFiar } from '../fiados/fiados.service';
+import { FaltaClienteError } from '../fiados/fiados.errors';
 
 // totalCentavos ya incluye IVA (precio final al público). Estos dos
 // campos son un desglose derivado, no datos nuevos: subtotalCentavos es
@@ -107,6 +117,9 @@ export class VentasService {
     ) {
       throw new FaltaMontoRecibidoError();
     }
+    if (metodoPago === MetodoPago.FIADO && !dto.clienteId) {
+      throw new FaltaClienteError();
+    }
 
     // Ya llegó antes (la app la reenvía si no supo si se guardó): la misma.
     if (dto.claveIdempotencia) {
@@ -166,6 +179,12 @@ export class VentasService {
       );
       if (!turno) throw new CajaCerradaError();
 
+      // Al fiado: a alguien de la tienda que no esté archivado.
+      const cliente =
+        metodoPago === MetodoPago.FIADO
+          ? await clienteParaFiar(manager, tenantId, dto.clienteId!)
+          : null;
+
       const productoRepo = manager.getRepository(Producto);
       let totalCentavos = 0;
       const items: VentaItem[] = [];
@@ -198,6 +217,8 @@ export class VentasService {
 
       for (const linea of dto.items) {
         const producto = productos.get(linea.productoId)!;
+        // Lo que va por unidad, en enteros; lo que va por peso, con decimales.
+        revisarCantidad(producto, linea.cantidad);
 
         // producto.stock se va descontando en memoria, así que si el
         // mismo producto viene en dos líneas, la segunda se valida contra
@@ -210,13 +231,16 @@ export class VentasService {
           );
         }
 
-        producto.stock -= linea.cantidad;
+        producto.stock = restar(producto.stock, linea.cantidad);
         // Del lote que vence antes (FEFO); nada si el producto no vence.
         deLotesPorLinea.push(
           await sacarDeLotes(manager, producto, linea.cantidad),
         );
 
-        const subtotalCentavos = producto.precioVentaCentavos * linea.cantidad;
+        const subtotalCentavos = importeCentavos(
+          producto.precioVentaCentavos,
+          linea.cantidad,
+        );
         totalCentavos += subtotalCentavos;
 
         const item = new VentaItem();
@@ -234,12 +258,18 @@ export class VentasService {
 
       await productoRepo.save([...productos.values()]);
 
-      // Transferencia: se paga el total exacto, sin vuelto.
+      // Transferencia: se paga el total exacto, sin vuelto. Fiado: no se
+      // recibe nada ahora (queda como deuda del cliente).
       const montoRecibidoCentavos =
         metodoPago === MetodoPago.TRANSFERENCIA
           ? totalCentavos
-          : dto.montoRecibidoCentavos!;
-      if (montoRecibidoCentavos < totalCentavos) {
+          : metodoPago === MetodoPago.FIADO
+            ? 0
+            : dto.montoRecibidoCentavos!;
+      if (
+        metodoPago === MetodoPago.EFECTIVO &&
+        montoRecibidoCentavos < totalCentavos
+      ) {
         throw new MontoRecibidoInsuficienteError(
           totalCentavos,
           montoRecibidoCentavos,
@@ -253,7 +283,11 @@ export class VentasService {
       venta.metodoPago = metodoPago;
       venta.totalCentavos = totalCentavos;
       venta.montoRecibidoCentavos = montoRecibidoCentavos;
-      venta.vueltoCentavos = montoRecibidoCentavos - totalCentavos;
+      venta.vueltoCentavos =
+        metodoPago === MetodoPago.EFECTIVO
+          ? montoRecibidoCentavos - totalCentavos
+          : 0;
+      venta.clienteId = cliente?.id ?? null;
       venta.items = items;
       venta.claveIdempotencia = dto.claveIdempotencia ?? null;
       // Cobrada sin conexión: vale la hora en que se cobró, no la de ahora.
@@ -324,11 +358,13 @@ export class VentasService {
 
   /** La ganancia de una línea (lo mismo que suma calcularGananciaCentavos). */
   calcularGananciaDeLineaCentavos(item: VentaItem): number {
-    const cantidadVendida = item.cantidad - item.cantidadAnulada;
+    const cantidadVendida = restar(item.cantidad, item.cantidadAnulada);
     const ivaVendido = item.ivaCentavos - item.ivaAnuladoCentavos;
-    const subtotalLineaSinIva =
-      item.precioVentaCentavos * cantidadVendida - ivaVendido;
-    const costoLinea = item.costoUnitarioCentavos * cantidadVendida;
+    const subtotalLineaSinIva = importeVendido(item) - ivaVendido;
+    const costoLinea = importeCentavos(
+      item.costoUnitarioCentavos,
+      cantidadVendida,
+    );
     return subtotalLineaSinIva - costoLinea;
   }
 
@@ -403,6 +439,10 @@ export class VentasService {
       transferenciaCentavos: ventas
         .filter((venta) => venta.metodoPago === MetodoPago.TRANSFERENCIA)
         .reduce((acc, venta) => acc + neto(venta), 0),
+      // Vendido pero no cobrado todavía.
+      fiadoCentavos: ventas
+        .filter((venta) => venta.metodoPago === MetodoPago.FIADO)
+        .reduce((acc, venta) => acc + neto(venta), 0),
       agrupadoPor,
       serie:
         agrupadoPor === 'hora'
@@ -433,6 +473,7 @@ export class VentasService {
       .getRepository(Venta)
       .createQueryBuilder('venta')
       .leftJoinAndSelect('venta.usuario', 'vendedor')
+      .leftJoinAndSelect('venta.cliente', 'cliente')
       .leftJoinAndSelect('venta.items', 'item')
       .leftJoinAndSelect('item.producto', 'producto')
       .leftJoinAndSelect('venta.anulaciones', 'anulacion')
@@ -469,6 +510,7 @@ export class VentasService {
       .getRepository(Venta)
       .createQueryBuilder('venta')
       .leftJoinAndSelect('venta.usuario', 'vendedor')
+      .leftJoinAndSelect('venta.cliente', 'cliente')
       .leftJoinAndSelect('venta.items', 'item')
       .leftJoinAndSelect('item.producto', 'producto')
       .where('venta.tenantId = :tenantId', { tenantId })
@@ -496,7 +538,7 @@ export class VentasService {
   ): Promise<TicketDto> {
     const venta = await this.dataSource.getRepository(Venta).findOne({
       where: { id: ventaId, tenantId },
-      relations: { usuario: true, items: { producto: true } },
+      relations: { usuario: true, cliente: true, items: { producto: true } },
     });
     if (!venta) throw new VentaNoEncontradaError(ventaId);
     if (rol !== Rol.ADMIN && venta.createdAt < inicioDelDia()) {
@@ -509,7 +551,8 @@ export class VentasService {
     // Sin IVA = línea exenta (tarifa 0%): su IVA congelado es 0.
     const conIva = venta.items.filter((item) => item.ivaCentavos > 0);
     const sinIva = venta.items.filter((item) => item.ivaCentavos === 0);
-    const bruto = (item: VentaItem) => item.precioVentaCentavos * item.cantidad;
+    const bruto = (item: VentaItem) =>
+      importeCentavos(item.precioVentaCentavos, item.cantidad);
     const ivaCentavos = conIva.reduce((acc, item) => acc + item.ivaCentavos, 0);
 
     return {
@@ -518,8 +561,11 @@ export class VentasService {
       fecha: venta.createdAt,
       cajero: venta.usuario.nombre,
       metodoPago: venta.metodoPago,
+      // Al fiado: a quién.
+      cliente: venta.cliente?.nombre ?? null,
       lineas: venta.items.map((item) => ({
         nombre: item.producto.nombre,
+        unidad: item.producto.unidad,
         cantidad: item.cantidad,
         precioUnitarioCentavos: item.precioVentaCentavos,
         totalCentavos: bruto(item),
@@ -549,6 +595,7 @@ export class VentasService {
       .getRepository(Venta)
       .createQueryBuilder('venta')
       .leftJoinAndSelect('venta.usuario', 'vendedor')
+      .leftJoinAndSelect('venta.cliente', 'cliente')
       .leftJoinAndSelect('venta.items', 'item')
       .leftJoinAndSelect('item.producto', 'producto')
       .leftJoinAndSelect('venta.anulaciones', 'anulacion')
@@ -633,12 +680,12 @@ export class VentasService {
           }
           aAnular.set(
             linea.ventaItemId,
-            (aAnular.get(linea.ventaItemId) ?? 0) + linea.cantidad,
+            sumar(aAnular.get(linea.ventaItemId) ?? 0, linea.cantidad),
           );
         }
       } else {
         for (const item of items) {
-          const pendiente = item.cantidad - item.cantidadAnulada;
+          const pendiente = restar(item.cantidad, item.cantidadAnulada);
           if (pendiente > 0) aAnular.set(item.id, pendiente);
         }
         if (aAnular.size === 0) {
@@ -648,7 +695,8 @@ export class VentasService {
 
       for (const [itemId, cantidad] of aAnular) {
         const item = itemsPorId.get(itemId)!;
-        const pendiente = item.cantidad - item.cantidadAnulada;
+        revisarCantidad(item.producto, cantidad);
+        const pendiente = restar(item.cantidad, item.cantidadAnulada);
         if (cantidad > pendiente) {
           throw new CantidadAAnularInvalidaError(
             item.producto.nombre,
@@ -679,7 +727,7 @@ export class VentasService {
         for (const [itemId, cantidad] of lineasPorProducto.get(productoId)!) {
           // Antes de sumar al stock (ver devolverALotes).
           await devolverALotes(manager, producto, itemId, cantidad);
-          producto.stock += cantidad;
+          producto.stock = sumar(producto.stock, cantidad);
         }
         await productoRepo.save(producto);
       }
@@ -688,7 +736,7 @@ export class VentasService {
       const detalle: DetalleAnulacion[] = [];
       for (const [itemId, cantidad] of aAnular) {
         const item = itemsPorId.get(itemId)!;
-        const pendiente = item.cantidad - item.cantidadAnulada;
+        const pendiente = restar(item.cantidad, item.cantidadAnulada);
         const ivaPendiente = item.ivaCentavos - item.ivaAnuladoCentavos;
         // IVA proporcional a las unidades anuladas. Si se anula todo lo
         // que queda, se toma el resto exacto para no dejar centavos
@@ -701,9 +749,14 @@ export class VentasService {
                 Math.round((item.ivaCentavos * cantidad) / item.cantidad),
               );
 
-        item.cantidadAnulada += cantidad;
+        // Por tramos: anular todo en partes devuelve justo lo cobrado.
+        montoDevueltoCentavos += importeDelTramo(
+          item.precioVentaCentavos,
+          item.cantidadAnulada,
+          cantidad,
+        );
+        item.cantidadAnulada = sumar(item.cantidadAnulada, cantidad);
         item.ivaAnuladoCentavos += ivaAAnular;
-        montoDevueltoCentavos += item.precioVentaCentavos * cantidad;
         detalle.push({
           ventaItemId: item.id,
           productoId: item.productoId,
@@ -793,20 +846,32 @@ function serieDiaria(
   return serie;
 }
 
+/**
+ * Lo cobrado por una línea menos lo anulado: las anulaciones se devuelven
+ * por tramos (ver importeDelTramo), así que es la diferencia de importes.
+ */
+function importeVendido(item: VentaItem): number {
+  return (
+    importeCentavos(item.precioVentaCentavos, item.cantidad) -
+    importeCentavos(item.precioVentaCentavos, item.cantidadAnulada)
+  );
+}
+
 /** Los 5 productos con más unidades vendidas (descontando lo anulado). */
 function masVendidos(ventas: Venta[]): ProductoVendido[] {
   const porProducto = new Map<string, ProductoVendido>();
   for (const venta of ventas) {
     for (const item of venta.items) {
-      const unidades = item.cantidad - item.cantidadAnulada;
+      const unidades = restar(item.cantidad, item.cantidadAnulada);
       if (unidades <= 0) continue;
       const previo = porProducto.get(item.productoId) ?? {
         nombre: item.producto?.nombre ?? 'Producto',
+        unidad: item.producto?.unidad ?? UnidadDeVenta.UNIDAD,
         unidades: 0,
         centavos: 0,
       };
-      previo.unidades += unidades;
-      previo.centavos += item.precioVentaCentavos * unidades;
+      previo.unidades = sumar(previo.unidades, unidades);
+      previo.centavos += importeVendido(item);
       porProducto.set(item.productoId, previo);
     }
   }
@@ -842,6 +907,9 @@ function aVentaDelHistorial(venta: Venta): VentaDelHistorialDto {
     totalAnuladoCentavos: venta.totalAnuladoCentavos,
     numero: venta.numero,
     metodoPago: venta.metodoPago,
+    cliente: venta.cliente
+      ? { id: venta.cliente.id, nombre: venta.cliente.nombre }
+      : null,
     montoRecibidoCentavos: venta.montoRecibidoCentavos,
     vueltoCentavos: venta.vueltoCentavos,
     estado,
@@ -850,6 +918,7 @@ function aVentaDelHistorial(venta: Venta): VentaDelHistorialDto {
       productoId: item.productoId,
       nombre: item.producto.nombre,
       codigoBarras: item.producto.codigoBarras,
+      unidad: item.producto.unidad,
       cantidad: item.cantidad,
       cantidadAnulada: item.cantidadAnulada,
       precioVentaCentavos: item.precioVentaCentavos,

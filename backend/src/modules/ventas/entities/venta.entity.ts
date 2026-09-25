@@ -14,6 +14,7 @@ import { VentaItem } from './venta-item.entity';
 import { AnulacionVenta } from './anulacion-venta.entity';
 import { TurnoCaja } from '../../caja/entities/turno-caja.entity';
 import { MetodoPago } from '../../../common/enums/metodo-pago.enum';
+import { Cliente } from '../../fiados/entities/cliente.entity';
 
 /**
  * Cabecera de una venta (ticket).
@@ -73,6 +74,14 @@ export class Venta {
     default: MetodoPago.EFECTIVO,
   })
   metodoPago: MetodoPago;
+
+  // Al fiado: a quién (null en las demás).
+  @Column({ name: 'cliente_id', type: 'uuid', nullable: true })
+  clienteId: string | null;
+
+  @ManyToOne(() => Cliente, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'cliente_id' })
+  cliente: Cliente | null;
 
   // Turno de caja en el que se cobró (null en ventas de antes del arqueo).
   @Column({ name: 'turno_id', type: 'uuid', nullable: true })

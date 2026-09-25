@@ -5,7 +5,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { useSSO, useAuth as useClerkAuth } from '@clerk/expo';
 import { useAuth } from '../lib/auth-context';
-import { ApiError } from '../lib/api';
+import { ApiError, SERVIDOR_CAMBIABLE, SinConexionError, servidorActual } from '../lib/api';
 import { AuthFrame } from '../components/auth-frame';
 import { AvisoDeCampo, Boton, Etiqueta, estilosCampo } from '../components/ui';
 import { CampoContrasena } from '../components/campo-contrasena';
@@ -13,10 +13,19 @@ import { problemaDelEmail } from '../lib/validacion';
 import { colores, espaciado } from '../theme/colores';
 import type { AuthStackParamList } from '../navigation/AuthNavigator';
 import { PasoCodigo } from '../components/paso-codigo';
+import { FilaServidor } from '../components/servidor';
 
 WebBrowser.maybeCompleteAuthSession();
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
+
+/** Sin respuesta del servidor: decir cuál y qué revisar, no "no se pudo". */
+function mensajeSinConexion(): string {
+  const donde = servidorActual().replace(/^https?:\/\//, '');
+  return SERVIDOR_CAMBIABLE
+    ? `No hay conexión con el servidor (${donde}). Revisa que el celular esté en la misma red que la PC; si la PC cambió de IP, cámbiala abajo.`
+    : 'No hay conexión con el servidor. Revisa tu internet y prueba de nuevo.';
+}
 
 export function LoginScreen({ navigation }: Props) {
   const { iniciarSesion, loginConClerk } = useAuth();
@@ -46,7 +55,13 @@ export function LoginScreen({ navigation }: Props) {
         setPassword('');
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'No se pudo iniciar sesión');
+      setError(
+        err instanceof SinConexionError
+          ? mensajeSinConexion()
+          : err instanceof ApiError
+            ? err.message
+            : 'No se pudo iniciar sesión',
+      );
     } finally {
       setCargando(false);
     }
@@ -76,7 +91,9 @@ export function LoginScreen({ navigation }: Props) {
     } catch (err) {
       console.error('Login con Google falló', err);
       setError(
-        err instanceof ApiError
+        err instanceof SinConexionError
+          ? mensajeSinConexion()
+          : err instanceof ApiError
           ? err.message
           : `No se pudo continuar con Google: ${(err as Error)?.message ?? 'error desconocido'}`,
       );
@@ -159,6 +176,8 @@ export function LoginScreen({ navigation }: Props) {
         <Boton variante="ghost" onPress={manejarGoogle} cargando={cargandoGoogle}>
           Continuar con Google
         </Boton>
+
+        <FilaServidor />
       </View>
     </AuthFrame>
   );

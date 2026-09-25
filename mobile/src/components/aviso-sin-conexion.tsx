@@ -115,7 +115,7 @@ function ListaDeProblemas() {
             <Text style={styles.detalle}>Cobrada a las {hora(venta.vendidaEn)}</Text>
           </View>
           <Text style={styles.detalle} numberOfLines={2}>
-            {venta.items.map((i) => `${i.cantidad} × ${i.nombre}`).join(', ')}
+            {venta.items.map((i) => `${i.cantidad.toLocaleString('es-EC')} × ${i.nombre}`).join(', ')}
           </Text>
           <Text style={styles.problema}>{venta.problema}</Text>
           <View style={[styles.fila, { marginTop: espaciado.sm }]}>

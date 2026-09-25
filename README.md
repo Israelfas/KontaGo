@@ -146,6 +146,11 @@ Al terminar, EAS da un enlace y un QR para instalarla. Ese enlace va en
 local) la app permite tráfico sin cifrar; con `https`, no (ver
 `mobile/app.config.ts`).
 
+Si la PC cambia de IP (otra red, o el router le dio otra), no hace falta
+volver a armar el APK: en el login de la app, abajo, **Servidor · Cambiar**
+deja escribir la IP nueva (la de `ipconfig`, "Dirección IPv4"), prueba que
+conteste y la recuerda. Solo aparece con una dirección `http`.
+
 Para entrar con Google desde la app instalada, en el panel de Clerk
 (Native applications) hay que permitir la redirección `kontago://sso-callback`.
 
@@ -165,3 +170,19 @@ abierta, si se corta la red, los productos salen del catálogo guardado y
 cada venta queda en una cola que se envía sola al volver la conexión (con
 una clave para no cobrarla dos veces). En la web, la pestaña tiene que
 haberse abierto con conexión: recargarla sin red no funciona.
+
+Para la tienda de barrio:
+
+- **Productos sin código de barras** (pan, huevos, lo suelto): se cargan
+  sin código (el sistema les pone uno interno, EAN-13 con prefijo 20) y en
+  la caja se buscan por nombre o con los botones de "Sin código de barras".
+- **Venta por peso**: un producto se vende por unidad, por libra o por
+  kilo. Las cantidades van con hasta 3 decimales (`numeric(12,3)` en la
+  base) y los importes se redondean al centavo; en la caja se elige ¼, ½,
+  1 o 2 libras, el peso exacto o "por cuánto dinero".
+- **Fiado**: se vende a un cliente sin cobrar y queda en su cuenta. En
+  Fiados se ve quién debe cuánto y se registran los abonos (en efectivo
+  entran a la caja como un ingreso, así el arqueo cuadra).
+- El **reporte en Excel** trae una hoja "Gráficos" con gráficos nativos
+  (ventas por día u hora, cómo pagan, lo más vendido, pérdidas), que leen
+  sus datos de la misma hoja.

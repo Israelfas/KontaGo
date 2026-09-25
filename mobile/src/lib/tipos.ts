@@ -1,3 +1,5 @@
+import type { UnidadDeVenta } from './cantidad';
+
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
@@ -12,8 +14,11 @@ export interface Producto {
   proveedor: string | null;
   precioVentaCentavos: number;
   costoUnitarioCentavos: number;
+  // En unidades, o en libras/kilos si se vende por peso (ver unidad).
   stock: number;
   stockMinimo: number;
+  // Cómo se vende; el precio es por esta unidad.
+  unidad: UnidadDeVenta;
   // Con lotes: la fecha del lote que vence antes.
   fechaVencimiento: string | null;
   ivaExento: boolean;
@@ -57,7 +62,8 @@ export interface VentaItem {
 }
 
 // Solo el efectivo entra al cajón (y al arqueo de caja).
-export type MetodoPago = 'efectivo' | 'transferencia';
+// Fiado: no se cobra ahora, queda como deuda del cliente.
+export type MetodoPago = 'efectivo' | 'transferencia' | 'fiado';
 
 export interface Venta {
   id: string;
@@ -91,6 +97,7 @@ export interface PuntoSerie {
 
 export interface ProductoVendido {
   nombre: string;
+  unidad: UnidadDeVenta;
   unidades: number;
   centavos: number;
 }
@@ -103,6 +110,8 @@ export interface ResumenPeriodo extends ResumenDelDia {
   // Lo cobrado (neto de anulaciones) según cómo se pagó.
   efectivoCentavos: number;
   transferenciaCentavos: number;
+  // Vendido al fiado (todavía no cobrado).
+  fiadoCentavos: number;
   // Un día se grafica por hora; un rango, por día.
   agrupadoPor: 'hora' | 'dia';
   serie: PuntoSerie[];
@@ -127,11 +136,14 @@ export interface VentaDelHistorial {
   montoRecibidoCentavos: number;
   vueltoCentavos: number;
   estado: 'completa' | 'parcialmente_anulada' | 'anulada';
+  // Al fiado: a quién.
+  cliente: { id: string; nombre: string } | null;
   items: {
     id: string;
     productoId: string;
     nombre: string;
     codigoBarras: string;
+    unidad: UnidadDeVenta;
     cantidad: number;
     cantidadAnulada: number;
     precioVentaCentavos: number;
@@ -211,6 +223,8 @@ export interface TurnoCaja {
   fondoInicialCentavos: number;
   cantidadVentas: number;
   ventasTransferenciaCentavos: number;
+  // Al fiado: vendido en el turno, no entra al cajón.
+  ventasFiadoCentavos: number;
   ingresosCentavos: number;
   retirosCentavos: number;
   // Conteo a ciegas: el cajero no los recibe mientras su caja está abierta.
@@ -242,8 +256,11 @@ export interface Ticket {
   fecha: string;
   cajero: string;
   metodoPago: MetodoPago;
+  // Al fiado: a quién se le fió.
+  cliente: string | null;
   lineas: {
     nombre: string;
+    unidad: UnidadDeVenta;
     cantidad: number;
     precioUnitarioCentavos: number;
     totalCentavos: number;
@@ -267,7 +284,7 @@ export interface MovimientoDelHistorial {
   id: string;
   tipo: TipoMovimientoInventario;
   createdAt: string;
-  producto: { id: string; nombre: string };
+  producto: { id: string; nombre: string; unidad: UnidadDeVenta };
   cantidad: number;
   // Abastecimiento: lo que costó esa compra. Merma: el costo en ese momento.
   costoUnitarioCentavos: number;
@@ -294,4 +311,42 @@ export interface ResumenInventarioPeriodo {
   perdidaPorMotivo: { motivo: MotivoMerma; unidades: number; centavos: number }[];
   porProveedor: { proveedor: string | null; compras: number; centavos: number }[];
   productosConMasPerdida: { nombre: string; unidades: number; centavos: number }[];
+}
+
+// --- Fiado ---
+
+/** Alguien a quien la tienda le fía, con lo que debe (negativo: a favor). */
+export interface ClienteFiado {
+  id: string;
+  nombre: string;
+  telefono: string | null;
+  activo: boolean;
+  saldoCentavos: number;
+  ultimoMovimiento: string | null;
+}
+
+export type MetodoDeAbono = 'efectivo' | 'transferencia';
+
+export type MovimientoDeFiado =
+  | {
+      tipo: 'venta';
+      id: string;
+      fecha: string;
+      numero: number;
+      totalCentavos: number;
+      anuladoCentavos: number;
+      items: { nombre: string; cantidad: number; unidad: UnidadDeVenta }[];
+    }
+  | {
+      tipo: 'abono';
+      id: string;
+      fecha: string;
+      montoCentavos: number;
+      metodoPago: MetodoDeAbono;
+      registradoPor: string;
+      nota: string | null;
+    };
+
+export interface DetalleClienteFiado extends ClienteFiado {
+  movimientos: MovimientoDeFiado[];
 }

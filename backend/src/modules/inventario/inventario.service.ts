@@ -23,6 +23,8 @@ import {
   lotesDelProducto,
   sacarDeLotes,
 } from './lotes';
+import { importeCentavos, restar, sumar } from '../../common/cantidad';
+import { revisarCantidad } from '../productos/cantidad-del-producto';
 
 @Injectable()
 export class InventarioService {
@@ -60,6 +62,7 @@ export class InventarioService {
         throw new ProductoNoEncontradoError(dto.productoId);
       }
 
+      revisarCantidad(producto, dto.cantidad);
       // Antes de sumar al stock (ver agregarAlLote).
       const lote = await agregarAlLote(
         manager,
@@ -70,7 +73,7 @@ export class InventarioService {
 
       const costoTotalActual = producto.stock * producto.costoUnitarioCentavos;
       const costoTotalNuevo = dto.cantidad * dto.costoUnitarioCentavos;
-      const stockResultante = producto.stock + dto.cantidad;
+      const stockResultante = sumar(producto.stock, dto.cantidad);
 
       producto.costoUnitarioCentavos = Math.round(
         (costoTotalActual + costoTotalNuevo) / stockResultante,
@@ -119,6 +122,7 @@ export class InventarioService {
         throw new ProductoNoEncontradoError(dto.productoId);
       }
 
+      revisarCantidad(producto, dto.cantidad);
       if (producto.stock < dto.cantidad) {
         throw new StockInsuficienteParaMermaError(
           producto.id,
@@ -133,7 +137,7 @@ export class InventarioService {
         dto.cantidad,
         dto.loteId,
       );
-      producto.stock -= dto.cantidad;
+      producto.stock = restar(producto.stock, dto.cantidad);
       await productoRepo.save(producto);
 
       const movimientoRepo = manager.getRepository(MovimientoInventario);
@@ -175,6 +179,7 @@ export class InventarioService {
         throw new ProductoNoEncontradoError(productoId);
       }
 
+      for (const fila of dto.lotes) revisarCantidad(producto, fila.cantidad);
       await corregirLotes(
         manager,
         producto,
@@ -235,10 +240,14 @@ export class InventarioService {
         id: m.id,
         tipo: m.tipo,
         createdAt: m.createdAt,
-        producto: { id: m.producto.id, nombre: m.producto.nombre },
+        producto: {
+          id: m.producto.id,
+          nombre: m.producto.nombre,
+          unidad: m.producto.unidad,
+        },
         cantidad: m.cantidad,
         costoUnitarioCentavos: m.costoUnitarioCentavos,
-        totalCentavos: m.costoUnitarioCentavos * m.cantidad,
+        totalCentavos: importeCentavos(m.costoUnitarioCentavos, m.cantidad),
         proveedor: m.proveedor,
         motivo: m.motivo,
         vencimientoLote: m.lote?.fechaVencimiento ?? null,
@@ -271,7 +280,7 @@ export class InventarioService {
       .getMany();
 
     const total = (m: MovimientoInventario) =>
-      m.costoUnitarioCentavos * m.cantidad;
+      importeCentavos(m.costoUnitarioCentavos, m.cantidad);
     const abastecimientos = movimientos.filter(
       (m) => m.tipo === TipoMovimientoInventario.ABASTECIMIENTO,
     );
@@ -294,7 +303,7 @@ export class InventarioService {
         unidades: 0,
         centavos: 0,
       };
-      deMotivo.unidades += m.cantidad;
+      deMotivo.unidades = sumar(deMotivo.unidades, m.cantidad);
       deMotivo.centavos += total(m);
       porMotivo.set(motivo, deMotivo);
 
@@ -303,7 +312,7 @@ export class InventarioService {
         unidades: 0,
         centavos: 0,
       };
-      deProducto.unidades += m.cantidad;
+      deProducto.unidades = sumar(deProducto.unidades, m.cantidad);
       deProducto.centavos += total(m);
       porProducto.set(m.productoId, deProducto);
     }
@@ -370,11 +379,11 @@ export class InventarioService {
     );
 
     const egresoCentavos = abastecimientos.reduce(
-      (acc, m) => acc + m.costoUnitarioCentavos * m.cantidad,
+      (acc, m) => acc + importeCentavos(m.costoUnitarioCentavos, m.cantidad),
       0,
     );
     const perdidaCentavos = mermas.reduce(
-      (acc, m) => acc + m.costoUnitarioCentavos * m.cantidad,
+      (acc, m) => acc + importeCentavos(m.costoUnitarioCentavos, m.cantidad),
       0,
     );
 

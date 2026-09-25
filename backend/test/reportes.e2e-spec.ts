@@ -1,5 +1,6 @@
 import { NestExpressApplication } from '@nestjs/platform-express';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import request from 'supertest';
 import {
   abrirCaja,
@@ -93,6 +94,7 @@ describe('Reporte en Excel (e2e)', () => {
     const libro = await abrirLibro(res.body as Buffer);
     expect(libro.worksheets.map((h) => h.name)).toEqual([
       'Resumen',
+      'Gráficos',
       'Ventas',
       'Productos vendidos',
       'Caja',
@@ -100,6 +102,19 @@ describe('Reporte en Excel (e2e)', () => {
       'Compras y mermas',
       'Stock actual',
     ]);
+
+    // Gráficos nativos de Excel en la hoja "Gráficos", leyendo sus celdas.
+    const zip = await JSZip.loadAsync(res.body as Buffer);
+    const graficos = Object.keys(zip.files).filter((f) =>
+      /^xl\/charts\/chart\d+\.xml$/.test(f),
+    );
+    expect(graficos.length).toBeGreaterThanOrEqual(3);
+    const primero = await zip.file(graficos[0])!.async('string');
+    expect(primero).toMatch(/Gráficos(&apos;|')!\$B\$\d+:\$B\$\d+/);
+    const tiposDeArchivo = await zip
+      .file('[Content_Types].xml')!
+      .async('string');
+    expect(tiposDeArchivo).toContain('drawingml.chart+xml');
 
     const resumen = (
       await cliente(app, admin).get('/ventas/resumen').expect(200)

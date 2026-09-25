@@ -31,3 +31,19 @@ export class FechaSinStockError extends BadRequestException {
     );
   }
 }
+
+export class CantidadConDecimalesError extends BadRequestException {
+  constructor(nombre: string) {
+    super(
+      `${nombre} se vende por unidad: la cantidad va sin decimales. Si lo vendes por peso, cambia su unidad en Productos.`,
+    );
+  }
+}
+
+export class UnidadConStockDecimalError extends BadRequestException {
+  constructor(stock: number) {
+    super(
+      `Quedan ${stock.toLocaleString('es-EC')} en stock: para venderlo por unidad, el stock tiene que ser un número entero. Corrígelo con una merma o un abastecimiento.`,
+    );
+  }
+}

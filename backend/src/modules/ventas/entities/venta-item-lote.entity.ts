@@ -6,6 +6,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { columnaCantidad } from '../../../common/cantidad';
 import { VentaItem } from './venta-item.entity';
 import { Lote } from '../../inventario/entities/lote.entity';
 
@@ -35,10 +36,10 @@ export class VentaItemLote {
   @JoinColumn({ name: 'lote_id' })
   lote: Lote;
 
-  @Column({ type: 'integer' })
+  @Column(columnaCantidad())
   cantidad: number;
 
   // Cuántas de estas unidades volvieron al lote por anulaciones.
-  @Column({ name: 'cantidad_devuelta', type: 'integer', default: 0 })
+  @Column(columnaCantidad({ name: 'cantidad_devuelta', default: 0 }))
   cantidadDevuelta: number;
 }

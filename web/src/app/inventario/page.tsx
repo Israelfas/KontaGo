@@ -50,6 +50,19 @@ import {
   type Producto,
   type ResumenMovimientosDelDia,
 } from '@/lib/tipos';
+import {
+  formatearCantidad,
+  leerCantidad,
+  pasoDe,
+  porPeso,
+  redondear,
+  type UnidadDeVenta,
+} from '@/lib/cantidad';
+
+/** " (lb)" en la etiqueta si el producto va por peso. */
+function enUnidad(unidad: UnidadDeVenta | undefined): string {
+  return unidad === 'libra' ? ' (lb)' : unidad === 'kilo' ? ' (kg)' : '';
+}
 
 // --- Resumen del día (egreso por abastecimiento + pérdida por merma) ---
 
@@ -77,7 +90,7 @@ function SelectorProducto({
       </option>
       {productos.map((p) => (
         <option key={p.id} value={p.id}>
-          {p.nombre} · stock {p.stock}
+          {p.nombre} · stock {formatearCantidad(p.stock, p.unidad)}
         </option>
       ))}
     </select>
@@ -113,11 +126,20 @@ function FormularioAbastecimiento({
     e.preventDefault();
     if (!token) return;
     setError(null);
+    const leida = leerCantidad(cantidad, elegido?.unidad);
+    if (leida === null) {
+      setError(
+        porPeso(elegido?.unidad)
+          ? 'Revisa la cantidad: mayor que 0, con hasta 3 decimales.'
+          : 'Revisa la cantidad: va en unidades enteras.',
+      );
+      return;
+    }
     setEnviando(true);
     try {
       await registrarAbastecimiento(token, {
         productoId,
-        cantidad: parseInt(cantidad, 10),
+        cantidad: leida,
         // Igual que en el alta de producto: el input es en dólares,
         // el backend espera centavos enteros.
         costoUnitarioCentavos: Math.round(parseFloat(costoUnitario) * 100),
@@ -150,14 +172,15 @@ function FormularioAbastecimiento({
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="field-label" htmlFor="abastecimiento-cantidad">
-              Cantidad
+              Cantidad{enUnidad(elegido?.unidad)}
             </label>
             <input
               autoFocus={!!productoInicialId}
               id="abastecimiento-cantidad"
               required
               type="number"
-              min="1"
+              min={porPeso(elegido?.unidad) ? '0.001' : '1'}
+              step={pasoDe(elegido?.unidad)}
               value={cantidad}
               onChange={(e) => setCantidad(e.target.value)}
               className="field font-ticket"
@@ -166,7 +189,11 @@ function FormularioAbastecimiento({
           </div>
           <div>
             <label className="field-label" htmlFor="abastecimiento-costo">
-              Costo unitario
+              {elegido?.unidad === 'libra'
+                ? 'Costo por libra'
+                : elegido?.unidad === 'kilo'
+                  ? 'Costo por kilo'
+                  : 'Costo unitario'}
             </label>
             <input
               id="abastecimiento-costo"
@@ -274,7 +301,7 @@ function FormularioMerma({
   const loteElegido = lotes.find((l) => l.id === loteId);
   // No se puede dar de baja más de lo que hay (el backend lo rechaza).
   const disponible = loteElegido?.cantidad ?? producto?.stock;
-  const pedida = parseInt(cantidad, 10);
+  const pedida = leerCantidad(cantidad, producto?.unidad) ?? NaN;
   const problemaCantidad =
     disponible !== undefined && pedida > disponible
       ? `Solo hay ${unidades(disponible)}${loteElegido ? ' en ese lote' : ''}.`
@@ -284,11 +311,19 @@ function FormularioMerma({
     e.preventDefault();
     if (!token) return;
     setError(null);
+    if (!Number.isFinite(pedida)) {
+      setError(
+        porPeso(producto?.unidad)
+          ? 'Revisa la cantidad: mayor que 0, con hasta 3 decimales.'
+          : 'Revisa la cantidad: va en unidades enteras.',
+      );
+      return;
+    }
     setEnviando(true);
     try {
       await registrarMerma(token, {
         productoId,
-        cantidad: parseInt(cantidad, 10),
+        cantidad: pedida,
         motivo,
         loteId: loteId || undefined,
       });
@@ -341,13 +376,14 @@ function FormularioMerma({
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="field-label" htmlFor="merma-cantidad">
-              Cantidad
+              Cantidad{enUnidad(producto?.unidad)}
             </label>
             <input
               id="merma-cantidad"
               required
               type="number"
-              min="1"
+              min={porPeso(producto?.unidad) ? '0.001' : '1'}
+              step={pasoDe(producto?.unidad)}
               max={disponible}
               value={cantidad}
               onChange={(e) => setCantidad(e.target.value)}
@@ -590,7 +626,8 @@ function TablaAlertas({
                   <td className="px-4 py-3 text-tinta">{p.nombre}</td>
                   <td className="px-4 py-3 text-right">
                     <span className="status-pill status-pill-warning font-ticket">
-                      {p.stock} / mín. {p.stockMinimo}
+                      {formatearCantidad(p.stock, p.unidad)} / mín.{' '}
+                      {formatearCantidad(p.stockMinimo, p.unidad)}
                     </span>
                     {onAbastecer && (
                       <button
@@ -668,8 +705,10 @@ function EditorLotes({ producto, onGuardado }: { producto: Producto; onGuardado:
   );
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
-  const suma = filas.reduce((acc, f) => acc + (Number.isFinite(f.cantidad) ? f.cantidad : 0), 0);
-  const diferencia = suma - producto.stock;
+  const suma = redondear(
+    filas.reduce((acc, f) => acc + (Number.isFinite(f.cantidad) ? f.cantidad : 0), 0),
+  );
+  const diferencia = redondear(suma - producto.stock);
 
   function cambiar(clave: string, cambios: Partial<FilaDeLote>) {
     setFilas((prev) => prev.map((f) => (f.clave === clave ? { ...f, ...cambios } : f)));
@@ -733,8 +772,15 @@ function EditorLotes({ producto, onGuardado }: { producto: Producto; onGuardado:
               type="number"
               min="0"
               required
+              step={pasoDe(producto.unidad)}
               value={Number.isFinite(fila.cantidad) ? fila.cantidad : ''}
-              onChange={(e) => cambiar(fila.clave, { cantidad: parseInt(e.target.value, 10) })}
+              onChange={(e) =>
+                cambiar(fila.clave, {
+                  cantidad: porPeso(producto.unidad)
+                    ? redondear(parseFloat(e.target.value))
+                    : parseInt(e.target.value, 10),
+                })
+              }
               className="field font-ticket !mb-0"
             />
           </div>

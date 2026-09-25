@@ -143,6 +143,12 @@ export function PerfilScreen() {
                 titulo="Caja (abrir, retiros, cierre)"
                 onPress={() => navigation.navigate('Caja')}
               />
+              <View style={styles.separador} />
+              <FilaOpcion
+                icono="book-outline"
+                titulo="Fiados (lo que te deben)"
+                onPress={() => navigation.navigate('Fiados')}
+              />
             </Tarjeta>
 
             {/* Equipo y suscripción son de la tienda: solo el admin. */}

@@ -36,8 +36,17 @@ import { HojaModal, HojaPie, useHoja } from '../components/hoja-modal';
 import { Banda, LabioHoja } from '../components/banda';
 import type { Producto } from '../lib/tipos';
 import {
+  UNIDADES,
+  formatearCantidad,
+  leerCantidad,
+  porPeso,
+  precioPor,
+  type UnidadDeVenta,
+} from '../lib/cantidad';
+import {
   estaPorVencer,
   filtrarProductos,
+  textoDelCodigo,
   tieneStockBajo,
   type FiltroProductos,
 } from '../lib/filtro-productos';
@@ -170,7 +179,7 @@ function FilaProducto({
         <Text style={styles.filaNombre} numberOfLines={1}>
           {producto.nombre}
         </Text>
-        <Text style={styles.filaCodigo}>{producto.codigoBarras}</Text>
+        <Text style={styles.filaCodigo}>{textoDelCodigo(producto.codigoBarras)}</Text>
         <ChipFechaVencimiento
           producto={producto}
           onActualizado={onActualizado}
@@ -178,10 +187,13 @@ function FilaProducto({
         />
       </View>
       <View style={{ alignItems: 'flex-end' }}>
-        <Text style={styles.filaPrecio}>{formatearCentavos(producto.precioVentaCentavos)}</Text>
+        <Text style={styles.filaPrecio}>
+          {formatearCentavos(producto.precioVentaCentavos)}
+          {precioPor(producto.unidad)}
+        </Text>
         <View style={[styles.stockPill, stockBajo && styles.stockPillBajo]}>
           <Text style={[styles.filaStock, stockBajo && styles.filaStockBajo]}>
-            Stock {producto.stock}
+            Stock {formatearCantidad(producto.stock, producto.unidad)}
           </Text>
         </View>
       </View>
@@ -207,6 +219,40 @@ function FilaProducto({
   );
 }
 
+/** Cómo se vende: por unidad o por peso (el precio y el stock van en esa unidad). */
+function SelectorUnidad({ valor, onCambio }: { valor: UnidadDeVenta; onCambio: (u: UnidadDeVenta) => void }) {
+  return (
+    <View style={styles.selectorUnidad} accessibilityRole="radiogroup" accessibilityLabel="Cómo se vende">
+      {UNIDADES.map((u) => {
+        const activa = valor === u.valor;
+        return (
+          <Pressable
+            key={u.valor}
+            onPress={() => onCambio(u.valor)}
+            style={[styles.opcionUnidad, activa && styles.opcionUnidadActiva]}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: activa }}
+          >
+            <Text style={[styles.opcionUnidadTexto, activa && styles.opcionUnidadTextoActiva]}>{u.texto}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** "Precio de venta" o "Precio de venta por libra". */
+function etiquetaPor(base: string, unidad: UnidadDeVenta): string {
+  if (unidad === 'libra') return `${base} por libra`;
+  if (unidad === 'kilo') return `${base} por kilo`;
+  return base;
+}
+
+/** " (lb)" en las etiquetas de stock si va por peso. */
+function enUnidad(unidad: UnidadDeVenta): string {
+  return unidad === 'libra' ? ' (lb)' : unidad === 'kilo' ? ' (kg)' : '';
+}
+
 function FormularioNuevoProducto({ onCreado }: { onCreado: (p: Producto) => void }) {
   const { cerrar: onCerrar } = useHoja();
   const { token } = useAuth();
@@ -216,29 +262,41 @@ function FormularioNuevoProducto({ onCreado }: { onCreado: (p: Producto) => void
   const [costoUnitario, setCostoUnitario] = useState('');
   const [stockInicial, setStockInicial] = useState('');
   const [stockMinimo, setStockMinimo] = useState('');
+  const [unidad, setUnidad] = useState<UnidadDeVenta>('unidad');
   const [fechaVencimiento, setFechaVencimiento] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
   // La fecha es del stock inicial: sin unidades no hay qué venza.
-  const sinStockInicial = !(parseInt(stockInicial, 10) > 0);
+  const sinStockInicial = !((leerCantidad(stockInicial, unidad) ?? 0) > 0);
   const fechaValida = sinStockInicial || !fechaVencimiento || esFechaValida(fechaVencimiento);
   const avisoMargen = avisoDelMargen(aCentavos(precioVenta), aCentavos(costoUnitario));
 
   async function manejarSubmit() {
     if (!token || !fechaValida) return;
     setError(null);
+    const stock = stockInicial.trim() ? leerCantidad(stockInicial, unidad, true) : undefined;
+    const minimo = stockMinimo.trim() ? leerCantidad(stockMinimo, unidad, true) : undefined;
+    if (stock === null || minimo === null) {
+      setError(
+        porPeso(unidad)
+          ? 'Revisa el stock: un número con hasta 3 decimales (por ejemplo 12,5).'
+          : 'Revisa el stock: va en unidades enteras. Si se vende por peso, elige "Por libra" o "Por kilo".',
+      );
+      return;
+    }
     setEnviando(true);
     try {
       const producto = await crearProducto(token, {
-        codigoBarras: codigoBarras.trim(),
+        codigoBarras: codigoBarras.trim() || undefined,
         nombre: nombre.trim(),
         precioVentaCentavos: Math.round(parseFloat(precioVenta || '0') * 100),
         costoUnitarioCentavos: costoUnitario
           ? Math.round(parseFloat(costoUnitario) * 100)
           : undefined,
-        stockInicial: stockInicial ? parseInt(stockInicial, 10) : undefined,
-        stockMinimo: stockMinimo ? parseInt(stockMinimo, 10) : undefined,
+        stockInicial: stock,
+        stockMinimo: minimo,
+        unidad,
         fechaVencimiento: (!sinStockInicial && fechaVencimiento) || undefined,
       });
       onCreado(producto);
@@ -252,13 +310,16 @@ function FormularioNuevoProducto({ onCreado }: { onCreado: (p: Producto) => void
 
   return (
     <View>
-      <Etiqueta>Código de barras</Etiqueta>
+      <Etiqueta>Código de barras (opcional)</Etiqueta>
       <TextInput
         value={codigoBarras}
         onChangeText={setCodigoBarras}
         style={estilosCampo.input}
         placeholder="7791234567890"
       />
+      <Text style={styles.ayudaCampo}>
+        Si no tiene (pan, huevos, lo suelto), déjalo vacío: al vender lo buscas por su nombre.
+      </Text>
       <Etiqueta>Nombre</Etiqueta>
       <TextInput
         value={nombre}
@@ -266,7 +327,14 @@ function FormularioNuevoProducto({ onCreado }: { onCreado: (p: Producto) => void
         style={estilosCampo.input}
         placeholder="Coca Cola 500ml"
       />
-      <Etiqueta>Precio de venta</Etiqueta>
+      <Etiqueta>Cómo se vende</Etiqueta>
+      <SelectorUnidad valor={unidad} onCambio={setUnidad} />
+      {porPeso(unidad) && (
+        <Text style={styles.ayudaCampo}>
+          Arroz, azúcar, queso: al vender se pone cuánto (media libra, 2 libras) o por cuánto dinero.
+        </Text>
+      )}
+      <Etiqueta>{etiquetaPor('Precio de venta', unidad)}</Etiqueta>
       <TextInput
         value={precioVenta}
         onChangeText={setPrecioVenta}
@@ -274,7 +342,7 @@ function FormularioNuevoProducto({ onCreado }: { onCreado: (p: Producto) => void
         style={estilosCampo.input}
         placeholder="1.50"
       />
-      <Etiqueta>Costo unitario (opcional)</Etiqueta>
+      <Etiqueta>{`${unidad === 'unidad' ? 'Costo unitario' : etiquetaPor('Costo', unidad)} (opcional)`}</Etiqueta>
       <TextInput
         value={costoUnitario}
         onChangeText={setCostoUnitario}
@@ -283,19 +351,19 @@ function FormularioNuevoProducto({ onCreado }: { onCreado: (p: Producto) => void
         placeholder="0.90"
       />
       <AvisoDeCampo advertencia={avisoMargen} />
-      <Etiqueta>Stock inicial (opcional)</Etiqueta>
+      <Etiqueta>{`Stock inicial${enUnidad(unidad)} (opcional)`}</Etiqueta>
       <TextInput
         value={stockInicial}
         onChangeText={setStockInicial}
-        keyboardType="number-pad"
+        keyboardType={porPeso(unidad) ? 'decimal-pad' : 'number-pad'}
         style={estilosCampo.input}
         placeholder="20"
       />
-      <Etiqueta>Stock mínimo (opcional)</Etiqueta>
+      <Etiqueta>{`Stock mínimo${enUnidad(unidad)} (opcional)`}</Etiqueta>
       <TextInput
         value={stockMinimo}
         onChangeText={setStockMinimo}
-        keyboardType="number-pad"
+        keyboardType={porPeso(unidad) ? 'decimal-pad' : 'number-pad'}
         style={estilosCampo.input}
         placeholder="5"
       />
@@ -322,7 +390,7 @@ function FormularioNuevoProducto({ onCreado }: { onCreado: (p: Producto) => void
         <Boton
           onPress={manejarSubmit}
           cargando={enviando}
-          disabled={!codigoBarras || !nombre || !precioVenta || !fechaValida}
+          disabled={!nombre || !precioVenta || !fechaValida}
           style={{ flex: 1 }}
         >
           Guardar
@@ -348,6 +416,7 @@ function FormularioEditarProducto({
   const { token } = useAuth();
   const [precioVenta, setPrecioVenta] = useState((producto.precioVentaCentavos / 100).toFixed(2));
   const [stockMinimo, setStockMinimo] = useState(producto.stockMinimo.toString());
+  const [unidad, setUnidad] = useState<UnidadDeVenta>(producto.unidad);
   const [fechaVencimiento, setFechaVencimiento] = useState(producto.fechaVencimiento ?? '');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -376,11 +445,21 @@ function FormularioEditarProducto({
   async function manejarSubmit() {
     if (!token || !fechaValida) return;
     setError(null);
+    const minimo = stockMinimo.trim() ? leerCantidad(stockMinimo, unidad, true) : 0;
+    if (minimo === null) {
+      setError(
+        porPeso(unidad)
+          ? 'Revisa el stock mínimo: un número con hasta 3 decimales.'
+          : 'Revisa el stock mínimo: va en unidades enteras.',
+      );
+      return;
+    }
     setEnviando(true);
     try {
       const actualizado = await actualizarProducto(token, producto.id, {
         precioVentaCentavos: Math.round(parseFloat(precioVenta || '0') * 100),
-        stockMinimo: stockMinimo ? parseInt(stockMinimo, 10) : 0,
+        stockMinimo: minimo,
+        ...(unidad !== producto.unidad ? { unidad } : {}),
         // Solo si se tocó: con varios lotes la fecha no se edita acá.
         ...(cambioLaFecha
           ? {
@@ -405,12 +484,12 @@ function FormularioEditarProducto({
         <View style={{ flex: 1.4 }}>
           <Text style={styles.fichaEtiqueta}>CÓDIGO</Text>
           <Text style={styles.fichaValor} numberOfLines={1}>
-            {producto.codigoBarras}
+            {textoDelCodigo(producto.codigoBarras)}
           </Text>
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.fichaEtiqueta}>STOCK</Text>
-          <Text style={styles.fichaValor}>{producto.stock}</Text>
+          <Text style={styles.fichaValor}>{formatearCantidad(producto.stock, producto.unidad)}</Text>
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.fichaEtiqueta}>COSTO</Text>
@@ -422,7 +501,9 @@ function FormularioEditarProducto({
         </View>
       </View>
 
-      <Etiqueta>Precio de venta</Etiqueta>
+      <Etiqueta>Cómo se vende</Etiqueta>
+      <SelectorUnidad valor={unidad} onCambio={setUnidad} />
+      <Etiqueta>{etiquetaPor('Precio de venta', unidad)}</Etiqueta>
       <TextInput
         value={precioVenta}
         onChangeText={setPrecioVenta}
@@ -437,11 +518,11 @@ function FormularioEditarProducto({
             : null
         }
       />
-      <Etiqueta>Stock mínimo</Etiqueta>
+      <Etiqueta>{`Stock mínimo${enUnidad(unidad)}`}</Etiqueta>
       <TextInput
         value={stockMinimo}
         onChangeText={setStockMinimo}
-        keyboardType="number-pad"
+        keyboardType={porPeso(unidad) ? 'decimal-pad' : 'number-pad'}
         style={estilosCampo.input}
       />
       <Etiqueta>Fecha de vencimiento</Etiqueta>
@@ -571,7 +652,7 @@ function SeccionDadosDeBaja({
                   {p.nombre}
                 </Text>
                 <Text style={styles.filaCodigo}>
-                  {p.codigoBarras} · Stock {p.stock}
+                  {textoDelCodigo(p.codigoBarras)} · Stock {formatearCantidad(p.stock, p.unidad)}
                 </Text>
               </View>
               <Boton
@@ -877,6 +958,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   filaNombre: { fontSize: 14, color: colores.tinta, fontWeight: '600' },
+  selectorUnidad: { flexDirection: 'row', gap: espaciado.sm, marginBottom: espaciado.sm },
+  opcionUnidad: {
+    flex: 1,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colores.papelLinea,
+    borderRadius: radios.md,
+    backgroundColor: '#fff',
+    paddingVertical: espaciado.sm + 2,
+  },
+  opcionUnidadActiva: { backgroundColor: colores.tinta, borderColor: colores.tinta },
+  opcionUnidadTexto: { fontSize: 13, fontWeight: '700', color: colores.tinta },
+  opcionUnidadTextoActiva: { color: colores.papel },
+  ayudaCampo: { fontSize: 12, color: colores.tintaSuave, marginTop: -4, marginBottom: espaciado.sm },
   filaCodigo: { fontSize: 11, color: colores.tintaSuave, marginTop: 2, fontVariant: ['tabular-nums'] },
   filaVencimiento: { fontSize: 11, color: colores.ambar, marginTop: 2, fontWeight: '600' },
   chipFechaEdicion: { flexDirection: 'row', alignItems: 'center', gap: espaciado.xs, marginTop: 4 },

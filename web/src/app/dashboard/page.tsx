@@ -182,11 +182,16 @@ function ContenidoDashboard() {
               <Pieza
                 etiqueta="Ticket promedio"
                 valor={formatearCentavos(ticketPromedioCentavos)}
-                detalle={
-                  resumen.transferenciaCentavos > 0
-                    ? `Por cliente · ${formatearCentavos(resumen.transferenciaCentavos)} por transferencia`
-                    : 'Por cliente · todo en efectivo'
-                }
+                detalle={`Por cliente · ${
+                  [
+                    resumen.transferenciaCentavos > 0 &&
+                      `${formatearCentavos(resumen.transferenciaCentavos)} por transferencia`,
+                    resumen.fiadoCentavos > 0 &&
+                      `${formatearCentavos(resumen.fiadoCentavos)} al fiado`,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || 'todo en efectivo'
+                }`}
               />
               <Pieza
                 etiqueta="IVA incluido"

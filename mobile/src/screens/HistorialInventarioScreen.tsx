@@ -26,6 +26,7 @@ import {
   type ResumenInventarioPeriodo,
   type TipoMovimientoInventario,
 } from '../lib/tipos';
+import { formatearCantidad, porPeso } from '../lib/cantidad';
 
 const POR_PAGINA = 50;
 // Mismo color de serie que los gráficos (ver components/graficos.tsx).
@@ -274,7 +275,10 @@ export function HistorialInventarioScreen() {
                     {item.producto.nombre}
                   </Text>
                   <Text style={styles.detalle}>
-                    {item.cantidad} u. × {formatearCentavos(item.costoUnitarioCentavos)}
+                    {porPeso(item.producto.unidad)
+                      ? formatearCantidad(item.cantidad, item.producto.unidad)
+                      : `${item.cantidad} u.`}{' '}
+                    × {formatearCentavos(item.costoUnitarioCentavos)}
                     {item.proveedor ? ` · ${item.proveedor}` : ''}
                     {item.vencimientoLote ? ` · vence ${formatearFechaCorta(item.vencimientoLote)}` : ''}
                     {` · ${item.registradoPor}`}

@@ -3,6 +3,7 @@ import { IsEnum, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
 import { RangoFechasDto } from '../../ventas/dto/consulta-ventas.dto';
 import { TipoMovimientoInventario } from '../../../common/enums/tipo-movimiento-inventario.enum';
 import { MotivoMerma } from '../../../common/enums/motivo-merma.enum';
+import type { UnidadDeVenta } from '../../../common/cantidad';
 
 /** ?desde&hasta&tipo&productoId&limite&desplazamiento */
 export class ListarMovimientosDto extends RangoFechasDto {
@@ -33,7 +34,8 @@ export interface MovimientoDelHistorialDto {
   id: string;
   tipo: TipoMovimientoInventario;
   createdAt: Date;
-  producto: { id: string; nombre: string };
+  // La cantidad está en la unidad del producto (libras si va por peso).
+  producto: { id: string; nombre: string; unidad: UnidadDeVenta };
   cantidad: number;
   // Abastecimiento: lo que costó esta compra. Merma: el costo del
   // producto en ese momento (así se valoriza la pérdida).

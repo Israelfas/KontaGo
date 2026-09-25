@@ -1,12 +1,12 @@
-import { IsEnum, IsInt, IsOptional, IsUUID, Min } from 'class-validator';
+import { IsEnum, IsOptional, IsUUID } from 'class-validator';
 import { MotivoMerma } from '../../../common/enums/motivo-merma.enum';
+import { EsCantidad } from '../../../common/validacion/es-cantidad';
 
 export class RegistrarMermaDto {
   @IsUUID()
   productoId: string;
 
-  @IsInt()
-  @Min(1)
+  @EsCantidad({ positiva: true })
   cantidad: number;
 
   @IsEnum(MotivoMerma)

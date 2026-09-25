@@ -5,6 +5,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { columnaCantidad } from '../../../common/cantidad';
 import { Venta } from './venta.entity';
 import { Producto } from '../../productos/entities/producto.entity';
 
@@ -27,7 +28,7 @@ export class VentaItem {
   @JoinColumn({ name: 'producto_id' })
   producto: Producto;
 
-  @Column({ type: 'integer' })
+  @Column(columnaCantidad())
   cantidad: number;
 
   // Congelados al momento de la venta: si el producto cambia de precio
@@ -49,7 +50,7 @@ export class VentaItem {
   // Unidades de esta línea anuladas después (devueltas al cliente y al
   // stock). La línea original no se modifica: lo vendido de verdad es
   // cantidad - cantidadAnulada.
-  @Column({ name: 'cantidad_anulada', type: 'integer', default: 0 })
+  @Column(columnaCantidad({ name: 'cantidad_anulada', default: 0 }))
   cantidadAnulada: number;
 
   // Porción de ivaCentavos que corresponde a las unidades anuladas,

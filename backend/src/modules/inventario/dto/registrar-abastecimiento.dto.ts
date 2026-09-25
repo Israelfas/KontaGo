@@ -8,13 +8,13 @@ import {
   Min,
 } from 'class-validator';
 import { FORMATO_FECHA } from '../../../common/formato-fecha';
+import { EsCantidad } from '../../../common/validacion/es-cantidad';
 
 export class RegistrarAbastecimientoDto {
   @IsUUID()
   productoId: string;
 
-  @IsInt()
-  @Min(1)
+  @EsCantidad({ positiva: true })
   cantidad: number;
 
   @IsInt()

@@ -62,6 +62,8 @@ export interface TurnoDto {
   fondoInicialCentavos: number;
   cantidadVentas: number;
   ventasTransferenciaCentavos: number;
+  // Al fiado: vendido en el turno, no entra al cajón.
+  ventasFiadoCentavos: number;
   ingresosCentavos: number;
   retirosCentavos: number;
   // Lo que revela cuánto efectivo debería haber: el cajero no lo ve hasta

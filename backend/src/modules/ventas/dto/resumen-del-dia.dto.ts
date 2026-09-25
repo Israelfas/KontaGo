@@ -1,3 +1,5 @@
+import type { UnidadDeVenta } from '../../../common/cantidad';
+
 export class ResumenDelDiaDto {
   fecha: string; // YYYY-MM-DD
   cantidadVentas: number;
@@ -15,6 +17,8 @@ export interface PuntoSerie {
 
 export interface ProductoVendido {
   nombre: string;
+  // unidades está en esta unidad (libras si se vende por peso).
+  unidad: UnidadDeVenta;
   unidades: number;
   centavos: number;
 }
@@ -30,6 +34,8 @@ export class ResumenPeriodoDto extends ResumenDelDiaDto {
   // Lo cobrado (neto de anulaciones) según cómo se pagó.
   efectivoCentavos: number;
   transferenciaCentavos: number;
+  // Vendido al fiado (no cobrado todavía).
+  fiadoCentavos: number;
   // Un día se grafica por hora; un rango, por día.
   agrupadoPor: 'hora' | 'dia';
   serie: PuntoSerie[];

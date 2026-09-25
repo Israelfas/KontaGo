@@ -1,4 +1,5 @@
 import { MetodoPago } from '../../../common/enums/metodo-pago.enum';
+import type { UnidadDeVenta } from '../../../common/cantidad';
 
 /**
  * Una venta tal como se muestra en el historial del día. A propósito NO
@@ -17,11 +18,15 @@ export interface VentaDelHistorialDto {
   montoRecibidoCentavos: number;
   vueltoCentavos: number;
   estado: 'completa' | 'parcialmente_anulada' | 'anulada';
+  // Al fiado: a quién (null en las demás).
+  cliente: { id: string; nombre: string } | null;
   items: {
     id: string;
     productoId: string;
     nombre: string;
     codigoBarras: string;
+    // La cantidad está en esta unidad (libras si se vende por peso).
+    unidad: UnidadDeVenta;
     cantidad: number;
     cantidadAnulada: number;
     precioVentaCentavos: number;

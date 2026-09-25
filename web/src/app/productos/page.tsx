@@ -25,10 +25,62 @@ import { aCentavos, avisoDelMargen, avisoDelVencimiento } from '@/lib/validacion
 import {
   estaPorVencer,
   filtrarProductos,
+  textoDelCodigo,
   tieneStockBajo,
   type FiltroProductos,
 } from '@/lib/filtro-productos';
 import type { Producto } from '@/lib/tipos';
+import {
+  UNIDADES,
+  formatearCantidad,
+  leerCantidad,
+  pasoDe,
+  porPeso,
+  precioPor,
+  type UnidadDeVenta,
+} from '@/lib/cantidad';
+
+/** Cómo se vende: por unidad o por peso (el precio y el stock van en esa unidad). */
+function SelectorUnidad({
+  valor,
+  onCambio,
+}: {
+  valor: UnidadDeVenta;
+  onCambio: (u: UnidadDeVenta) => void;
+}) {
+  return (
+    <div role="radiogroup" aria-label="Cómo se vende" className="grid grid-cols-3 gap-2">
+      {UNIDADES.map((u) => (
+        <button
+          key={u.valor}
+          type="button"
+          role="radio"
+          aria-checked={valor === u.valor}
+          onClick={() => onCambio(u.valor)}
+          className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
+            valor === u.valor
+              ? 'border-tinta bg-tinta text-papel'
+              : 'border-papel-linea bg-white text-tinta hover:border-tinta'
+          }`}
+        >
+          {u.texto}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** "Precio de venta" o "Precio por libra". */
+function etiquetaPor(base: string, unidad: UnidadDeVenta): string {
+  if (unidad === 'libra') return `${base} por libra`;
+  if (unidad === 'kilo') return `${base} por kilo`;
+  return base;
+}
+
+/** Aclaración de la unidad en los campos de stock: " (lb)". */
+function enUnidad(unidad: UnidadDeVenta): string {
+  return unidad === 'libra' ? ' (lb)' : unidad === 'kilo' ? ' (kg)' : '';
+}
 
 function FormularioNuevoProducto({ onCreado }: { onCreado: (p: Producto) => void }) {
   const { token } = useAuth();
@@ -39,11 +91,12 @@ function FormularioNuevoProducto({ onCreado }: { onCreado: (p: Producto) => void
   const [costoUnitario, setCostoUnitario] = useState('');
   const [stockInicial, setStockInicial] = useState('');
   const [stockMinimo, setStockMinimo] = useState('');
+  const [unidad, setUnidad] = useState<UnidadDeVenta>('unidad');
   const [fechaVencimiento, setFechaVencimiento] = useState('');
   const [ivaExento, setIvaExento] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
-  const sinStockInicial = !(parseInt(stockInicial, 10) > 0);
+  const sinStockInicial = !((leerCantidad(stockInicial, unidad) ?? 0) > 0);
   const avisoMargen = avisoDelMargen(aCentavos(precioVenta), aCentavos(costoUnitario));
   const avisoFecha = sinStockInicial ? null : avisoDelVencimiento(fechaVencimiento);
 
@@ -51,19 +104,30 @@ function FormularioNuevoProducto({ onCreado }: { onCreado: (p: Producto) => void
     e.preventDefault();
     if (!token) return;
     setError(null);
+    const stock = stockInicial.trim() ? leerCantidad(stockInicial, unidad, true) : undefined;
+    const minimo = stockMinimo.trim() ? leerCantidad(stockMinimo, unidad, true) : undefined;
+    if (stock === null || minimo === null) {
+      setError(
+        porPeso(unidad)
+          ? 'Revisa el stock: un número con hasta 3 decimales (por ejemplo 12,5).'
+          : 'Revisa el stock: va en unidades enteras. Si se vende por peso, elige "Por libra" o "Por kilo".',
+      );
+      return;
+    }
     setEnviando(true);
     try {
       // Los inputs son pesos/dólares "humanos" (ej. 1500.50); el backend
       // espera centavos enteros (ver sección 6.3 del spec: nunca floats).
       const producto = await crearProducto(token, {
-        codigoBarras,
+        codigoBarras: codigoBarras.trim() || undefined,
         nombre,
         precioVentaCentavos: Math.round(parseFloat(precioVenta) * 100),
         costoUnitarioCentavos: costoUnitario
           ? Math.round(parseFloat(costoUnitario) * 100)
           : undefined,
-        stockInicial: stockInicial ? parseInt(stockInicial, 10) : undefined,
-        stockMinimo: stockMinimo ? parseInt(stockMinimo, 10) : undefined,
+        stockInicial: stock,
+        stockMinimo: minimo,
+        unidad,
         fechaVencimiento: (!sinStockInicial && fechaVencimiento) || undefined,
         ivaExento,
       });
@@ -81,16 +145,19 @@ function FormularioNuevoProducto({ onCreado }: { onCreado: (p: Producto) => void
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2">
           <label className="field-label" htmlFor="producto-codigo">
-            Código de barras
+            Código de barras <span className="font-normal normal-case">(opcional)</span>
           </label>
           <input
             id="producto-codigo"
-            required
             value={codigoBarras}
             onChange={(e) => setCodigoBarras(e.target.value)}
             className="field font-ticket"
             placeholder="7791234567890"
+            aria-describedby="producto-codigo-ayuda"
           />
+          <p id="producto-codigo-ayuda" className="-mt-2 mb-1 text-xs text-tinta-suave">
+            Si no tiene (pan, huevos, lo suelto), déjalo vacío: al vender lo buscas por su nombre.
+          </p>
         </div>
         <div className="col-span-2">
           <label className="field-label" htmlFor="producto-nombre">
@@ -105,9 +172,19 @@ function FormularioNuevoProducto({ onCreado }: { onCreado: (p: Producto) => void
             placeholder="Coca Cola 500ml"
           />
         </div>
+        <div className="col-span-2">
+          <p className="field-label">Cómo se vende</p>
+          <SelectorUnidad valor={unidad} onCambio={setUnidad} />
+          {porPeso(unidad) && (
+            <p className="mt-1.5 text-xs text-tinta-suave">
+              Arroz, azúcar, queso: al vender se pone cuánto (media libra, 2 libras) o por cuánto
+              dinero.
+            </p>
+          )}
+        </div>
         <div>
           <label className="field-label" htmlFor="producto-precio">
-            Precio de venta
+            {etiquetaPor('Precio de venta', unidad)}
           </label>
           <input
             id="producto-precio"
@@ -123,7 +200,7 @@ function FormularioNuevoProducto({ onCreado }: { onCreado: (p: Producto) => void
         </div>
         <div>
           <label className="field-label" htmlFor="producto-costo">
-            Costo unitario
+            {unidad === 'unidad' ? 'Costo unitario' : etiquetaPor('Costo', unidad)}
           </label>
           <input
             id="producto-costo"
@@ -143,12 +220,13 @@ function FormularioNuevoProducto({ onCreado }: { onCreado: (p: Producto) => void
         )}
         <div className="col-span-2">
           <label className="field-label" htmlFor="producto-stock">
-            Stock inicial
+            Stock inicial{enUnidad(unidad)}
           </label>
           <input
             id="producto-stock"
             type="number"
             min="0"
+            step={pasoDe(unidad)}
             value={stockInicial}
             onChange={(e) => setStockInicial(e.target.value)}
             className="field font-ticket"
@@ -157,12 +235,13 @@ function FormularioNuevoProducto({ onCreado }: { onCreado: (p: Producto) => void
         </div>
         <div>
           <label className="field-label" htmlFor="producto-stock-minimo">
-            Stock mínimo (opcional)
+            Stock mínimo{enUnidad(unidad)} (opcional)
           </label>
           <input
             id="producto-stock-minimo"
             type="number"
             min="0"
+            step={pasoDe(unidad)}
             value={stockMinimo}
             onChange={(e) => setStockMinimo(e.target.value)}
             className="field font-ticket"
@@ -233,6 +312,7 @@ function FormularioEditarProducto({
   const { cerrar } = useVentana();
   const [precioVenta, setPrecioVenta] = useState((producto.precioVentaCentavos / 100).toFixed(2));
   const [stockMinimo, setStockMinimo] = useState(producto.stockMinimo.toString());
+  const [unidad, setUnidad] = useState<UnidadDeVenta>(producto.unidad);
   const [fechaVencimiento, setFechaVencimiento] = useState(producto.fechaVencimiento ?? '');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -260,11 +340,21 @@ function FormularioEditarProducto({
     e.preventDefault();
     if (!token) return;
     setError(null);
+    const minimo = stockMinimo.trim() ? leerCantidad(stockMinimo, unidad, true) : 0;
+    if (minimo === null) {
+      setError(
+        porPeso(unidad)
+          ? 'Revisa el stock mínimo: un número con hasta 3 decimales.'
+          : 'Revisa el stock mínimo: va en unidades enteras.',
+      );
+      return;
+    }
     setEnviando(true);
     try {
       const actualizado = await actualizarProducto(token, producto.id, {
         precioVentaCentavos: Math.round(parseFloat(precioVenta) * 100),
-        stockMinimo: stockMinimo ? parseInt(stockMinimo, 10) : 0,
+        stockMinimo: minimo,
+        ...(unidad !== producto.unidad ? { unidad } : {}),
         // Solo si se tocó: con varios lotes la fecha no se edita acá.
         ...(cambioLaFecha
           ? {
@@ -288,11 +378,11 @@ function FormularioEditarProducto({
       <div className="ficha">
         <div className="ficha-dato">
           <span>Código</span>
-          <strong className="truncate text-xs">{producto.codigoBarras}</strong>
+          <strong className="truncate text-xs">{textoDelCodigo(producto.codigoBarras)}</strong>
         </div>
         <div className="ficha-dato">
           <span>Stock</span>
-          <strong>{producto.stock}</strong>
+          <strong>{formatearCantidad(producto.stock, producto.unidad)}</strong>
         </div>
         <div className="ficha-dato">
           <span>Costo</span>
@@ -304,9 +394,13 @@ function FormularioEditarProducto({
         </div>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-4">
+        <div className="col-span-2">
+          <p className="field-label">Cómo se vende</p>
+          <SelectorUnidad valor={unidad} onCambio={setUnidad} />
+        </div>
         <div>
           <label className="field-label" htmlFor={`editar-precio-${producto.id}`}>
-            Precio de venta
+            {etiquetaPor('Precio de venta', unidad)}
           </label>
           <input
             id={`editar-precio-${producto.id}`}
@@ -331,12 +425,13 @@ function FormularioEditarProducto({
         </div>
         <div>
           <label className="field-label" htmlFor={`editar-stock-minimo-${producto.id}`}>
-            Stock mínimo
+            Stock mínimo{enUnidad(unidad)}
           </label>
           <input
             id={`editar-stock-minimo-${producto.id}`}
             type="number"
             min="0"
+            step={pasoDe(unidad)}
             value={stockMinimo}
             onChange={(e) => setStockMinimo(e.target.value)}
             className="field font-ticket"
@@ -570,19 +665,22 @@ function TablaProductos({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-medium text-tinta">{p.nombre}</p>
-                  <p className="font-ticket text-xs text-tinta-suave">{p.codigoBarras}</p>
+                  <p className="font-ticket text-xs text-tinta-suave">
+                    {textoDelCodigo(p.codigoBarras)}
+                  </p>
                 </div>
                 <p className="shrink-0 font-ticket font-semibold text-tinta">
                   {formatearCentavos(p.precioVentaCentavos)}
+                  {precioPor(p.unidad)}
                 </p>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-tinta-suave">
                 {stockBajo ? (
                   <span className="status-pill status-pill-warning font-ticket">
-                    Stock {p.stock} · bajo
+                    Stock {formatearCantidad(p.stock, p.unidad)} · bajo
                   </span>
                 ) : (
-                  <span className="font-ticket">Stock {p.stock}</span>
+                  <span className="font-ticket">Stock {formatearCantidad(p.stock, p.unidad)}</span>
                 )}
                 <span className="flex items-center gap-1">
                   Vence
@@ -635,16 +733,21 @@ function TablaProductos({
                 >
                   <td className="px-4 py-3 text-tinta">{p.nombre}</td>
                   <td className="px-4 py-3 font-ticket text-xs text-tinta-suave">
-                    {p.codigoBarras}
+                    {textoDelCodigo(p.codigoBarras)}
                   </td>
                   <td className="px-4 py-3 text-right font-ticket text-tinta">
                     {formatearCentavos(p.precioVentaCentavos)}
+                    {precioPor(p.unidad)}
                   </td>
                   <td className="px-4 py-3 text-right">
                     {stockBajo ? (
-                      <span className="status-pill status-pill-warning font-ticket">{p.stock}</span>
+                      <span className="status-pill status-pill-warning font-ticket">
+                        {formatearCantidad(p.stock, p.unidad)}
+                      </span>
                     ) : (
-                      <span className="font-ticket text-tinta">{p.stock}</span>
+                      <span className="font-ticket text-tinta">
+                        {formatearCantidad(p.stock, p.unidad)}
+                      </span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -735,7 +838,8 @@ function SeccionDadosDeBaja({
                   <div className="min-w-0">
                     <p className="text-sm text-tinta-suave">{p.nombre}</p>
                     <p className="font-ticket text-xs text-tinta-suave">
-                      {p.codigoBarras} · stock {p.stock}
+                      {textoDelCodigo(p.codigoBarras)} · stock{' '}
+                      {formatearCantidad(p.stock, p.unidad)}
                     </p>
                   </div>
                   <button
@@ -766,10 +870,10 @@ function SeccionDadosDeBaja({
                     <tr key={p.id} className="border-t border-papel-linea">
                       <td className="px-4 py-3 text-tinta-suave">{p.nombre}</td>
                       <td className="px-4 py-3 font-ticket text-xs text-tinta-suave">
-                        {p.codigoBarras}
+                        {textoDelCodigo(p.codigoBarras)}
                       </td>
                       <td className="px-4 py-3 text-right font-ticket text-tinta-suave">
-                        {p.stock}
+                        {formatearCantidad(p.stock, p.unidad)}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button

@@ -13,6 +13,8 @@ import { MetodoPago } from '../../common/enums/metodo-pago.enum';
 import { MotivoMerma } from '../../common/enums/motivo-merma.enum';
 import { TipoMovimientoInventario } from '../../common/enums/tipo-movimiento-inventario.enum';
 import { TipoMovimientoCaja } from '../caja/entities/movimiento-caja.entity';
+import { importeCentavos, restar } from '../../common/cantidad';
+import { agregarGraficos, rangoDe, type GraficoExcel } from './graficos-excel';
 
 // Colores de KontaGo (sin el #, como los pide Excel).
 const TINTA = 'FF1C2B3A';
@@ -21,6 +23,8 @@ const LINEA = 'FFE4DDC9';
 
 // Montos en dólares con dos decimales; los negativos en rojo.
 const DINERO = '"$"#,##0.00;[Red]-"$"#,##0.00';
+// Cantidades: 3 si es entera, 0,5 si es media libra (sin ceros de más).
+const CANTIDAD = 'General';
 const FECHA = 'dd/mm/yyyy';
 const HORA = 'hh:mm';
 const FECHA_HORA = 'dd/mm/yyyy hh:mm';
@@ -28,6 +32,7 @@ const FECHA_HORA = 'dd/mm/yyyy hh:mm';
 const PAGO: Record<MetodoPago, string> = {
   [MetodoPago.EFECTIVO]: 'Efectivo',
   [MetodoPago.TRANSFERENCIA]: 'Transferencia',
+  [MetodoPago.FIADO]: 'Fiado',
 };
 const MOTIVO: Record<MotivoMerma, string> = {
   [MotivoMerma.VENCIDO]: 'Vencido',
@@ -224,6 +229,7 @@ export class ReportesService {
     dato('Anulado', dolares(resumen.anuladoCentavos));
     dato('En efectivo', dolares(resumen.efectivoCentavos));
     dato('Por transferencia', dolares(resumen.transferenciaCentavos));
+    dato('Al fiado (por cobrar)', dolares(resumen.fiadoCentavos));
     hoja.addRow([]);
 
     seccion('Inventario');
@@ -250,6 +256,138 @@ export class ReportesService {
     hoja.addRow([
       `Generado por KontaGo el ${new Date().toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'short' })}. El ticket no reemplaza a la factura electrónica.`,
     ]).font = { italic: true, size: 9, color: { argb: 'FF4C5C6B' } };
+
+    // --- Gráficos ---
+    // Los datos van en tablitas a la izquierda y cada gráfico al lado, leyendo
+    // de esas celdas (así, si alguien corrige un número, el gráfico cambia).
+    const graficos: GraficoExcel[] = [];
+    const HOJA_GRAFICOS = 'Gráficos';
+    const hojaGraficos = libro.addWorksheet(HOJA_GRAFICOS);
+    hojaGraficos.columns = [{ width: 28 }, { width: 14 }];
+    hojaGraficos.addRow([
+      `Estadísticas del ${rango.desde.split('-').reverse().join('/')} al ${rango.hasta.split('-').reverse().join('/')}`,
+    ]).font = {
+      bold: true,
+      size: 14,
+      color: { argb: TINTA },
+    };
+    // Cada bloque ocupa lo mismo: el alto del gráfico (o la tabla, si es más larga).
+    const ALTO_BLOQUE = 18;
+    let filaBloque = 3;
+    const bloque = (
+      tipo: GraficoExcel['tipo'],
+      tituloGrafico: string,
+      encabezado: [string, string],
+      filas: [string, number][],
+      opciones: { color?: string; colores?: string[]; formato?: string } = {},
+    ) => {
+      if (filas.length === 0) return;
+      const formato = opciones.formato ?? DINERO;
+      const inicio = filaBloque;
+      hojaGraficos.getCell(`A${inicio}`).value = tituloGrafico;
+      hojaGraficos.getCell(`A${inicio}`).font = {
+        bold: true,
+        color: { argb: TINTA },
+      };
+      const cabecera = hojaGraficos.getRow(inicio + 1);
+      cabecera.values = encabezado;
+      cabecera.font = { bold: true, color: { argb: PAPEL } };
+      cabecera.eachCell((celda) => {
+        celda.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: TINTA },
+        };
+      });
+      filas.forEach(([etiqueta, valor], i) => {
+        const fila = hojaGraficos.getRow(inicio + 2 + i);
+        fila.values = [etiqueta, valor];
+        fila.getCell(2).numFmt = formato;
+      });
+      const primera = inicio + 2;
+      const ultima = inicio + 1 + filas.length;
+      graficos.push({
+        tipo,
+        titulo: tituloGrafico,
+        hoja: HOJA_GRAFICOS,
+        categorias: {
+          rango: rangoDe(HOJA_GRAFICOS, 'A', primera, ultima),
+          valores: filas.map(([etiqueta]) => etiqueta),
+        },
+        series: [
+          {
+            nombre: encabezado[1],
+            rango: rangoDe(HOJA_GRAFICOS, 'B', primera, ultima),
+            valores: filas.map(([, valor]) => valor),
+            color: opciones.color ?? 'D98C2B',
+          },
+        ],
+        formato,
+        coloresPorcion: opciones.colores,
+        // De la columna D a la L, a la altura de su tabla.
+        desde: [3, inicio - 1],
+        hasta: [11, inicio - 1 + ALTO_BLOQUE - 1],
+      });
+      filaBloque += Math.max(ALTO_BLOQUE, filas.length + 4);
+    };
+
+    const porHora = resumen.agrupadoPor === 'hora';
+    const serie = resumen.serie.map(
+      (p) => [p.etiqueta, dolares(p.centavos)] as [string, number],
+    );
+    if (serie.some(([, v]) => v !== 0)) {
+      bloque(
+        serie.length > 31 ? 'linea' : 'columnas',
+        porHora ? 'Ventas por hora' : 'Ventas por día',
+        [porHora ? 'Hora' : 'Día', 'Cobrado'],
+        serie,
+      );
+    }
+    const pagos = (
+      [
+        ['Efectivo', resumen.efectivoCentavos, '1C2B3A'],
+        ['Transferencia', resumen.transferenciaCentavos, 'D98C2B'],
+        ['Fiado', resumen.fiadoCentavos, '2F6F4F'],
+      ] as const
+    ).filter(([, centavos]) => centavos > 0);
+    bloque(
+      'dona',
+      'Cómo pagan',
+      ['Forma de pago', 'Cobrado'],
+      pagos.map(([nombre, centavos]) => [nombre, dolares(centavos)]),
+      { colores: pagos.map(([, , color]) => color) },
+    );
+    bloque(
+      'barras',
+      'Lo más vendido',
+      ['Producto', 'Cobrado'],
+      resumen.topProductos.map((p) => [p.nombre, dolares(p.centavos)]),
+      { color: '2F6F4F' },
+    );
+    bloque(
+      'barras',
+      'Por qué se pierde mercadería',
+      ['Motivo', 'Perdido'],
+      resumenInventario.perdidaPorMotivo
+        .filter((m) => m.centavos > 0)
+        .map((m) => [MOTIVO[m.motivo], dolares(m.centavos)]),
+      { color: 'B6462F' },
+    );
+    bloque(
+      'barras',
+      'Lo que más se pierde',
+      ['Producto', 'Perdido'],
+      resumenInventario.productosConMasPerdida
+        .filter((p) => p.centavos > 0)
+        .map((p) => [p.nombre, dolares(p.centavos)]),
+      { color: 'B6462F' },
+    );
+    if (graficos.length === 0) {
+      hojaGraficos.addRow([]);
+      hojaGraficos.addRow([
+        'Todavía no hay ventas ni pérdidas en este período para graficar.',
+      ]);
+    }
 
     // --- Ventas ---
     type FilaVenta = (typeof ventas)[number];
@@ -317,7 +455,7 @@ export class ReportesService {
     );
     type FilaLinea = (typeof lineas)[number];
     const vendidas = ({ item }: FilaLinea) =>
-      item.cantidad - item.cantidadAnulada;
+      restar(item.cantidad, item.cantidadAnulada);
     hojaDeDatos<FilaLinea>(
       libro,
       'Productos vendidos',
@@ -353,14 +491,14 @@ export class ReportesService {
           titulo: 'Vendidas',
           ancho: 10,
           valor: vendidas,
-          formato: '0',
+          formato: CANTIDAD,
           total: true,
         },
         {
           titulo: 'Anuladas',
           ancho: 10,
           valor: (l) => l.item.cantidadAnulada,
-          formato: '0',
+          formato: CANTIDAD,
           total: true,
         },
         {
@@ -372,7 +510,14 @@ export class ReportesService {
         {
           titulo: 'Total',
           ancho: 12,
-          valor: (l) => dolares(l.item.precioVentaCentavos * vendidas(l)),
+          valor: (l) =>
+            dolares(
+              importeCentavos(l.item.precioVentaCentavos, l.item.cantidad) -
+                importeCentavos(
+                  l.item.precioVentaCentavos,
+                  l.item.cantidadAnulada,
+                ),
+            ),
           formato: DINERO,
           total: true,
         },
@@ -564,7 +709,7 @@ export class ReportesService {
           titulo: 'Cantidad',
           ancho: 10,
           valor: (m) => m.cantidad,
-          formato: '0',
+          formato: CANTIDAD,
         },
         {
           titulo: 'Costo unitario',
@@ -630,19 +775,20 @@ export class ReportesService {
           titulo: 'Stock',
           ancho: 9,
           valor: (p) => p.stock,
-          formato: '0',
+          formato: CANTIDAD,
           total: true,
         },
         {
           titulo: 'Stock mínimo',
           ancho: 12,
           valor: (p) => p.stockMinimo,
-          formato: '0',
+          formato: CANTIDAD,
         },
         {
           titulo: 'Valor al costo',
           ancho: 14,
-          valor: (p) => dolares(p.stock * p.costoUnitarioCentavos),
+          valor: (p) =>
+            dolares(importeCentavos(p.costoUnitarioCentavos, p.stock)),
           formato: DINERO,
           total: true,
         },
@@ -659,7 +805,10 @@ export class ReportesService {
       '&LStock al momento de descargar el reporte';
 
     const nombre = `kontago-${aNombreDeArchivo(tienda.nombre)}-${rango.desde}-a-${rango.hasta}.xlsx`;
-    const contenido = Buffer.from(await libro.xlsx.writeBuffer());
+    const contenido = await agregarGraficos(
+      Buffer.from(await libro.xlsx.writeBuffer()),
+      graficos,
+    );
     return { nombre, contenido };
   }
 }

@@ -230,7 +230,11 @@ try {
     await db.query('BEGIN');
     await db.query('DELETE FROM anulaciones_venta WHERE tenant_id = $1', [tenantId]);
     await db.query('DELETE FROM venta_items WHERE venta_id IN (SELECT id FROM ventas WHERE tenant_id = $1)', [tenantId]);
+    // El fiado: los abonos primero (apuntan a clientes y usuarios), los
+    // clientes después de las ventas que los nombran.
+    await db.query('DELETE FROM abonos_fiado WHERE tenant_id = $1', [tenantId]);
     await db.query('DELETE FROM ventas WHERE tenant_id = $1', [tenantId]);
+    await db.query('DELETE FROM clientes WHERE tenant_id = $1', [tenantId]);
     await db.query('DELETE FROM movimientos_caja WHERE tenant_id = $1', [tenantId]);
     await db.query('DELETE FROM turnos_caja WHERE tenant_id = $1', [tenantId]);
     await db.query('DELETE FROM movimientos_inventario WHERE tenant_id = $1', [tenantId]);

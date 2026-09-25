@@ -55,6 +55,12 @@ import {
   type Producto,
   type ResumenMovimientosDelDia,
 } from '../lib/tipos';
+import { formatearCantidad, leerCantidad, porPeso, redondear, type UnidadDeVenta } from '../lib/cantidad';
+
+/** " (lb)" en la etiqueta si el producto va por peso. */
+function enUnidad(unidad: UnidadDeVenta | undefined): string {
+  return unidad === 'libra' ? ' (lb)' : unidad === 'kilo' ? ' (kg)' : '';
+}
 
 const MOTIVOS: MotivoMerma[] = ['vencido', 'danado', 'robado', 'otro'];
 
@@ -87,11 +93,20 @@ function FormularioAbastecimiento({
   async function manejarSubmit() {
     if (!token) return;
     setError(null);
+    const leida = leerCantidad(cantidad, elegido?.unidad);
+    if (leida === null) {
+      setError(
+        porPeso(elegido?.unidad)
+          ? 'Revisa la cantidad: mayor que 0, con hasta 3 decimales.'
+          : 'Revisa la cantidad: va en unidades enteras.',
+      );
+      return;
+    }
     setEnviando(true);
     try {
       await registrarAbastecimiento(token, {
         productoId,
-        cantidad: parseInt(cantidad, 10),
+        cantidad: leida,
         costoUnitarioCentavos: Math.round(parseFloat(costoUnitario) * 100),
         proveedor: proveedor || undefined,
         fechaVencimiento: fechaVencimiento || undefined,
@@ -111,16 +126,18 @@ function FormularioAbastecimiento({
       <Etiqueta>Producto</Etiqueta>
       <SelectorProducto productos={productos} seleccionadoId={productoId} onSeleccionar={setProductoId} />
 
-      <Etiqueta>Cantidad</Etiqueta>
+      <Etiqueta>{`Cantidad${enUnidad(elegido?.unidad)}`}</Etiqueta>
       <TextInput
         value={cantidad}
         onChangeText={setCantidad}
-        keyboardType="number-pad"
+        keyboardType={porPeso(elegido?.unidad) ? 'decimal-pad' : 'number-pad'}
         style={estilosCampo.input}
         placeholder="Ej: 50"
       />
 
-      <Etiqueta>Costo unitario</Etiqueta>
+      <Etiqueta>
+        {elegido?.unidad === 'libra' ? 'Costo por libra' : elegido?.unidad === 'kilo' ? 'Costo por kilo' : 'Costo unitario'}
+      </Etiqueta>
       <TextInput
         value={costoUnitario}
         onChangeText={setCostoUnitario}
@@ -204,19 +221,28 @@ function FormularioMerma({
   const loteElegido = lotes.find((l) => l.id === loteId);
   // No se puede dar de baja más de lo que hay (el backend lo rechaza).
   const disponible = loteElegido?.cantidad ?? producto?.stock;
+  const pedida = leerCantidad(cantidad, producto?.unidad);
   const problemaCantidad =
-    disponible !== undefined && parseInt(cantidad, 10) > disponible
+    disponible !== undefined && pedida !== null && pedida > disponible
       ? `Solo hay ${unidades(disponible)}${loteElegido ? ' en ese lote' : ''}.`
       : null;
 
   async function manejarSubmit() {
     if (!token) return;
     setError(null);
+    if (pedida === null) {
+      setError(
+        porPeso(producto?.unidad)
+          ? 'Revisa la cantidad: mayor que 0, con hasta 3 decimales.'
+          : 'Revisa la cantidad: va en unidades enteras.',
+      );
+      return;
+    }
     setEnviando(true);
     try {
       await registrarMerma(token, {
         productoId,
-        cantidad: parseInt(cantidad, 10),
+        cantidad: pedida,
         motivo,
         loteId: loteId || undefined,
       });
@@ -267,11 +293,11 @@ function FormularioMerma({
         </>
       )}
 
-      <Etiqueta>Cantidad</Etiqueta>
+      <Etiqueta>{`Cantidad${enUnidad(producto?.unidad)}`}</Etiqueta>
       <TextInput
         value={cantidad}
         onChangeText={setCantidad}
-        keyboardType="number-pad"
+        keyboardType={porPeso(producto?.unidad) ? 'decimal-pad' : 'number-pad'}
         style={[estilosCampo.input, problemaCantidad && estilosCampo.inputInvalido]}
         placeholder="Ej: 3"
       />
@@ -364,7 +390,7 @@ function SeccionAlertas({
               <Text style={styles.alertaNombre}>{p.nombre}</Text>
               <View style={styles.alertaDerecha}>
                 <Text style={[styles.alertaValor, { color: colores.ambar }]}>
-                  {p.stock} / mín. {p.stockMinimo}
+                  {formatearCantidad(p.stock, p.unidad)} / mín. {formatearCantidad(p.stockMinimo, p.unidad)}
                 </Text>
                 {onAbastecer && (
                   <Pressable onPress={() => onAbastecer(p.id)} hitSlop={8}>
@@ -386,7 +412,7 @@ function SeccionAlertas({
                 {/* Con varias fechas, cuántas son las que vencen. */}
                 {p.stock !== lote.cantidad && (
                   <Text style={styles.alertaDetalle}>
-                    {unidades(lote.cantidad)} de {p.stock}
+                    {unidades(lote.cantidad)} de {formatearCantidad(p.stock, p.unidad)}
                   </Text>
                 )}
               </View>
@@ -434,8 +460,11 @@ function EditorLotes({
   );
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
-  const suma = filas.reduce((acc, f) => acc + (parseInt(f.cantidad, 10) || 0), 0);
-  const diferencia = suma - producto.stock;
+  // Por peso, con decimales ("12,5"); por unidad, enteros.
+  const numeroDe = (texto: string) =>
+    porPeso(producto.unidad) ? redondear(parseFloat(texto.replace(',', '.')) || 0) : parseInt(texto, 10) || 0;
+  const suma = redondear(filas.reduce((acc, f) => acc + numeroDe(f.cantidad), 0));
+  const diferencia = redondear(suma - producto.stock);
   const fechasValidas = filas.every((f) => !f.fecha || esFechaValida(f.fecha));
 
   function cambiar(clave: string, cambios: Partial<FilaEditable>) {
@@ -450,7 +479,7 @@ function EditorLotes({
       const lotes: FilaDeLote[] = filas.map((f) => ({
         id: f.id,
         fechaVencimiento: f.fecha || null,
-        cantidad: parseInt(f.cantidad, 10) || 0,
+        cantidad: numeroDe(f.cantidad),
       }));
       await corregirLotes(token, producto.id, lotes);
       onGuardado();
@@ -481,8 +510,10 @@ function EditorLotes({
             <Text style={styles.editorEtiqueta}>Unidades</Text>
             <TextInput
               value={fila.cantidad}
-              onChangeText={(t) => cambiar(fila.clave, { cantidad: t.replace(/\D/g, '') })}
-              keyboardType="number-pad"
+              onChangeText={(t) =>
+                cambiar(fila.clave, { cantidad: porPeso(producto.unidad) ? t.replace(/[^\d.,]/g, '') : t.replace(/\D/g, '') })
+              }
+              keyboardType={porPeso(producto.unidad) ? 'decimal-pad' : 'number-pad'}
               style={[estilosCampo.input, styles.editorInput]}
               accessibilityLabel="Unidades"
             />
