@@ -841,7 +841,15 @@ export function VentaScreen() {
               accessibilityState={{ checked: metodoPago === valor }}
               style={[styles.metodo, metodoPago === valor && styles.metodoActivo]}
             >
-              <Text style={[styles.metodoTexto, metodoPago === valor && styles.metodoTextoActivo]}>{texto}</Text>
+              {/* Tres opciones: en un celular angosto, el texto se achica en vez de cortarse. */}
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
+                style={[styles.metodoTexto, metodoPago === valor && styles.metodoTextoActivo]}
+              >
+                {texto}
+              </Text>
             </Pressable>
           ))}
         </View>

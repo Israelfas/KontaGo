@@ -264,3 +264,15 @@ export function NotebookIcon(props: IconProps) {
     </IconBase>
   );
 }
+
+// Transferencia: dinero que va de una cuenta a otra.
+export function TransferIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M4 8h13" />
+      <path d="m14 5 3 3-3 3" />
+      <path d="M20 16H7" />
+      <path d="m10 13-3 3 3 3" />
+    </IconBase>
+  );
+}

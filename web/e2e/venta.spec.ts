@@ -73,6 +73,15 @@ test.describe('Vender (cajero)', () => {
   test('cobra por transferencia sin pedir monto recibido', async ({ page }) => {
     await page.goto('/venta');
     await escanear(page, COCA);
+
+    // Las tres formas de pago entran completas (antes "Transferencia" se cortaba).
+    for (const nombre of ['Efectivo', 'Transferencia', 'Fiado']) {
+      const boton = page.getByRole('radio', { name: nombre });
+      const desborda = await boton.evaluate((b) =>
+        [b, ...Array.from(b.querySelectorAll('span'))].some((e) => e.scrollWidth > e.clientWidth),
+      );
+      expect(desborda, `${nombre} no entra en su botón`).toBe(false);
+    }
     await page.getByRole('radio', { name: 'Transferencia' }).click();
     await expect(page.locator('#monto-recibido')).toHaveCount(0);
     await page.getByRole('button', { name: 'Cobrar por transferencia' }).click();

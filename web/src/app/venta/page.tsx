@@ -9,7 +9,16 @@ import { Button, EmptyState, ErrorState, LoadingState } from '@/components/ui';
 import { CifraAnimada } from '@/components/cifra';
 import { FormularioAbrirCaja } from '@/components/caja';
 import { Banda, Hoja } from '@/components/banda';
-import { CameraIcon, CartIcon, CashIcon, MinusIcon, PlusIcon, TrashIcon } from '@/components/icons';
+import {
+  CameraIcon,
+  CartIcon,
+  CashIcon,
+  MinusIcon,
+  NotebookIcon,
+  PlusIcon,
+  TransferIcon,
+  TrashIcon,
+} from '@/components/icons';
 import { AvisoSinConexion } from '@/components/aviso-sin-conexion';
 import { useAuth } from '@/lib/auth-context';
 import {
@@ -703,11 +712,11 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
       <div className="mb-4 grid grid-cols-3 gap-2" role="radiogroup" aria-labelledby="metodo-pago">
         {(
           [
-            ['efectivo', 'Efectivo'],
-            ['transferencia', 'Transferencia'],
-            ['fiado', 'Fiado'],
+            ['efectivo', 'Efectivo', CashIcon],
+            ['transferencia', 'Transferencia', TransferIcon],
+            ['fiado', 'Fiado', NotebookIcon],
           ] as const
-        ).map(([valor, texto]) => (
+        ).map(([valor, texto, Icono]) => (
           <button
             key={valor}
             type="button"
@@ -717,13 +726,16 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
               setMetodoPago(valor);
               setErrorVenta(null);
             }}
-            className={`rounded-xl border px-2 py-2.5 text-sm font-semibold transition-colors ${
+            // Tres opciones en el panel angosto: ícono arriba y texto chico,
+            // así "Transferencia" entra entera.
+            className={`flex min-w-0 flex-col items-center gap-1 rounded-xl border px-1 py-2 text-xs font-semibold transition-colors ${
               metodoPago === valor
                 ? 'border-tinta bg-tinta text-papel'
                 : 'border-papel-linea bg-white text-tinta hover:border-tinta'
             }`}
           >
-            {texto}
+            <Icono className="h-4 w-4" />
+            <span className="whitespace-nowrap">{texto}</span>
           </button>
         ))}
       </div>
@@ -873,7 +885,7 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
         {/* Dos columnas en escritorio: el ticket a la izquierda y el cobro
             siempre a la vista a la derecha. Antes todo iba en una columna
             angosta al medio, con media pantalla vacía. */}
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
           <div>
             <form onSubmit={manejarSubmitBusqueda}>
               <label className="field-label" htmlFor="codigo-barras">

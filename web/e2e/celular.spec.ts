@@ -63,4 +63,13 @@ test('vender desde el celular: el carrito en tarjetas', async ({ page }) => {
   await page.locator('#codigo-barras').press('Enter');
   await expect(page.locator('li.entra', { hasText: 'Coca-Cola 500 ml' })).toBeVisible();
   expect(await sinScrollLateral(page)).toBe(true);
+
+  // Las tres formas de pago entran completas (antes "Transferencia" se cortaba).
+  for (const nombre of ['Efectivo', 'Transferencia', 'Fiado']) {
+    const boton = page.getByRole('radio', { name: nombre });
+    const desborda = await boton.evaluate((b) =>
+      [b, ...Array.from(b.querySelectorAll('span'))].some((e) => e.scrollWidth > e.clientWidth),
+    );
+    expect(desborda, `${nombre} no entra en su botón`).toBe(false);
+  }
 });
