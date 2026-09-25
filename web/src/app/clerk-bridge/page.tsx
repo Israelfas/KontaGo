@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth-context';
 import { ApiError } from '@/lib/api';
 import { AuthShell } from '@/components/auth-shell';
 import { ErrorState, LoadingState } from '@/components/ui';
+import { PasoCodigo } from '@/components/paso-codigo';
 
 // Clerk ya armó su propia sesión (ver sso-callback). Acá se toma el
 // token de ESA sesión y se lo cambia por un token propio de KontaGo
@@ -17,6 +18,8 @@ export default function ClerkBridgePage() {
   const { completarLoginConClerk } = useAuth();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  // Entró con Google, pero la cuenta pide además el código de dos pasos.
+  const [desafio, setDesafio] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -28,13 +31,27 @@ export default function ClerkBridgePage() {
           setError('No se pudo obtener la sesión de Google. Prueba iniciar sesión de nuevo.');
           return;
         }
-        await completarLoginConClerk(clerkToken);
+        const pendiente = await completarLoginConClerk(clerkToken);
+        if (pendiente) setDesafio(pendiente.desafio);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'No se pudo completar el login');
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded]);
+
+  if (desafio) {
+    return (
+      <AuthShell
+        eyebrow="Verificación en dos pasos"
+        title="Un paso más"
+        description="Tu cuenta está protegida con un código además de Google."
+        footer={null}
+      >
+        <PasoCodigo desafio={desafio} onVolver={() => router.push('/login')} />
+      </AuthShell>
+    );
+  }
 
   return (
     <AuthShell

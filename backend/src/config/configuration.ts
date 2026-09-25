@@ -147,6 +147,11 @@ export default () => ({
     secretKey: process.env.CLERK_SECRET_KEY || '',
   },
 
+  // Cifra en la base los datos sensibles (el secreto de la verificación
+  // en dos pasos). Si se cambia, las verificaciones ya activadas dejan de
+  // servir: cada persona tendría que volver a activarla.
+  claveCifrado: secretoRequerido('CLAVE_CIFRADO', 'change-me-clave-de-cifrado'),
+
   jwt: {
     accessSecret: secretoRequerido(
       'JWT_ACCESS_SECRET',

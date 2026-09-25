@@ -10,7 +10,14 @@ import { CifraAnimada } from '@/components/cifra';
 import { FormularioAbrirCaja } from '@/components/caja';
 import { Banda, Hoja } from '@/components/banda';
 import { CameraIcon, CartIcon, CashIcon, MinusIcon, PlusIcon, TrashIcon } from '@/components/icons';
+import { AvisoSinConexion } from '@/components/aviso-sin-conexion';
 import { useAuth } from '@/lib/auth-context';
+import {
+  esFaltaDeConexion,
+  nuevaClave,
+  useSinConexion,
+  type VentaPendiente,
+} from '@/lib/sin-conexion';
 import {
   buscarPorCodigoBarras,
   crearProducto,
@@ -180,7 +187,11 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
   const [errorVenta, setErrorVenta] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
   const [ventaConfirmada, setVentaConfirmada] = useState<Venta | null>(null);
+  // Cobrada sin conexión: guardada en el navegador, se manda sola después.
+  const [ventaGuardada, setVentaGuardada] = useState<VentaPendiente | null>(null);
   const [camaraActiva, setCamaraActiva] = useState(false);
+  const { sinConexion, marcarSinConexion, buscarEnCatalogo, descontarDelCatalogo, guardarVenta } =
+    useSinConexion();
   const [confirmacionEscaneo, setConfirmacionEscaneo] = useState<string | null>(null);
 
   const inputCodigoRef = useRef<HTMLInputElement>(null);
@@ -205,10 +216,40 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
     });
   }
 
+  /** Sin conexión: busca en el catálogo guardado y cuida el stock guardado. */
+  function agregarDelCatalogoGuardado(codigo: string) {
+    const producto = buscarEnCatalogo(codigo);
+    if (!producto) {
+      setErrorBusqueda(
+        `Sin conexión: el código ${codigo} no está en el catálogo guardado en este navegador.`,
+      );
+      return;
+    }
+    const enCarrito = carrito.find((i) => i.producto.id === producto.id)?.cantidad ?? 0;
+    if (enCarrito + 1 > producto.stock) {
+      setErrorBusqueda(
+        producto.stock === 0
+          ? `Según el último stock guardado, no queda ${producto.nombre}.`
+          : `Según el último stock guardado, quedan ${producto.stock} de ${producto.nombre}.`,
+      );
+      return;
+    }
+    agregarAlCarrito(producto);
+    setCodigoInput('');
+    setConfirmacionEscaneo(producto.nombre);
+    setTimeout(() => setConfirmacionEscaneo(null), 1200);
+  }
+
   async function buscarYAgregar(codigo: string) {
     if (!token || !codigo.trim()) return;
     setErrorBusqueda(null);
     setCodigoNoEncontrado(null);
+    // Ya se sabe que no hay red: directo a lo guardado, sin esperar.
+    if (sinConexion) {
+      agregarDelCatalogoGuardado(codigo.trim());
+      inputCodigoRef.current?.focus();
+      return;
+    }
     setBuscando(true);
     try {
       const producto = await buscarPorCodigoBarras(token, codigo.trim());
@@ -233,6 +274,11 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
       setConfirmacionEscaneo(producto.nombre);
       setTimeout(() => setConfirmacionEscaneo(null), 1200);
     } catch (err) {
+      if (esFaltaDeConexion(err)) {
+        marcarSinConexion(true);
+        agregarDelCatalogoGuardado(codigo.trim());
+        return;
+      }
       setErrorBusqueda(err instanceof ApiError ? err.message : 'No se pudo buscar el producto');
     } finally {
       setBuscando(false);
@@ -286,23 +332,64 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
   async function confirmarVenta() {
     if (!token || !puedeCobrar) return;
     setErrorVenta(null);
-    setProcesando(true);
-    try {
-      const venta = await crearVenta(token, {
-        items: carrito.map((i) => ({
-          productoId: i.producto.id,
-          cantidad: i.cantidad,
-        })),
-        metodoPago,
-        ...(efectivo ? { montoRecibidoCentavos: montoRecibidoCentavos! } : {}),
-      });
-      setVentaConfirmada(venta);
+    // La clave y la hora se fijan ahora: si hay que mandarla después, es
+    // la misma venta, cobrada en este momento.
+    const clave = nuevaClave();
+    const vendidaEn = new Date().toISOString();
+    const items = carrito.map((i) => ({ productoId: i.producto.id, cantidad: i.cantidad }));
+
+    const limpiar = () => {
       // En el celular, un toque corto confirma sin mirar la pantalla.
       navigator.vibrate?.(12);
       setCarrito([]);
       setMontoRecibido('');
       setMetodoPago('efectivo');
+    };
+    const guardarParaDespues = () => {
+      const pendiente: VentaPendiente = {
+        clave,
+        vendidaEn,
+        items: carrito.map((i) => ({
+          productoId: i.producto.id,
+          nombre: i.producto.nombre,
+          cantidad: i.cantidad,
+          precioVentaCentavos: i.producto.precioVentaCentavos,
+        })),
+        metodoPago,
+        ...(efectivo ? { montoRecibidoCentavos: montoRecibidoCentavos! } : {}),
+        totalCentavos,
+      };
+      guardarVenta(pendiente);
+      descontarDelCatalogo(items);
+      setVentaGuardada(pendiente);
+      limpiar();
+    };
+
+    if (sinConexion) {
+      guardarParaDespues();
+      return;
+    }
+
+    setProcesando(true);
+    try {
+      const venta = await crearVenta(token, {
+        items,
+        metodoPago,
+        ...(efectivo ? { montoRecibidoCentavos: montoRecibidoCentavos! } : {}),
+        claveIdempotencia: clave,
+        vendidaEn,
+      });
+      setVentaConfirmada(venta);
+      descontarDelCatalogo(items);
+      limpiar();
     } catch (err) {
+      // Se cortó (o no respondió a tiempo): queda guardada y se manda
+      // sola. Si en realidad sí llegó, la clave evita cobrarla dos veces.
+      if (esFaltaDeConexion(err)) {
+        marcarSinConexion(true);
+        guardarParaDespues();
+        return;
+      }
       // La caja se cerró mientras tanto (desde otra pestaña, o el admin):
       // volver a pedir que se abra. El carrito se pierde, pero no se cobró.
       if (err instanceof ApiError && err.statusCode === 409) {
@@ -317,7 +404,77 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
 
   function nuevaVenta() {
     setVentaConfirmada(null);
+    setVentaGuardada(null);
     inputCodigoRef.current?.focus();
+  }
+
+  // --- Cobrada sin conexión ---
+  if (ventaGuardada) {
+    const vuelto =
+      ventaGuardada.montoRecibidoCentavos !== undefined
+        ? ventaGuardada.montoRecibidoCentavos - ventaGuardada.totalCentavos
+        : null;
+    return (
+      <div className="app-page">
+        <div className="mx-auto max-w-md px-4 py-10 sm:px-6">
+          <div className="confirmacion app-card border-ambar/30 bg-ambar/5 p-6 text-center">
+            <svg viewBox="0 0 52 52" className="mx-auto h-14 w-14 text-ambar" aria-hidden="true">
+              <circle
+                className="check-circulo"
+                cx="26"
+                cy="26"
+                r="24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              />
+              <path
+                className="check-trazo"
+                d="M15 27l7.5 7.5L37 19.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-[#9a5b08]">
+              Venta guardada sin conexión
+            </p>
+            <p className="mt-2 font-ticket text-3xl font-semibold text-tinta">
+              <CifraAnimada texto={formatearCentavos(ventaGuardada.totalCentavos)} />
+            </p>
+            <div className="borde-perforado my-4" />
+            {vuelto === null ? (
+              <p className="text-sm font-medium text-tinta">Pagado por transferencia</p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-tinta-suave">Recibido</span>
+                  <span className="font-ticket text-tinta">
+                    {formatearCentavos(ventaGuardada.montoRecibidoCentavos!)}
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center justify-between text-sm">
+                  <span className="font-medium text-tinta">Vuelto</span>
+                  <span className="font-ticket text-lg font-semibold text-ambar">
+                    <CifraAnimada texto={formatearCentavos(vuelto)} />
+                  </span>
+                </div>
+              </>
+            )}
+            <div className="borde-perforado my-4" />
+            <p className="text-xs text-tinta-suave">
+              Se envía sola cuando vuelva internet, con la hora de ahora. El número de ticket se le
+              asigna al enviarla.
+            </p>
+          </div>
+          <Button variant="primary" onClick={nuevaVenta} className="mt-6 w-full">
+            Nueva venta
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   // --- Pantalla de confirmación ---
@@ -556,6 +713,7 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
       />
 
       <Hoja>
+        <AvisoSinConexion />
         {/* Dos columnas en escritorio: el ticket a la izquierda y el cobro
             siempre a la vista a la derecha. Antes todo iba en una columna
             angosta al medio, con media pantalla vacía. */}
@@ -747,17 +905,44 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
  */
 function VentaConCaja() {
   const { token } = useAuth();
+  const { sinConexion, ultimaCaja, marcarSinConexion, recordarCaja, actualizarCatalogo } =
+    useSinConexion();
   const [caja, setCaja] = useState<TurnoCaja | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
 
+  // Por ref: la caja guardada se lee después de que falla el pedido.
+  const ultimaCajaRef = useRef(ultimaCaja);
+  useEffect(() => {
+    ultimaCajaRef.current = ultimaCaja;
+  }, [ultimaCaja]);
+
+  // Sin conexión se sigue con la caja como se vio la última vez, y con el
+  // catálogo guardado.
   function cargar() {
     if (!token) return;
     setError(null);
     obtenerCajaActual(token)
-      .then(setCaja)
-      .catch((err) =>
-        setError(err instanceof ApiError ? err.message : 'No se pudo revisar la caja'),
-      );
+      .then((turno) => {
+        setCaja(turno);
+        recordarCaja(turno);
+        marcarSinConexion(false);
+        // Con conexión, el catálogo guardado se pone al día.
+        void actualizarCatalogo();
+      })
+      .catch((err) => {
+        if (esFaltaDeConexion(err)) {
+          marcarSinConexion(true);
+          if (ultimaCajaRef.current !== undefined) {
+            setCaja(ultimaCajaRef.current);
+            return;
+          }
+          setError(
+            'Sin conexión, y todavía no se sabe si tu caja está abierta. Conéctate una vez para empezar.',
+          );
+          return;
+        }
+        setError(err instanceof ApiError ? err.message : 'No se pudo revisar la caja');
+      });
   }
 
   useEffect(() => {
@@ -766,7 +951,25 @@ function VentaConCaja() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  if (caja) return <ContenidoVenta onCajaCerrada={() => setCaja(null)} />;
+  // Si se cortó antes de saber cómo está la caja, al leer la guardada se usa.
+  useEffect(() => {
+    if (sinConexion && caja === undefined && ultimaCaja !== undefined) {
+      /* eslint-disable react-hooks/set-state-in-effect */
+      setCaja(ultimaCaja);
+      setError(null);
+      /* eslint-enable react-hooks/set-state-in-effect */
+    }
+  }, [sinConexion, caja, ultimaCaja]);
+
+  if (caja)
+    return (
+      <ContenidoVenta
+        onCajaCerrada={() => {
+          setCaja(null);
+          recordarCaja(null);
+        }}
+      />
+    );
 
   return (
     <div>
@@ -789,7 +992,15 @@ function VentaConCaja() {
             </ErrorState>
           )}
           {caja === undefined && !error && <LoadingState label="Revisando la caja…" />}
-          {caja === null && <FormularioAbrirCaja onAbierta={setCaja} />}
+          {caja === null && (
+            <FormularioAbrirCaja
+              onAbierta={(turno) => {
+                setCaja(turno);
+                recordarCaja(turno);
+                void actualizarCatalogo();
+              }}
+            />
+          )}
         </div>
       </Hoja>
     </div>

@@ -11,6 +11,8 @@ import { colores, espaciado, radios } from '../theme/colores';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { HAY_SOPORTE, MOSTRAR_SUSCRIPCION } from '../lib/config-app';
 import { useSinConexion } from '../lib/sin-conexion';
+import { HojaModal } from '../components/hoja-modal';
+import { ConfiguracionDosPasos } from '../components/dos-pasos';
 
 const ETIQUETAS_PLAN: Record<NonNullable<Perfil['plan']>, string> = {
   gratuito: 'Gratis',
@@ -45,6 +47,7 @@ export function PerfilScreen() {
   const [perfil, setPerfil] = useState<Perfil | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viendoDosPasos, setViendoDosPasos] = useState(false);
 
   const cargar = useCallback(() => {
     if (!token) return;
@@ -200,6 +203,12 @@ export function PerfilScreen() {
             <Text style={styles.seccionTitulo}>Seguridad</Text>
             <Tarjeta style={styles.grupoOpciones}>
               <FilaOpcion
+                icono="lock-closed-outline"
+                titulo={`Verificación en dos pasos · ${perfil.dosPasos ? 'activada' : 'desactivada'}`}
+                onPress={() => setViendoDosPasos(true)}
+              />
+              <View style={styles.separador} />
+              <FilaOpcion
                 icono="phone-portrait-outline"
                 titulo="Cerrar sesión en todos mis dispositivos"
                 onPress={confirmarCierreEnTodos}
@@ -212,6 +221,17 @@ export function PerfilScreen() {
           </>
         )}
       </ScrollView>
+
+      {viendoDosPasos && (
+        <HojaModal
+          titulo="Verificación en dos pasos"
+          descripcion="Un código de tu celular, además de la contraseña."
+          icono="lock-closed-outline"
+          onCerrar={() => setViendoDosPasos(false)}
+        >
+          <ConfiguracionDosPasos onCambio={cargar} />
+        </HojaModal>
+      )}
     </SafeAreaView>
   );
 }

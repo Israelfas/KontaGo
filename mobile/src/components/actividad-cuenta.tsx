@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../lib/auth-context';
-import { ApiError, cerrarSesionesDe, obtenerActividad } from '../lib/api';
+import { ApiError, cerrarSesionesDe, obtenerActividad, quitarDosPasos } from '../lib/api';
 import { EVENTOS, haceCuanto, type ActividadDeCuenta } from '../lib/actividad';
 import type { UsuarioEquipo } from '../lib/tipos';
 import { Boton, EstadoCargando, Etiqueta } from './ui';
@@ -19,15 +19,50 @@ export function ActividadDeLaCuenta({
   persona,
   esVos,
   onSesionesCerradas,
+  onCambio,
 }: {
   persona: UsuarioEquipo;
   esVos: boolean;
   onSesionesCerradas: () => void;
+  /** La persona cambió (se le quitó la verificación en dos pasos). */
+  onCambio?: (actualizada: UsuarioEquipo) => void;
 }) {
   const { token, cerrarSesion } = useAuth();
   const { cerrar } = useHoja();
   const [actividad, setActividad] = useState<ActividadDeCuenta | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dosPasos, setDosPasos] = useState(persona.dosPasos);
+  const [quitando, setQuitando] = useState(false);
+
+  // Perdió el celular y los códigos de recuperación: entra con su
+  // contraseña y la vuelve a activar.
+  function confirmarQuitar() {
+    Alert.alert(
+      'Quitar la verificación',
+      `${persona.nombre} va a poder entrar solo con su contraseña hasta que la vuelva a activar. Hazlo solo si perdió el celular y sus códigos de recuperación.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Quitarla',
+          style: 'destructive',
+          onPress: async () => {
+            if (!token) return;
+            setQuitando(true);
+            try {
+              const actualizada = await quitarDosPasos(token, persona.id);
+              vibrar.exito();
+              setDosPasos(false);
+              onCambio?.(actualizada);
+            } catch (err) {
+              setError(err instanceof ApiError ? err.message : 'No se pudo quitar la verificación');
+            } finally {
+              setQuitando(false);
+            }
+          },
+        },
+      ],
+    );
+  }
   const [confirmando, setConfirmando] = useState(false);
   const [cerrando, setCerrando] = useState(false);
   // Intentos sospechosos de la última semana, contados al llegar los datos.
@@ -107,6 +142,18 @@ export function ActividadDeLaCuenta({
               </Text>
             </View>
           ))}
+        </View>
+      )}
+
+      {!esVos && dosPasos && (
+        <View style={styles.dosPasos}>
+          <Text style={styles.dosPasosTexto}>
+            <Text style={{ fontWeight: '700' }}>Verificación en dos pasos activada.</Text> Si
+            perdió el celular y sus códigos de recuperación, se la puedes quitar.
+          </Text>
+          <Boton variante="secondary" onPress={confirmarQuitar} cargando={quitando}>
+            Quitar la verificación
+          </Boton>
         </View>
       )}
 
@@ -227,6 +274,15 @@ const styles = StyleSheet.create({
   punto: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },
   eventoTexto: { fontSize: 14, color: colores.tinta },
   eventoAlerta: { color: colores.rojoPerdida, fontWeight: '600' },
+  dosPasos: {
+    borderWidth: 1,
+    borderColor: colores.papelLinea,
+    borderRadius: radios.md,
+    padding: espaciado.sm + 4,
+    gap: espaciado.sm,
+    marginBottom: espaciado.sm,
+  },
+  dosPasosTexto: { fontSize: 13, lineHeight: 19, color: colores.tinta },
   confirmacion: {
     fontSize: 13,
     lineHeight: 18,

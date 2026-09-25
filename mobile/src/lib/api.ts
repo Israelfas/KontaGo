@@ -224,8 +224,21 @@ function parsearOFallar<T>(texto: string, statusCode: number): T {
 
 // --- Auth ---
 
-export function login(email: string, password: string): Promise<TokenPair> {
-  return apiFetch<TokenPair>('/auth/login', {
+/**
+ * La cuenta tiene la verificación en dos pasos: la contraseña (o Google)
+ * estuvo bien, falta el código. El desafío dura unos minutos.
+ */
+export interface DesafioDosPasos {
+  requiereCodigo: true;
+  desafio: string;
+}
+
+export type RespuestaIngreso = TokenPair | DesafioDosPasos;
+
+export const pideCodigo = (r: RespuestaIngreso): r is DesafioDosPasos => 'requiereCodigo' in r;
+
+export function login(email: string, password: string): Promise<RespuestaIngreso> {
+  return apiFetch<RespuestaIngreso>('/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });
@@ -257,8 +270,8 @@ export function registrar(dto: RegistroInput): Promise<TokenPair> {
 
 // Puente con Clerk: manda el token de sesión de Clerk y recibe el JWT
 // propio de KontaGo.
-export function loginConClerk(clerkToken: string): Promise<TokenPair> {
-  return apiFetch<TokenPair>('/auth/clerk', {
+export function loginConClerk(clerkToken: string): Promise<RespuestaIngreso> {
+  return apiFetch<RespuestaIngreso>('/auth/clerk', {
     method: 'POST',
     body: JSON.stringify({ clerkToken }),
   });
@@ -287,6 +300,57 @@ export interface Perfil {
   rol: 'admin' | 'cajero';
   tienda: string | null;
   plan: 'gratuito' | 'pago' | 'enterprise' | null;
+  dosPasos: boolean;
+}
+
+// --- Verificación en dos pasos ---
+
+/** Segundo paso del ingreso: el código de la app o uno de recuperación. */
+export function ingresarConCodigo(desafio: string, codigo: string): Promise<TokenPair> {
+  return apiFetch<TokenPair>('/auth/login/codigo', {
+    method: 'POST',
+    body: JSON.stringify({ desafio, codigo }),
+  });
+}
+
+export interface EstadoDosPasos {
+  activa: boolean;
+  desde: string | null;
+  codigosRestantes: number;
+}
+
+export function obtenerDosPasos(token: string): Promise<EstadoDosPasos> {
+  return apiFetch<EstadoDosPasos>('/auth/dos-pasos', { token });
+}
+
+/** Un secreto nuevo para cargar en la app autenticadora (queda pendiente). */
+export function iniciarDosPasos(token: string): Promise<{ secreto: string; enlace: string }> {
+  return apiFetch('/auth/dos-pasos/iniciar', { method: 'POST', token });
+}
+
+/** Con un código de la app queda activada; los de recuperación se ven una sola vez. */
+export function activarDosPasos(
+  token: string,
+  codigo: string,
+): Promise<{ codigosRecuperacion: string[] }> {
+  return apiFetch('/auth/dos-pasos/activar', {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ codigo }),
+  });
+}
+
+export function desactivarDosPasos(token: string, codigo: string): Promise<void> {
+  return apiFetch<void>('/auth/dos-pasos/desactivar', {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ codigo }),
+  });
+}
+
+/** El admin se la quita a alguien del equipo que perdió el celular. */
+export function quitarDosPasos(token: string, id: string): Promise<UsuarioEquipo> {
+  return apiFetch<UsuarioEquipo>(`/usuarios/${id}/dos-pasos/quitar`, { method: 'PATCH', token });
 }
 
 export function obtenerPerfil(token: string): Promise<Perfil> {

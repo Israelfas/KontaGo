@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Space_Grotesk, Inter, IBM_Plex_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { AuthProvider } from "@/lib/auth-context";
+import { SinConexionProvider } from "@/lib/sin-conexion";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -45,7 +46,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           signUpFallbackRedirectUrl="/clerk-bridge"
           afterSignOutUrl="/login"
         >
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            <SinConexionProvider>{children}</SinConexionProvider>
+          </AuthProvider>
         </ClerkProvider>
       </body>
     </html>

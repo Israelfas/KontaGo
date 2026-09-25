@@ -13,7 +13,6 @@ import type {
   Tienda,
   TipoMovimientoCaja,
   TipoMovimientoInventario,
-  TokenPair,
   TurnoCaja,
   UsuarioEquipo,
   Venta,
@@ -45,6 +44,34 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * No hubo conexión (o no respondió a tiempo): el pedido no llegó al
+ * servidor, o no se sabe si llegó. La caja lo usa para seguir vendiendo
+ * sin internet.
+ */
+export class SinConexionError extends Error {
+  constructor() {
+    super('Sin conexión a internet.');
+    this.name = 'SinConexionError';
+  }
+}
+
+/**
+ * El servidor respondió bien pero la respuesta llegó cortada: lo pedido SÍ
+ * se hizo, solo que no se sabe el resultado. Una venta con clave se puede
+ * mandar de nuevo sin riesgo (el servidor devuelve la misma).
+ */
+export class RespuestaIncompletaError extends ApiError {}
+
+/** fetch, pero sin red avisa con SinConexionError (y no un TypeError suelto). */
+async function pedir(url: string, opciones: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, opciones);
+  } catch {
+    throw new SinConexionError();
+  }
+}
+
 // El accessToken dura 15 min. Cuando vence, el backend responde 401 y
 // acá se pide uno nuevo con el refreshToken (lo resuelve auth-context,
 // que es quien guarda la sesión) y se repite la petición una vez. Así
@@ -69,27 +96,40 @@ function refrescarUnaVez(): Promise<string | null> {
   return refrescoEnCurso;
 }
 
+interface OpcionesDePedido extends RequestInit {
+  token?: string;
+  /**
+   * Pedido de sesión (entrar, renovar, salir): la renovación viaja en una
+   * cookie httpOnly que ningún script puede leer. El backend la usa solo si
+   * el pedido dice X-Cliente: web.
+   */
+  conCookie?: boolean;
+}
+
 /**
  * El pedido con el token y la base URL. Si el token venció (401), renueva
  * la sesión y reintenta una vez. Lo usan apiFetch (JSON) y las descargas.
  */
 async function pedirConSesion(
   path: string,
-  options: RequestInit & { token?: string } = {},
+  options: OpcionesDePedido = {},
 ): Promise<{ response: Response; fetchOptions: RequestInit }> {
-  const { token, headers, ...resto } = options;
+  const { token, headers, conCookie, ...resto } = options;
 
   const construirOpciones = (tokenActual?: string): RequestInit => ({
     ...resto,
+    // La cookie de la sesión solo viaja en los pedidos de sesión.
+    ...(conCookie ? { credentials: 'include' as const } : {}),
     headers: {
       'Content-Type': 'application/json',
+      ...(conCookie ? { 'X-Cliente': 'web' } : {}),
       ...(tokenActual ? { Authorization: `Bearer ${tokenActual}` } : {}),
       ...headers,
     },
   });
 
   let fetchOptions = construirOpciones(token);
-  let response = await fetch(`${API_URL}${path}`, fetchOptions);
+  let response = await pedir(`${API_URL}${path}`, fetchOptions);
 
   // Reintentar tras un 401 es seguro incluso en POST: el guard JWT
   // rechaza la petición antes de que el controller haga nada.
@@ -97,7 +137,7 @@ async function pedirConSesion(
     const nuevoToken = await refrescarUnaVez();
     if (nuevoToken) {
       fetchOptions = construirOpciones(nuevoToken);
-      response = await fetch(`${API_URL}${path}`, fetchOptions);
+      response = await pedir(`${API_URL}${path}`, fetchOptions);
     }
   }
   return { response, fetchOptions };
@@ -117,10 +157,7 @@ async function errorDeLaRespuesta(response: Response): Promise<ApiError> {
  * así el manejo de errores, el header de auth y la base URL están en un
  * solo lugar.
  */
-async function apiFetch<T>(
-  path: string,
-  options: RequestInit & { token?: string } = {},
-): Promise<T> {
+async function apiFetch<T>(path: string, options: OpcionesDePedido = {}): Promise<T> {
   const { response, fetchOptions } = await pedirConSesion(path, options);
 
   if (!response.ok) throw await errorDeLaRespuesta(response);
@@ -150,7 +187,7 @@ async function apiFetch<T>(
     // barras único, un 409 confuso sobre algo que en realidad sí
     // funcionó la primera vez. Mejor avisar y dejar que la persona
     // confirme mirando la lista, que resubmitir a ciegas.
-    throw new ApiError(
+    throw new RespuestaIncompletaError(
       'Es posible que esto sí se haya guardado, pero no pudimos confirmarlo por un corte de conexión. Revisa la lista antes de intentar de nuevo.',
       response.status,
     );
@@ -159,7 +196,7 @@ async function apiFetch<T>(
   // Para GET (leer datos) reintentar es seguro: no hay efecto secundario
   // que duplicar. Si el segundo intento también llega vacío, ahí sí lo
   // tratamos como falla real en vez de inventar un resultado.
-  const reintento = await fetch(`${API_URL}${path}`, fetchOptions);
+  const reintento = await pedir(`${API_URL}${path}`, fetchOptions);
   if (!reintento.ok) {
     throw new ApiError(`Error ${reintento.status}`, reintento.status);
   }
@@ -183,35 +220,60 @@ function parsearOFallar<T>(texto: string, statusCode: number): T {
 
 // --- Auth ---
 
-export function login(email: string, password: string): Promise<TokenPair> {
-  return apiFetch<TokenPair>('/auth/login', {
+/**
+ * La cuenta tiene la verificación en dos pasos: la contraseña (o Google)
+ * estuvo bien, falta el código. El desafío dura unos minutos.
+ */
+export interface DesafioDosPasos {
+  requiereCodigo: true;
+  desafio: string;
+}
+
+/**
+ * Lo que recibe la web al entrar: solo el token de acceso (dura minutos y
+ * vive en memoria). El de renovación queda en una cookie httpOnly.
+ */
+export interface SesionWeb {
+  accessToken: string;
+}
+
+export type RespuestaIngreso = SesionWeb | DesafioDosPasos;
+
+export const pideCodigo = (r: RespuestaIngreso): r is DesafioDosPasos => 'requiereCodigo' in r;
+
+export function login(email: string, password: string): Promise<RespuestaIngreso> {
+  return apiFetch<RespuestaIngreso>('/auth/login', {
     method: 'POST',
+    conCookie: true,
     body: JSON.stringify({ email, password }),
   });
 }
 
-export function loginConClerk(clerkToken: string): Promise<TokenPair> {
-  return apiFetch<TokenPair>('/auth/clerk', {
+export function loginConClerk(clerkToken: string): Promise<RespuestaIngreso> {
+  return apiFetch<RespuestaIngreso>('/auth/clerk', {
     method: 'POST',
+    conCookie: true,
     body: JSON.stringify({ clerkToken }),
   });
 }
 
-export function refrescarSesion(refreshToken: string): Promise<TokenPair> {
-  return apiFetch<TokenPair>('/auth/refresh', {
+/**
+ * Renueva el token de acceso con la cookie. `tokenViejo`: el que quedaba en
+ * el navegador de antes de la cookie; se canjea una vez y pasa a la cookie.
+ */
+export function refrescarSesion(tokenViejo?: string): Promise<SesionWeb> {
+  return apiFetch<SesionWeb>('/auth/refresh', {
     method: 'POST',
-    body: JSON.stringify({ refreshToken }),
+    conCookie: true,
+    body: JSON.stringify(tokenViejo ? { refreshToken: tokenViejo } : {}),
   });
 }
 
 // Cierra la sesión en el servidor: el refreshToken y el accessToken dejan
 // de servir (si alguien los copió, tampoco le sirven). Nunca falla del
 // lado del backend (204), pero sin conexión sí: el que llama lo ignora.
-export function cerrarSesionEnServidor(refreshToken: string): Promise<void> {
-  return apiFetch<void>('/auth/logout', {
-    method: 'POST',
-    body: JSON.stringify({ refreshToken }),
-  });
+export function cerrarSesionEnServidor(): Promise<void> {
+  return apiFetch<void>('/auth/logout', { method: 'POST', conCookie: true, body: '{}' });
 }
 
 export interface RegistroInput {
@@ -223,9 +285,10 @@ export interface RegistroInput {
   moneda?: string;
 }
 
-export function registrar(dto: RegistroInput): Promise<TokenPair> {
-  return apiFetch<TokenPair>('/auth/registro', {
+export function registrar(dto: RegistroInput): Promise<SesionWeb> {
+  return apiFetch<SesionWeb>('/auth/registro', {
     method: 'POST',
+    conCookie: true,
     body: JSON.stringify(dto),
   });
 }
@@ -262,6 +325,7 @@ export interface Perfil {
   rol: 'admin' | 'cajero';
   tienda: string | null;
   plan: 'gratuito' | 'pago' | 'enterprise' | null;
+  dosPasos: boolean;
 }
 
 export function obtenerPerfil(token: string): Promise<Perfil> {
@@ -379,17 +443,25 @@ export function listarProductosDadosDeBaja(token: string): Promise<Producto[]> {
 
 // null = el código no está en el catálogo (el backend responde 404), para
 // que la caja ofrezca darlo de alta en vez de mostrar un error.
+// Con red lenta no se queda esperando: pasado el límite avisa
+// SinConexionError y la caja busca en el catálogo guardado.
 export async function buscarPorCodigoBarras(
   token: string,
   codigoBarras: string,
+  limiteMs = 5_000,
 ): Promise<Producto | null> {
+  const control = new AbortController();
+  const reloj = setTimeout(() => control.abort(), limiteMs);
   try {
     return await apiFetch<Producto>(`/productos/escanear/${encodeURIComponent(codigoBarras)}`, {
       token,
+      signal: control.signal,
     });
   } catch (err) {
     if (err instanceof ApiError && err.statusCode === 404) return null;
     throw err;
+  } finally {
+    clearTimeout(reloj);
   }
 }
 
@@ -400,14 +472,26 @@ export interface CrearVentaInput {
   metodoPago: MetodoPago;
   // Solo en efectivo (en transferencia se paga el total exacto).
   montoRecibidoCentavos?: number;
+  // La genera el navegador: si la venta llega dos veces, se cobra una.
+  claveIdempotencia?: string;
+  // Cuándo se cobró, si se manda después (se hizo sin conexión).
+  vendidaEn?: string;
 }
 
-export function crearVenta(token: string, dto: CrearVentaInput): Promise<Venta> {
+/**
+ * Registra una venta. Con red lenta no espera para siempre: pasado el
+ * límite avisa SinConexionError y la caja la guarda para mandarla
+ * después (con la clave, si al final sí llegó, no se duplica).
+ */
+export function crearVenta(token: string, dto: CrearVentaInput, limiteMs = 12_000): Promise<Venta> {
+  const control = new AbortController();
+  const reloj = setTimeout(() => control.abort(), limiteMs);
   return apiFetch<Venta>('/ventas', {
     method: 'POST',
     token,
     body: JSON.stringify(dto),
-  });
+    signal: control.signal,
+  }).finally(() => clearTimeout(reloj));
 }
 
 export function obtenerVentasDeHoy(token: string): Promise<VentaDelHistorial[]> {
@@ -645,6 +729,57 @@ export function obtenerResumenInventario(
   return apiFetch<ResumenInventarioPeriodo>(`/inventario/resumen?${q}`, { token });
 }
 
+// --- Verificación en dos pasos ---
+
+/** Segundo paso del ingreso: el código de la app o uno de recuperación. */
+export function ingresarConCodigo(desafio: string, codigo: string): Promise<SesionWeb> {
+  return apiFetch<SesionWeb>('/auth/login/codigo', {
+    method: 'POST',
+    conCookie: true,
+    body: JSON.stringify({ desafio, codigo }),
+  });
+}
+
+export interface EstadoDosPasos {
+  activa: boolean;
+  desde: string | null;
+  codigosRestantes: number;
+}
+
+export function obtenerDosPasos(token: string): Promise<EstadoDosPasos> {
+  return apiFetch<EstadoDosPasos>('/auth/dos-pasos', { token });
+}
+
+/** Un secreto nuevo para cargar en la app autenticadora (queda pendiente). */
+export function iniciarDosPasos(token: string): Promise<{ secreto: string; enlace: string }> {
+  return apiFetch('/auth/dos-pasos/iniciar', { method: 'POST', token });
+}
+
+/** Con un código de la app queda activada; los de recuperación se ven una sola vez. */
+export function activarDosPasos(
+  token: string,
+  codigo: string,
+): Promise<{ codigosRecuperacion: string[] }> {
+  return apiFetch('/auth/dos-pasos/activar', {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ codigo }),
+  });
+}
+
+export function desactivarDosPasos(token: string, codigo: string): Promise<void> {
+  return apiFetch<void>('/auth/dos-pasos/desactivar', {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ codigo }),
+  });
+}
+
+/** El admin se la quita a alguien del equipo que perdió el celular. */
+export function quitarDosPasos(token: string, id: string): Promise<UsuarioEquipo> {
+  return apiFetch<UsuarioEquipo>(`/usuarios/${id}/dos-pasos/quitar`, { method: 'PATCH', token });
+}
+
 // --- Reporte en Excel (solo admin) ---
 
 /**
@@ -682,5 +817,6 @@ export function desbloquearUsuario(token: string, id: string): Promise<UsuarioEq
 
 /** Cierra la sesión propia en todos los dispositivos (también este). */
 export function cerrarMisSesiones(token: string): Promise<void> {
-  return apiFetch<void>('/auth/cerrar-sesiones', { method: 'POST', token });
+  // Con la cookie: el backend también la borra.
+  return apiFetch<void>('/auth/cerrar-sesiones', { method: 'POST', token, conCookie: true });
 }

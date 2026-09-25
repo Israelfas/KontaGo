@@ -1,0 +1,47 @@
+# Lo que NO se sube a Expo (EAS) al armar la app. Reemplaza al .gitignore
+# para las compilaciones, así que repite lo que nunca tiene que salir de la
+# PC. La app solo necesita mobile/: el resto del monorepo pesaba cientos de
+# MB de subida en cada compilación.
+
+# El resto del monorepo
+/backend/
+/web/
+/docs/
+/.github/
+/.qodo/
+/.claude/
+docker-compose.yml
+
+# Dependencias y cachés (EAS las instala de nuevo)
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+
+# Claves y configuración local: las variables van en los entornos de EAS
+.env
+.env.*
+!.env.example
+
+# Carpetas nativas: EAS las genera desde app.json (íconos, permisos, plugins)
+/mobile/ios/
+/mobile/android/
+expo-env.d.ts
+.kotlin/
+*.tsbuildinfo
+.metro-health-check*
+
+# Credenciales de firma (viven en EAS)
+*.pem
+*.jks
+*.keystore
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Otros
+.DS_Store
+CLAUDE.md
+AGENTS.md

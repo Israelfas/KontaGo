@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { useSinConexion } from '@/lib/sin-conexion';
 import { ApiError, cerrarMisSesiones } from '@/lib/api';
+import { Ventana } from './ventana';
+import { ConfiguracionDosPasos } from './dos-pasos';
+import { LockIcon } from './icons';
 
 /**
  * El menú de la cuenta, arriba a la derecha: quién está adentro y cómo
@@ -23,10 +27,14 @@ export function MenuCuenta({
   rol: 'admin' | 'cajero' | undefined;
 }) {
   const { token, cerrarSesion } = useAuth();
+  const { pendientes } = useSinConexion();
   const [abierto, setAbierto] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
   const [cerrando, setCerrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // La ventana de la verificación en dos pasos (vive fuera del menú: el
+  // menú se cierra al abrirla).
+  const [dosPasos, setDosPasos] = useState(false);
   const raizRef = useRef<HTMLDivElement>(null);
   const botonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -149,6 +157,16 @@ export function MenuCuenta({
                 <button
                   type="button"
                   className="menu-cuenta-opcion"
+                  onClick={() => {
+                    cerrar(false);
+                    setDosPasos(true);
+                  }}
+                >
+                  Verificación en dos pasos
+                </button>
+                <button
+                  type="button"
+                  className="menu-cuenta-opcion"
                   onClick={() => setConfirmando(true)}
                 >
                   Cerrar sesión en todos mis dispositivos
@@ -157,6 +175,15 @@ export function MenuCuenta({
                   type="button"
                   className="menu-cuenta-opcion text-rojo-perdida"
                   onClick={() => {
+                    const n = pendientes.length;
+                    if (
+                      n > 0 &&
+                      !window.confirm(
+                        `Tienes ${n === 1 ? 'una venta cobrada' : `${n} ventas cobradas`} sin conexión que todavía no se ${n === 1 ? 'envió' : 'enviaron'}. Quedan guardadas en este navegador y se envían cuando vuelvas a entrar con tu cuenta. ¿Salir igual?`,
+                      )
+                    ) {
+                      return;
+                    }
                     cerrar(false);
                     void cerrarSesion();
                   }}
@@ -167,6 +194,17 @@ export function MenuCuenta({
             )}
           </div>
         </div>
+      )}
+
+      {dosPasos && (
+        <Ventana
+          titulo="Verificación en dos pasos"
+          descripcion="Un código de tu celular, además de la contraseña."
+          icono={<LockIcon className="h-5 w-5" />}
+          onCerrar={() => setDosPasos(false)}
+        >
+          <ConfiguracionDosPasos />
+        </Ventana>
       )}
     </div>
   );

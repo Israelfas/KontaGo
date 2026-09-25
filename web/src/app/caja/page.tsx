@@ -16,6 +16,7 @@ import {
   ResultadoArqueo,
 } from '@/components/caja';
 import { useAuth } from '@/lib/auth-context';
+import { useSinConexion } from '@/lib/sin-conexion';
 import { listarTurnosCaja, obtenerCajaActual, ApiError } from '@/lib/api';
 import { formatearCentavos } from '@/lib/formato';
 import { horaDe, textoDiferencia, tonoDiferencia } from '@/lib/caja';
@@ -225,6 +226,10 @@ function CajasDelEquipo({ usuarioId, version }: { usuarioId: string; version: nu
 function ContenidoCaja() {
   const { token, usuario } = useAuth();
   const esAdmin = usuario?.rol === 'admin';
+  // Las ventas cobradas sin conexión son de esta caja: hasta que lleguen,
+  // cerrarla dejaría el arqueo corto.
+  const { pendientes, recordarCaja } = useSinConexion();
+  const sinEnviar = pendientes.length;
   const [turno, setTurno] = useState<TurnoCaja | null | undefined>(undefined);
   const [cierre, setCierre] = useState<TurnoCaja | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -236,7 +241,10 @@ function ContenidoCaja() {
     if (!token) return;
     setError(null);
     obtenerCajaActual(token)
-      .then(setTurno)
+      .then((t) => {
+        setTurno(t);
+        recordarCaja(t);
+      })
       .catch((err) =>
         setError(err instanceof ApiError ? err.message : 'No se pudo cargar la caja'),
       );
@@ -250,6 +258,7 @@ function ContenidoCaja() {
 
   function actualizar(t: TurnoCaja) {
     setTurno(t);
+    recordarCaja(t);
     setVersion((v) => v + 1);
   }
 
@@ -368,8 +377,8 @@ function ContenidoCaja() {
                 </div>
                 {turno!.movimientos.length === 0 && (
                   <p className="mt-2 text-sm text-tinta-suave">
-                    Si pagas algo con dinero del cajón o traes más cambio, regístralo aquí para que la
-                    caja cuadre.
+                    Si pagas algo con dinero del cajón o traes más cambio, regístralo aquí para que
+                    la caja cuadre.
                   </p>
                 )}
                 <div className="mt-2">
@@ -377,8 +386,17 @@ function ContenidoCaja() {
                 </div>
               </section>
 
-              <div className="flex justify-center">
-                <Button variant="primary" onClick={() => setAccion('cerrar')}>
+              <div className="flex flex-col items-center gap-2">
+                {sinEnviar > 0 && (
+                  <p className="max-w-md text-center text-sm text-tinta-suave">
+                    {`Antes de cerrar hay que enviar ${sinEnviar === 1 ? 'la venta cobrada' : `las ${sinEnviar} ventas cobradas`} sin conexión (se envían solas al volver internet; las que tengan problema, revísalas en Vender).`}
+                  </p>
+                )}
+                <Button
+                  variant="primary"
+                  onClick={() => setAccion('cerrar')}
+                  disabled={sinEnviar > 0}
+                >
                   Cerrar la caja
                 </Button>
               </div>
@@ -409,6 +427,7 @@ function ContenidoCaja() {
                 onCerrado={(t) => {
                   setCierre(t);
                   setTurno(null);
+                  recordarCaja(null);
                   setVersion((v) => v + 1);
                 }}
               />

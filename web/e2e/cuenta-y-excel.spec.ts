@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { API, entrarComo, tokensDe } from './ayudas';
+import { API, entrarComo, ponerCookieDeSesion, tokensDe } from './ayudas';
 
 const CLAVE = 'una frase segura';
 
@@ -63,11 +63,7 @@ test.describe('Menú de la cuenta', () => {
     const aca = await entrar();
     const otro = await entrar();
 
-    await page.goto('/login');
-    await page.evaluate(({ accessToken, refreshToken }) => {
-      localStorage.setItem('kontago.accessToken', accessToken);
-      localStorage.setItem('kontago.refreshToken', refreshToken);
-    }, aca);
+    await ponerCookieDeSesion(page.context(), aca.refreshToken);
     await page.goto('/ventas');
     await page.getByRole('button', { name: /Tu cuenta: Marta Cajera/ }).click();
     await page.getByRole('button', { name: 'Cerrar sesión en todos mis dispositivos' }).click();

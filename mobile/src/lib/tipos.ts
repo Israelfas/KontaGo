@@ -41,6 +41,8 @@ export interface UsuarioEquipo {
   createdAt: string;
   // Bloqueada por intentos fallidos hasta esta hora (null si no lo está).
   bloqueadoHasta: string | null;
+  // Usa la verificación en dos pasos.
+  dosPasos: boolean;
   // Solo viene en la lista del equipo.
   ultimoIngreso?: string | null;
 }

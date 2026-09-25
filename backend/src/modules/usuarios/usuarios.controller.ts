@@ -78,6 +78,18 @@ export class UsuariosController {
     return this.usuariosService.desbloquear(user.tenantId, id);
   }
 
+  @Patch(':id/dos-pasos/quitar')
+  quitarDosPasos(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.usuariosService.quitarDosPasos(
+      user.tenantId,
+      user.usuarioId,
+      id,
+    );
+  }
+
   @Patch(':id/password')
   cambiarPassword(
     @CurrentUser() user: AuthenticatedUser,

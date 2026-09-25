@@ -1,20 +1,35 @@
 'use client';
 
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth as useClerkAuth } from '@clerk/nextjs';
 import * as api from './api';
-import type { RegistroInput } from './api';
-import type { TokenPair } from './tipos';
+import type { RegistroInput, SesionWeb } from './api';
 
-const STORAGE_KEY = 'kontago.accessToken';
-const REFRESH_STORAGE_KEY = 'kontago.refreshToken';
+// Dónde se guardaba la sesión antes de la cookie. Si quedó algo, se canjea
+// una vez por la cookie y se borra: nadie tiene que volver a entrar.
+const CLAVES_VIEJAS = ['kontago.accessToken', 'kontago.refreshToken'];
+
+function tokenViejo(): string | null {
+  try {
+    return localStorage.getItem('kontago.refreshToken');
+  } catch {
+    return null;
+  }
+}
+
+function borrarTokensViejos() {
+  try {
+    CLAVES_VIEJAS.forEach((clave) => localStorage.removeItem(clave));
+  } catch {
+    // Sin acceso al almacenamiento: no hay nada que borrar.
+  }
+}
+
+// Una sola renovación a la vez (varias pantallas con 401, el doble montaje
+// de React en desarrollo): dos con la misma cookie parecerían un token
+// robado y reusado.
+let renovacionEnCurso: Promise<string | null> | null = null;
 
 interface JwtPayload {
   sub: string;
@@ -42,8 +57,11 @@ interface AuthContextValue {
   token: string | null;
   usuario: JwtPayload | null;
   cargando: boolean;
-  iniciarSesion: (email: string, password: string) => Promise<void>;
-  completarLoginConClerk: (clerkToken: string) => Promise<void>;
+  // Devuelven el desafío si la cuenta pide el código de dos pasos (null
+  // si ya entró).
+  iniciarSesion: (email: string, password: string) => Promise<api.DesafioDosPasos | null>;
+  completarLoginConClerk: (clerkToken: string) => Promise<api.DesafioDosPasos | null>;
+  completarConCodigo: (desafio: string, codigo: string) => Promise<void>;
   registrarse: (dto: RegistroInput) => Promise<void>;
   cerrarSesion: () => void;
 }
@@ -56,63 +74,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { signOut: cerrarSesionDeClerk } = useClerkAuth();
 
+  /*
+   * La sesión de la web: el token de acceso (15 min) vive solo en memoria;
+   * el de renovación, en una cookie httpOnly que ningún script puede leer
+   * (ni uno inyectado por un ataque). Al abrir la página no hay token en
+   * memoria: se renueva con la cookie.
+   */
+
   // Único punto que renueva la sesión: lo usa api.ts cuando recibe un
-  // 401, y el arranque cuando el accessToken guardado ya venció. Devuelve
-  // el accessToken nuevo, o null si no se pudo renovar.
-  async function renovarSesion(): Promise<string | null> {
-    const refreshToken = localStorage.getItem(REFRESH_STORAGE_KEY);
-    if (!refreshToken) return null;
-    try {
-      const par = await api.refrescarSesion(refreshToken);
-      guardarSesion(par);
-      return par.accessToken;
-    } catch (err) {
-      // Solo un 401 significa "refresh vencido o usuario desactivado". Un
-      // corte de red no debe sacar a nadie de la sesión.
-      // Sin redirigir: RutaProtegida ya manda a /login si hace falta, y
-      // así una página pública no expulsa a nadie.
-      if (err instanceof api.ApiError && err.statusCode === 401) {
-        limpiarSesion();
-      }
-      return null;
+  // 401, y el arranque. Devuelve el accessToken nuevo, o null si no se
+  // pudo renovar.
+  function renovarSesion(): Promise<string | null> {
+    if (!renovacionEnCurso) {
+      renovacionEnCurso = (async () => {
+        try {
+          const { accessToken } = await api.refrescarSesion(tokenViejo() ?? undefined);
+          borrarTokensViejos();
+          setToken(accessToken);
+          return accessToken;
+        } catch (err) {
+          // Solo un 401 significa "sesión vencida o usuario desactivado". Un
+          // corte de red no debe sacar a nadie de la sesión.
+          // Sin redirigir: RutaProtegida ya manda a /login si hace falta, y
+          // así una página pública no expulsa a nadie.
+          if (err instanceof api.ApiError && err.statusCode === 401) {
+            borrarTokensViejos();
+            setToken(null);
+          }
+          return null;
+        }
+      })().finally(() => {
+        renovacionEnCurso = null;
+      });
     }
+    return renovacionEnCurso;
   }
 
   useEffect(() => {
     api.configurarRefrescoDeSesion(renovarSesion);
     return () => api.configurarRefrescoDeSesion(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Al montar, recuperamos la sesión guardada. Si el accessToken ya
-  // venció pero queda refreshToken, se renueva en vez de pedir login.
-  // localStorage no existe en el servidor, así que esto solo puede
-  // resolverse en un efecto — es el caso legítimo de "sincronizar estado
-  // inicial desde un sistema externo" que React recomienda.
+  // Al montar: la sesión sale de la cookie (el servidor la lee; acá no se
+  // puede). Es "sincronizar estado inicial desde un sistema externo".
   useEffect(() => {
-    const guardado = localStorage.getItem(STORAGE_KEY);
-    const payload = guardado ? decodificarPayload(guardado) : null;
-    if (guardado && payload && payload.exp * 1000 > Date.now()) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setToken(guardado);
-      setCargando(false);
-      return;
-    }
-    localStorage.removeItem(STORAGE_KEY);
     renovarSesion().finally(() => setCargando(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function guardarSesion({ accessToken, refreshToken }: TokenPair) {
-    localStorage.setItem(STORAGE_KEY, accessToken);
-    localStorage.setItem(REFRESH_STORAGE_KEY, refreshToken);
+  function entrar({ accessToken }: SesionWeb) {
+    borrarTokensViejos();
     setToken(accessToken);
+    router.push(rutaInicial(decodificarPayload(accessToken)?.rol));
   }
 
   async function iniciarSesion(email: string, password: string) {
-    const par = await api.login(email, password);
-    guardarSesion(par);
-    router.push(rutaInicial(decodificarPayload(par.accessToken)?.rol));
+    const respuesta = await api.login(email, password);
+    if (api.pideCodigo(respuesta)) return respuesta;
+    entrar(respuesta);
+    return null;
+  }
+
+  // Segundo paso, si la cuenta tiene la verificación en dos pasos.
+  async function completarConCodigo(desafio: string, codigo: string) {
+    entrar(await api.ingresarConCodigo(desafio, codigo));
   }
 
   // Puente con Clerk: Clerk ya autenticó a la persona (Google, etc.) del
@@ -120,32 +144,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // backend, que devuelve el MISMO tipo de token que iniciarSesion() —
   // de ahí en más es indistinguible de un login normal con contraseña.
   async function completarLoginConClerk(clerkToken: string) {
-    const par = await api.loginConClerk(clerkToken);
-    guardarSesion(par);
-    router.push(rutaInicial(decodificarPayload(par.accessToken)?.rol));
+    const respuesta = await api.loginConClerk(clerkToken);
+    if (api.pideCodigo(respuesta)) return respuesta;
+    entrar(respuesta);
+    return null;
   }
 
   async function registrarse(dto: RegistroInput) {
     // Quien se registra siempre es el admin de la tienda nueva.
-    guardarSesion(await api.registrar(dto));
+    const { accessToken } = await api.registrar(dto);
+    borrarTokensViejos();
+    setToken(accessToken);
     router.push('/dashboard');
-  }
-
-  function limpiarSesion() {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(REFRESH_STORAGE_KEY);
-    setToken(null);
   }
 
   // Cierra las DOS sesiones. Antes solo borraba el token de KontaGo, así
   // que la sesión de Clerk seguía viva: al tocar "Continuar con Google"
   // otra vez, entraba de una sin preguntar nada.
   async function cerrarSesion() {
-    // También en el servidor: si no, el refreshToken guardado seguiría
-    // sirviendo 7 días. Sin esperar: salir no depende de la conexión.
-    const refreshToken = localStorage.getItem(REFRESH_STORAGE_KEY);
-    if (refreshToken) api.cerrarSesionEnServidor(refreshToken).catch(() => {});
-    limpiarSesion();
+    // También en el servidor (y borra la cookie): si no, la sesión
+    // seguiría sirviendo 7 días. Sin esperar: salir no depende de la red.
+    api.cerrarSesionEnServidor().catch(() => {});
+    borrarTokensViejos();
+    setToken(null);
     try {
       await cerrarSesionDeClerk();
     } catch {
@@ -158,7 +179,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ token, usuario, cargando, iniciarSesion, completarLoginConClerk, registrarse, cerrarSesion }}
+      value={{
+        token,
+        usuario,
+        cargando,
+        iniciarSesion,
+        completarLoginConClerk,
+        completarConCodigo,
+        registrarse,
+        cerrarSesion,
+      }}
     >
       {children}
     </AuthContext.Provider>

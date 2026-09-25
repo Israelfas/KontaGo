@@ -58,9 +58,12 @@ interface AuthContextValue {
   token: string | null;
   usuario: JwtPayload | null;
   cargando: boolean;
-  iniciarSesion: (email: string, password: string) => Promise<void>;
+  // Devuelven el desafío si la cuenta pide el código de dos pasos (null
+  // si ya entró).
+  iniciarSesion: (email: string, password: string) => Promise<api.DesafioDosPasos | null>;
   registrarse: (dto: RegistroInput) => Promise<void>;
-  loginConClerk: (clerkToken: string) => Promise<void>;
+  loginConClerk: (clerkToken: string) => Promise<api.DesafioDosPasos | null>;
+  completarConCodigo: (desafio: string, codigo: string) => Promise<void>;
   cerrarSesion: () => Promise<void>;
 }
 
@@ -120,7 +123,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function iniciarSesion(email: string, password: string) {
-    await guardarSesion(await api.login(email, password));
+    const respuesta = await api.login(email, password);
+    if (api.pideCodigo(respuesta)) return respuesta;
+    await guardarSesion(respuesta);
+    return null;
+  }
+
+  // Segundo paso, si la cuenta tiene la verificación en dos pasos.
+  async function completarConCodigo(desafio: string, codigo: string) {
+    await guardarSesion(await api.ingresarConCodigo(desafio, codigo));
   }
 
   async function registrarse(dto: RegistroInput) {
@@ -128,7 +139,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function loginConClerk(clerkToken: string) {
-    await guardarSesion(await api.loginConClerk(clerkToken));
+    const respuesta = await api.loginConClerk(clerkToken);
+    if (api.pideCodigo(respuesta)) return respuesta;
+    await guardarSesion(respuesta);
+    return null;
   }
 
   // Cierra las DOS sesiones: si solo se borra el token de KontaGo, la
@@ -160,6 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         iniciarSesion,
         registrarse,
         loginConClerk,
+        completarConCodigo,
         cerrarSesion,
       }}
     >

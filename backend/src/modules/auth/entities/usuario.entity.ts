@@ -55,6 +55,54 @@ export class Usuario {
   })
   terminosAceptadosEn: Date | null;
 
+  // --- Verificación en dos pasos (ver auth/dos-pasos.service.ts) ---
+  // Los datos sensibles no se leen salvo que se pidan (select: false): así
+  // no se filtran por accidente en ninguna respuesta.
+
+  // null = no la usa. Con fecha, el login pide además el código.
+  @Column({
+    name: 'dos_pasos_activo_desde',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  dosPasosActivoDesde: Date | null;
+
+  // El secreto de la app autenticadora, cifrado.
+  @Column({
+    name: 'dos_pasos_secreto',
+    type: 'text',
+    nullable: true,
+    select: false,
+  })
+  dosPasosSecreto?: string | null;
+
+  // El que se está configurando, hasta que se confirma con un código.
+  @Column({
+    name: 'dos_pasos_pendiente',
+    type: 'text',
+    nullable: true,
+    select: false,
+  })
+  dosPasosPendiente?: string | null;
+
+  // El paso (de 30 s) del último código aceptado: no se acepta dos veces.
+  @Column({
+    name: 'dos_pasos_ultimo_paso',
+    type: 'integer',
+    nullable: true,
+    select: false,
+  })
+  dosPasosUltimoPaso?: number | null;
+
+  // Códigos de recuperación sin usar: solo su hash.
+  @Column({
+    name: 'dos_pasos_codigos',
+    type: 'jsonb',
+    nullable: true,
+    select: false,
+  })
+  dosPasosCodigos?: string[] | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

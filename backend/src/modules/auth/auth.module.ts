@@ -8,6 +8,7 @@ import { Sesion } from './entities/sesion.entity';
 import { RecuperacionPassword } from './entities/recuperacion-password.entity';
 import { EventoSeguridad } from './entities/evento-seguridad.entity';
 import { SeguridadService } from './seguridad.service';
+import { DosPasosService } from './dos-pasos.service';
 import { MailModule } from '../mail/mail.module';
 import { Tenant } from '../tenants/entities/tenant.entity';
 import { AuthController } from './auth.controller';
@@ -37,7 +38,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, SeguridadService],
-  exports: [AuthService, SeguridadService],
+  providers: [AuthService, JwtStrategy, SeguridadService, DosPasosService],
+  exports: [AuthService, SeguridadService, DosPasosService],
 })
 export class AuthModule {}

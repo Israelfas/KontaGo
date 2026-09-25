@@ -7,11 +7,25 @@ import {
   HttpStatus,
   Ip,
   Post,
+  Req,
+  Res,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { Request, Response } from 'express';
 import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { limiteDeIntentos } from '../../common/seguridad/limite-de-intentos';
-import { AuthService } from './auth.service';
+import { AuthService, type RespuestaIngreso } from './auth.service';
+import {
+  COOKIE_SESION,
+  borrarCookieDeSesion,
+  esClienteWeb,
+  guardarSesionEnCookie,
+  leerCookie,
+} from '../../common/seguridad/cookie-sesion';
+import { DosPasosService } from './dos-pasos.service';
+import { CodigoDosPasosDto, IngresoConCodigoDto } from './dto/dos-pasos.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegistroDto } from './dto/registro.dto';
 import { ClerkLoginDto } from './dto/clerk-login.dto';
@@ -31,34 +45,80 @@ import type { AuthenticatedUser } from './interfaces/jwt-payload.interface';
 @Controller('auth')
 @UseGuards(ThrottlerGuard)
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly dosPasos: DosPasosService,
+    private readonly config: ConfigService,
+  ) {}
 
   // De dónde vino el pedido, para el registro de eventos de seguridad.
   private contexto(ip: string, userAgent?: string): ContextoPedido {
     return { ip, userAgent: userAgent ?? null };
   }
 
+  // La cookie solo por https en producción (en la PC es http).
+  private get cookieSegura(): boolean {
+    return this.config.get<string>('nodeEnv') === 'production';
+  }
+
+  /**
+   * A la web, el token de renovación le llega en una cookie httpOnly (y
+   * no en el cuerpo, donde un script podría leerlo); a la app, como
+   * siempre. El desafío de la verificación en dos pasos no lleva tokens.
+   */
+  private entregar(
+    respuesta: RespuestaIngreso,
+    req: Request,
+    res: Response,
+  ): RespuestaIngreso | { accessToken: string } {
+    if (!esClienteWeb(req) || !('refreshToken' in respuesta)) return respuesta;
+    guardarSesionEnCookie(
+      res,
+      respuesta.refreshToken,
+      this.config.get<number>('jwt.refreshExpiresInSeconds')!,
+      this.cookieSegura,
+    );
+    return { accessToken: respuesta.accessToken };
+  }
+
+  /** El token de renovación: del cuerpo (app) o de la cookie (web). */
+  private refreshDe(dto: RefreshDto, req: Request): string | undefined {
+    return dto.refreshToken || leerCookie(req, COOKIE_SESION);
+  }
+
   @Post('registro')
   @HttpCode(HttpStatus.CREATED)
-  registrar(
+  async registrar(
     @Body() dto: RegistroDto,
     @Ip() ip: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
     @Headers('user-agent') userAgent?: string,
   ) {
-    return this.authService.registrar(dto, this.contexto(ip, userAgent));
+    return this.entregar(
+      await this.authService.registrar(dto, this.contexto(ip, userAgent)),
+      req,
+      res,
+    );
   }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  login(
+  async login(
     @Body() dto: LoginDto,
     @Ip() ip: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
     @Headers('user-agent') userAgent?: string,
   ) {
-    return this.authService.login(
-      dto.email,
-      dto.password,
-      this.contexto(ip, userAgent),
+    return this.entregar(
+      await this.authService.login(
+        dto.email,
+        dto.password,
+        this.contexto(ip, userAgent),
+      ),
+      req,
+      res,
     );
   }
 
@@ -114,14 +174,20 @@ export class AuthController {
    */
   @Post('clerk')
   @HttpCode(HttpStatus.OK)
-  loginConClerk(
+  async loginConClerk(
     @Body() dto: ClerkLoginDto,
     @Ip() ip: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
     @Headers('user-agent') userAgent?: string,
   ) {
-    return this.authService.loginConClerk(
-      dto.clerkToken,
-      this.contexto(ip, userAgent),
+    return this.entregar(
+      await this.authService.loginConClerk(
+        dto.clerkToken,
+        this.contexto(ip, userAgent),
+      ),
+      req,
+      res,
     );
   }
 
@@ -135,8 +201,26 @@ export class AuthController {
   @Post('refresh')
   @Throttle({ default: { limit: limiteDeIntentos(30), ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
-  refrescar(@Body() dto: RefreshDto) {
-    return this.authService.refrescar(dto.refreshToken);
+  async refrescar(
+    @Body() dto: RefreshDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const refreshToken = this.refreshDe(dto, req);
+    if (!refreshToken) {
+      throw new UnauthorizedException('Sesión vencida, inicia sesión de nuevo');
+    }
+    try {
+      return this.entregar(
+        await this.authService.refrescar(refreshToken),
+        req,
+        res,
+      );
+    } catch (err) {
+      // Una cookie que ya no sirve no tiene que quedar dando vueltas.
+      if (esClienteWeb(req)) borrarCookieDeSesion(res, this.cookieSegura);
+      throw err;
+    }
   }
 
   /**
@@ -150,10 +234,15 @@ export class AuthController {
   async cerrarSesion(
     @Body() dto: RefreshDto,
     @Ip() ip: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
     @Headers('user-agent') userAgent?: string,
   ) {
+    const refreshToken = this.refreshDe(dto, req);
+    if (esClienteWeb(req)) borrarCookieDeSesion(res, this.cookieSegura);
+    if (!refreshToken) return;
     await this.authService.cerrarSesion(
-      dto.refreshToken,
+      refreshToken,
       this.contexto(ip, userAgent),
     );
   }
@@ -166,8 +255,11 @@ export class AuthController {
   async cerrarTodasLasSesiones(
     @CurrentUser() user: AuthenticatedUser,
     @Ip() ip: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
     @Headers('user-agent') userAgent?: string,
   ) {
+    if (esClienteWeb(req)) borrarCookieDeSesion(res, this.cookieSegura);
     await this.authService.cerrarTodasLasSesiones(
       { id: user.usuarioId, tenantId: user.tenantId },
       this.contexto(ip, userAgent),
@@ -179,5 +271,83 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   perfil(@CurrentUser() user: AuthenticatedUser) {
     return this.authService.obtenerPerfil(user.usuarioId, user.tenantId);
+  }
+
+  // --- Verificación en dos pasos ---
+
+  /**
+   * Segundo paso del ingreso, si la cuenta lo tiene: /auth/login (o
+   * /auth/clerk) devolvió { requiereCodigo, desafio } en vez de tokens.
+   * Pocos intentos por IP; además, cada código mal suma al bloqueo de la
+   * cuenta.
+   */
+  @Post('login/codigo')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: limiteDeIntentos(10), ttl: 60_000 } })
+  async completarConCodigo(
+    @Body() dto: IngresoConCodigoDto,
+    @Ip() ip: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    return this.entregar(
+      await this.authService.completarConCodigo(
+        dto.desafio,
+        dto.codigo,
+        this.contexto(ip, userAgent),
+      ),
+      req,
+      res,
+    );
+  }
+
+  @Get('dos-pasos')
+  @SkipThrottle()
+  @UseGuards(JwtAuthGuard)
+  estadoDosPasos(@CurrentUser() user: AuthenticatedUser) {
+    return this.dosPasos.estado(user.usuarioId);
+  }
+
+  // Paso 1: el secreto para escanear (queda pendiente hasta confirmarlo).
+  @Post('dos-pasos/iniciar')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  iniciarDosPasos(@CurrentUser() user: AuthenticatedUser) {
+    return this.dosPasos.iniciar(user.usuarioId);
+  }
+
+  // Paso 2: con un código de la app queda activada; devuelve los códigos
+  // de recuperación (se muestran una sola vez).
+  @Post('dos-pasos/activar')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  activarDosPasos(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CodigoDosPasosDto,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    return this.dosPasos.activar(
+      user.usuarioId,
+      dto.codigo,
+      this.contexto(ip, userAgent),
+    );
+  }
+
+  @Post('dos-pasos/desactivar')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtAuthGuard)
+  async desactivarDosPasos(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CodigoDosPasosDto,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent?: string,
+  ): Promise<void> {
+    await this.dosPasos.desactivar(
+      user.usuarioId,
+      dto.codigo,
+      this.contexto(ip, userAgent),
+    );
   }
 }

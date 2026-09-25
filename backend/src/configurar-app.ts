@@ -16,12 +16,15 @@ export function configurarApp(app: NestExpressApplication): void {
   // el límite de intentos de login). Ver TRUST_PROXY en configuration.ts.
   app.set('trust proxy', config.get<number | string | false>('trustProxy'));
 
-  // Ver CORS_ORIGINS en configuration.ts. Sin cookies: la sesión viaja
-  // en el header Authorization, así que no hace falta `credentials`.
+  // Ver CORS_ORIGINS en configuration.ts. El acceso viaja en el header
+  // Authorization; la renovación de la web, en una cookie httpOnly (ver
+  // common/seguridad/cookie-sesion): por eso `credentials`, y X-Cliente
+  // para que la web se identifique (solo desde los orígenes permitidos).
   app.enableCors({
     origin: config.get<string[] | true>('corsOrigins'),
+    credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Cliente'],
     // Para que la web lea el nombre del archivo de las descargas (Excel).
     exposedHeaders: ['Content-Disposition'],
     maxAge: 600,

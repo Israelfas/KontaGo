@@ -452,6 +452,10 @@ export function EquipoScreen() {
             onSesionesCerradas={() =>
               setAviso(`Se cerraron las sesiones de ${viendoActividad.nombre}.`)
             }
+            onCambio={(actualizada) => {
+              reemplazar(actualizada);
+              setAviso(`${actualizada.nombre} ya puede entrar solo con su contraseña.`);
+            }}
           />
         </HojaModal>
       )}

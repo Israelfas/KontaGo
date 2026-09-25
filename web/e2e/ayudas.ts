@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type BrowserContext, type Page } from '@playwright/test';
 
 export const API = process.env.E2E_API_URL ?? 'http://localhost:3000';
 
@@ -43,16 +43,30 @@ async function entrar(quien: Quien): Promise<Sesion> {
 
 /**
  * Deja al navegador con la sesión de esa cuenta, sin pasar por el
- * formulario (el formulario se prueba en login.spec.ts).
+ * formulario (el formulario se prueba en login.spec.ts): la cookie
+ * httpOnly que dejaría el servidor al entrar desde la web.
+ *
+ * Una sesión nueva cada vez: cada carga de la página rota el token, así
+ * que uno compartido entre pruebas parecería robado y reusado.
  */
 export async function entrarComo(page: Page, quien: Quien): Promise<Sesion> {
-  const sesion = await tokensDe(quien);
-  await page.goto('/login');
-  await page.evaluate(({ accessToken, refreshToken }) => {
-    localStorage.setItem('kontago.accessToken', accessToken);
-    localStorage.setItem('kontago.refreshToken', refreshToken);
-  }, sesion);
+  const sesion = await entrar(quien);
+  await ponerCookieDeSesion(page.context(), sesion.refreshToken);
   return sesion;
+}
+
+/** La cookie de sesión de la web, como la deja el servidor. */
+export async function ponerCookieDeSesion(contexto: BrowserContext, refreshToken: string) {
+  await contexto.addCookies([
+    {
+      name: 'kontago_sesion',
+      value: refreshToken,
+      domain: new URL(API).hostname,
+      path: '/auth',
+      httpOnly: true,
+      sameSite: 'Strict',
+    },
+  ]);
 }
 
 /** GET a la API con la sesión dada. */

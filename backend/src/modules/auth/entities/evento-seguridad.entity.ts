@@ -21,7 +21,12 @@ export type TipoEventoSeguridad =
   | 'usuario_desactivado'
   | 'usuario_reactivado'
   | 'sesiones_cerradas'
-  | 'cuenta_desbloqueada';
+  | 'cuenta_desbloqueada'
+  | 'dos_pasos_activada'
+  | 'dos_pasos_desactivada'
+  | 'dos_pasos_quitada_por_admin'
+  | 'codigo_dos_pasos_fallido'
+  | 'codigo_recuperacion_usado';
 
 /**
  * Registro de eventos de seguridad (ISO/IEC 27002:2022, control 8.15):

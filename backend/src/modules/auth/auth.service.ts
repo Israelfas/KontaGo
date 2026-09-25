@@ -23,6 +23,8 @@ import { Usuario } from './entities/usuario.entity';
 import { Sesion } from './entities/sesion.entity';
 import { RecuperacionPassword } from './entities/recuperacion-password.entity';
 import { SeguridadService, type ContextoPedido } from './seguridad.service';
+import { DosPasosService } from './dos-pasos.service';
+import type { TipoEventoSeguridad } from './entities/evento-seguridad.entity';
 import { MailService } from '../mail/mail.service';
 import { correoPasswordCambiada, correoRecuperacion } from './correos';
 import { Tenant } from '../tenants/entities/tenant.entity';
@@ -55,6 +57,27 @@ const CREDENCIALES_INVALIDAS = 'Email o contraseña incorrectos.';
 // Frena a quien prueba contraseñas desde muchas IP (el límite por IP solo
 // frena a una). Recuperar la contraseña la desbloquea.
 const INTENTOS_ANTES_DE_BLOQUEAR = 5;
+
+/** Cuánto dura el paso del código después de la contraseña. */
+const SEGUNDOS_PARA_EL_CODIGO = 5 * 60;
+
+/**
+ * Contraseña (o Google) bien, pero la cuenta tiene la verificación en dos
+ * pasos: falta el código. El desafío es un token corto que solo sirve para
+ * /auth/login/codigo.
+ */
+export interface DesafioDosPasos {
+  requiereCodigo: true;
+  desafio: string;
+}
+
+export type RespuestaIngreso = TokenPair | DesafioDosPasos;
+
+interface PayloadDesafio {
+  sub: string;
+  tipo: 'dos-pasos';
+  metodo: 'password' | 'google';
+}
 const MINUTOS_DE_BLOQUEO = 15;
 
 // Enlace de "olvidé mi contraseña": una sola vez, 30 minutos, y como
@@ -100,6 +123,7 @@ export class AuthService {
     private readonly dataSource: DataSource,
     private readonly seguridad: SeguridadService,
     private readonly mail: MailService,
+    private readonly dosPasos: DosPasosService,
   ) {}
 
   /**
@@ -166,7 +190,7 @@ export class AuthService {
     email: string,
     password: string,
     contexto: ContextoPedido = {},
-  ): Promise<TokenPair> {
+  ): Promise<RespuestaIngreso> {
     const usuario = await this.usuarioRepo.findOne({
       where: { email, activo: true },
     });
@@ -199,7 +223,14 @@ export class AuthService {
     // con un costo viejo (más barato de atacar), se vuelve a cifrar ahora
     // que la tenemos: nadie tiene que cambiarla.
     const cambios: Partial<Usuario> = {};
-    if (usuario.intentosFallidos > 0 || usuario.bloqueadoHasta) {
+    // Con la verificación en dos pasos, los intentos se olvidan recién con
+    // el código bien: si no, la contraseña correcta reiniciaría la cuenta y
+    // se podrían probar códigos sin fin.
+    const pideCodigo = usuario.dosPasosActivoDesde !== null;
+    if (
+      !pideCodigo &&
+      (usuario.intentosFallidos > 0 || usuario.bloqueadoHasta)
+    ) {
       cambios.intentosFallidos = 0;
       cambios.bloqueadoHasta = null;
     }
@@ -210,13 +241,113 @@ export class AuthService {
       await this.usuarioRepo.update(usuario.id, cambios);
     }
 
+    if (pideCodigo) return this.desafio(usuario, 'password');
+
     await this.seguridad.registrar('ingreso', { usuario, contexto });
+    return this.emitirTokens(usuario, contexto);
+  }
+
+  // --- Verificación en dos pasos al ingresar ---
+
+  private desafio(
+    usuario: Usuario,
+    metodo: PayloadDesafio['metodo'],
+  ): DesafioDosPasos {
+    const payload: PayloadDesafio = {
+      sub: usuario.id,
+      tipo: 'dos-pasos',
+      metodo,
+    };
+    return {
+      requiereCodigo: true,
+      desafio: this.jwtService.sign(payload, {
+        secret: this.secretoDelDesafio(),
+        expiresIn: SEGUNDOS_PARA_EL_CODIGO,
+      }),
+    };
+  }
+
+  // Un secreto propio: un desafío nunca sirve como token de acceso.
+  private secretoDelDesafio(): string {
+    return `${this.configService.get<string>('jwt.accessSecret')}:dos-pasos`;
+  }
+
+  /**
+   * Segundo paso del ingreso: el código de la app (o uno de recuperación).
+   * Un código mal cuenta como un intento fallido más: tras varios, la
+   * cuenta se bloquea unos minutos, igual que con la contraseña.
+   */
+  async completarConCodigo(
+    desafio: string,
+    codigo: string,
+    contexto: ContextoPedido = {},
+  ): Promise<TokenPair> {
+    let payload: PayloadDesafio;
+    try {
+      payload = this.jwtService.verify<PayloadDesafio>(desafio, {
+        secret: this.secretoDelDesafio(),
+      });
+    } catch {
+      throw new UnauthorizedException(
+        'Pasó demasiado tiempo desde que pusiste la contraseña. Vuelve a ingresar.',
+      );
+    }
+    if (payload.tipo !== 'dos-pasos') {
+      throw new UnauthorizedException('Vuelve a ingresar.');
+    }
+
+    const usuario = await this.usuarioRepo.findOne({
+      where: { id: payload.sub, activo: true },
+    });
+    if (!usuario?.dosPasosActivoDesde) {
+      throw new UnauthorizedException('Vuelve a ingresar.');
+    }
+    if (usuario.bloqueadoHasta && usuario.bloqueadoHasta > new Date()) {
+      await this.seguridad.registrar('ingreso_bloqueado', {
+        usuario,
+        contexto,
+      });
+      throw new HttpException(
+        this.mensajeDeBloqueo(usuario.bloqueadoHasta),
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const como = await this.dosPasos.verificarParaIngresar(usuario.id, codigo);
+    if (!como) {
+      await this.anotarIntentoFallido(
+        usuario,
+        contexto,
+        'codigo_dos_pasos_fallido',
+      );
+      throw new UnauthorizedException(
+        'El código no es correcto. Usa el que muestra ahora la app (cambia cada 30 segundos) o uno de recuperación.',
+      );
+    }
+
+    if (usuario.intentosFallidos > 0 || usuario.bloqueadoHasta) {
+      await this.usuarioRepo.update(usuario.id, {
+        intentosFallidos: 0,
+        bloqueadoHasta: null,
+      });
+    }
+    if (como === 'recuperacion') {
+      await this.seguridad.registrar('codigo_recuperacion_usado', {
+        usuario,
+        contexto,
+      });
+    }
+    await this.seguridad.registrar(
+      payload.metodo === 'google' ? 'ingreso_google' : 'ingreso',
+      { usuario, contexto },
+    );
     return this.emitirTokens(usuario, contexto);
   }
 
   private async anotarIntentoFallido(
     usuario: Usuario,
     contexto: ContextoPedido,
+    tipo: TipoEventoSeguridad = 'ingreso_fallido',
   ) {
     // Suma en la base (no en memoria): dos intentos simultáneos cuentan dos.
     const [filas] = await this.dataSource.query<
@@ -227,7 +358,7 @@ export class AuthService {
       [usuario.id],
     );
     const intentos = filas[0]?.intentos_fallidos ?? 0;
-    await this.seguridad.registrar('ingreso_fallido', { usuario, contexto });
+    await this.seguridad.registrar(tipo, { usuario, contexto });
     if (intentos >= INTENTOS_ANTES_DE_BLOQUEAR) {
       await this.usuarioRepo.update(usuario.id, {
         intentosFallidos: 0,
@@ -398,6 +529,7 @@ export class AuthService {
       rol: usuario.rol,
       tienda: tenant?.nombre ?? null,
       plan: tenant?.plan ?? null,
+      dosPasos: usuario.dosPasosActivoDesde !== null,
     };
   }
 
@@ -420,7 +552,7 @@ export class AuthService {
   async loginConClerk(
     clerkToken: string,
     contexto: ContextoPedido = {},
-  ): Promise<TokenPair> {
+  ): Promise<RespuestaIngreso> {
     const secretKey = this.configService.get<string>('clerk.secretKey');
     if (!secretKey) {
       throw new UnauthorizedException(
@@ -508,6 +640,9 @@ export class AuthService {
         return usuarioRepo.save(nuevoUsuario);
       });
     }
+
+    // Con Google también: la verificación en dos pasos es de la cuenta.
+    if (usuario.dosPasosActivoDesde) return this.desafio(usuario, 'google');
 
     await this.seguridad.registrar('ingreso_google', { usuario, contexto });
     return this.emitirTokens(usuario, contexto);

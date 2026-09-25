@@ -2,12 +2,16 @@
   "expo": {
     "name": "KontaGo",
     "slug": "kontago-mobile",
+    "scheme": "kontago",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "extra": {
-      "apiUrl": "http://192.168.1.12:3000"
+      "apiUrl": "http://192.168.1.12:3000",
+      "eas": {
+        "projectId": "91255128-9712-4ba9-800b-71aa0e2c7a33"
+      }
     },
     "plugins": [
       [
@@ -17,22 +21,33 @@
         }
       ],
       "expo-web-browser",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "backgroundColor": "#F6F3EC"
+        }
+      ]
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "ec.kontago.app"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#D98C2B",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "ec.kontago.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "owner": "fas_6889"
   }
 }

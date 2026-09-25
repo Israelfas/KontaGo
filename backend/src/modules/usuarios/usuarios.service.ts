@@ -9,6 +9,7 @@ import { DataSource, Repository } from 'typeorm';
 import { Usuario } from '../auth/entities/usuario.entity';
 import { AuthService } from '../auth/auth.service';
 import { SeguridadService } from '../auth/seguridad.service';
+import { DosPasosService } from '../auth/dos-pasos.service';
 import { Rol } from '../../common/enums/rol.enum';
 import { bloquearEmail } from '../../common/db/bloquear-email';
 import { CrearUsuarioDto } from './dto/crear-usuario.dto';
@@ -23,6 +24,8 @@ export interface UsuarioPublico {
   createdAt: Date;
   // Bloqueada por intentos fallidos hasta esta hora (null si no lo está).
   bloqueadoHasta: Date | null;
+  // Usa la verificación en dos pasos.
+  dosPasos: boolean;
   // Solo en la lista (las respuestas de una sola persona no lo traen).
   ultimoIngreso?: Date | null;
 }
@@ -39,6 +42,7 @@ function aPublico(u: Usuario): UsuarioPublico {
       u.bloqueadoHasta && u.bloqueadoHasta > new Date()
         ? u.bloqueadoHasta
         : null,
+    dosPasos: u.dosPasosActivoDesde !== null,
   };
 }
 
@@ -55,6 +59,7 @@ export class UsuariosService {
     private readonly authService: AuthService,
     private readonly dataSource: DataSource,
     private readonly seguridad: SeguridadService,
+    private readonly dosPasos: DosPasosService,
   ) {}
 
   async listar(tenantId: string): Promise<UsuarioPublico[]> {
@@ -97,6 +102,29 @@ export class UsuariosService {
       usuario: guardado,
     });
     return aPublico(guardado);
+  }
+
+  /**
+   * Le quita la verificación en dos pasos a alguien del equipo que perdió
+   * el celular y sus códigos de recuperación: entra con su contraseña y la
+   * vuelve a activar. La propia se quita desde la cuenta, con un código.
+   */
+  async quitarDosPasos(
+    tenantId: string,
+    adminId: string,
+    id: string,
+  ): Promise<UsuarioPublico> {
+    if (id === adminId) {
+      throw new BadRequestException(
+        'La tuya se desactiva desde tu cuenta, con un código de la app o de recuperación.',
+      );
+    }
+    const usuario = await this.buscar(tenantId, id);
+    if (usuario.dosPasosActivoDesde) {
+      await this.dosPasos.quitarPorAdmin(usuario);
+      usuario.dosPasosActivoDesde = null;
+    }
+    return aPublico(usuario);
   }
 
   async crear(tenantId: string, dto: CrearUsuarioDto): Promise<UsuarioPublico> {

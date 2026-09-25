@@ -12,6 +12,7 @@ import { CampoContrasena } from '../components/campo-contrasena';
 import { problemaDelEmail } from '../lib/validacion';
 import { colores, espaciado } from '../theme/colores';
 import type { AuthStackParamList } from '../navigation/AuthNavigator';
+import { PasoCodigo } from '../components/paso-codigo';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -27,6 +28,8 @@ export function LoginScreen({ navigation }: Props) {
   const [cargando, setCargando] = useState(false);
   const [cargandoGoogle, setCargandoGoogle] = useState(false);
   const [salioDelEmail, setSalioDelEmail] = useState(false);
+  // La cuenta tiene la verificación en dos pasos: falta el código.
+  const [desafio, setDesafio] = useState<string | null>(null);
   const problemaEmail = salioDelEmail ? problemaDelEmail(email) : null;
 
   async function manejarSubmit() {
@@ -37,7 +40,11 @@ export function LoginScreen({ navigation }: Props) {
     setError(null);
     setCargando(true);
     try {
-      await iniciarSesion(email.trim(), password);
+      const pendiente = await iniciarSesion(email.trim(), password);
+      if (pendiente) {
+        setDesafio(pendiente.desafio);
+        setPassword('');
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo iniciar sesión');
     } finally {
@@ -64,7 +71,8 @@ export function LoginScreen({ navigation }: Props) {
       await setActive({ session: createdSessionId });
       const token = await getToken();
       if (!token) throw new Error('Sin token de Clerk');
-      await loginConClerk(token);
+      const pendiente = await loginConClerk(token);
+      if (pendiente) setDesafio(pendiente.desafio);
     } catch (err) {
       console.error('Login con Google falló', err);
       setError(
@@ -75,6 +83,20 @@ export function LoginScreen({ navigation }: Props) {
     } finally {
       setCargandoGoogle(false);
     }
+  }
+
+  if (desafio) {
+    return (
+      <AuthFrame
+        eyebrow="Verificación en dos pasos"
+        titulo="Un paso más"
+        descripcion="Tu cuenta está protegida con un código además de la contraseña."
+        icono="lock-closed-outline"
+        footer={null}
+      >
+        <PasoCodigo desafio={desafio} onVolver={() => setDesafio(null)} />
+      </AuthFrame>
+    );
   }
 
   return (

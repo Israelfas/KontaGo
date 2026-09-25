@@ -6,6 +6,7 @@ import { useSignIn } from '@clerk/nextjs/legacy';
 import { AuthShell } from '@/components/auth-shell';
 import { AlertaDeFormulario, AvisoDeCampo, Button } from '@/components/ui';
 import { CampoContrasena } from '@/components/campo-contrasena';
+import { PasoCodigo } from '@/components/paso-codigo';
 import { useAuth } from '@/lib/auth-context';
 import { ApiError } from '@/lib/api';
 import { problemaDelEmail } from '@/lib/validacion';
@@ -21,6 +22,8 @@ export default function LoginPage() {
   const [salioDelEmail, setSalioDelEmail] = useState(false);
   // Viene de elegir una contraseña nueva con el enlace del email.
   const [recienCambiada, setRecienCambiada] = useState(false);
+  // La cuenta tiene la verificación en dos pasos: falta el código.
+  const [desafio, setDesafio] = useState<string | null>(null);
   const problemaEmail = problemaDelEmail(email);
 
   useEffect(() => {
@@ -37,7 +40,11 @@ export default function LoginPage() {
     setError(null);
     setEnviando(true);
     try {
-      await iniciarSesion(email, password);
+      const pendiente = await iniciarSesion(email, password);
+      if (pendiente) {
+        setDesafio(pendiente.desafio);
+        setPassword('');
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo iniciar sesión');
     } finally {
@@ -62,6 +69,19 @@ export default function LoginPage() {
       setError('No se pudo iniciar el login con Google. Prueba de nuevo.');
       setConGoogle(false);
     }
+  }
+
+  if (desafio) {
+    return (
+      <AuthShell
+        eyebrow="Verificación en dos pasos"
+        title="Un paso más"
+        description="Tu cuenta está protegida con un código además de la contraseña."
+        footer={null}
+      >
+        <PasoCodigo desafio={desafio} onVolver={() => setDesafio(null)} />
+      </AuthShell>
+    );
   }
 
   return (

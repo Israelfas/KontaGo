@@ -21,7 +21,8 @@ export function AvisoSinConexion() {
 
   const porMandar = pendientes.filter((v) => !v.problema).length;
   const conProblema = pendientes.filter((v) => v.problema).length;
-  if (!sinConexion && porMandar === 0 && conProblema === 0) return null;
+  // Con la lista abierta se queda aunque ya no quede nada: se cierra con Listo.
+  if (!sinConexion && porMandar === 0 && conProblema === 0 && !viendoProblemas) return null;
 
   const ventas = (n: number) => `${n} venta${n === 1 ? '' : 's'}`;
 

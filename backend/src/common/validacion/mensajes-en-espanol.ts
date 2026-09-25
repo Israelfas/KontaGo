@@ -31,6 +31,8 @@ const NOMBRES: Record<string, string> = {
   efectivoContadoCentavos: 'El efectivo contado',
   nota: 'La nota',
   token: 'El enlace',
+  codigo: 'El código',
+  desafio: 'El paso de verificación',
   desde: 'La fecha desde',
   hasta: 'La fecha hasta',
 };

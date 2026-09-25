@@ -18,7 +18,12 @@ export type TipoEvento =
   | 'usuario_desactivado'
   | 'usuario_reactivado'
   | 'sesiones_cerradas'
-  | 'cuenta_desbloqueada';
+  | 'cuenta_desbloqueada'
+  | 'dos_pasos_activada'
+  | 'dos_pasos_desactivada'
+  | 'dos_pasos_quitada_por_admin'
+  | 'codigo_dos_pasos_fallido'
+  | 'codigo_recuperacion_usado';
 
 export interface SesionAbierta {
   id: string;
@@ -61,6 +66,11 @@ export const EVENTOS: Record<TipoEvento, { texto: string; alerta?: boolean }> = 
   usuario_reactivado: { texto: 'Cuenta reactivada' },
   sesiones_cerradas: { texto: 'Se cerraron todas sus sesiones' },
   cuenta_desbloqueada: { texto: 'Cuenta desbloqueada' },
+  dos_pasos_activada: { texto: 'Activó la verificación en dos pasos' },
+  dos_pasos_desactivada: { texto: 'Desactivó la verificación en dos pasos' },
+  dos_pasos_quitada_por_admin: { texto: 'El administrador le quitó la verificación en dos pasos' },
+  codigo_dos_pasos_fallido: { texto: 'Código de verificación equivocado', alerta: true },
+  codigo_recuperacion_usado: { texto: 'Entró con un código de recuperación', alerta: true },
 };
 
 /** "recién", "hace 12 min", "hoy 14:05", "ayer 09:30", "12 sept 18:40". */

@@ -370,6 +370,10 @@ function ContenidoEquipo() {
               <ActividadDeLaCuenta
                 persona={viendoActividad}
                 esVos={viendoActividad.id === usuario?.sub}
+                onCambio={(actualizada) => {
+                  reemplazar(actualizada);
+                  setAviso(`${actualizada.nombre} ya puede entrar solo con su contraseña.`);
+                }}
               />
             </Ventana>
           )}

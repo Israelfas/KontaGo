@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Button, LoadingState } from './ui';
 import { VentanaPie, useVentana } from './ventana';
 import { useAuth } from '@/lib/auth-context';
-import { ApiError, cerrarSesionesDe, obtenerActividad } from '@/lib/api';
+import { ApiError, cerrarSesionesDe, obtenerActividad, quitarDosPasos } from '@/lib/api';
 import { EVENTOS, haceCuanto, type ActividadDeCuenta } from '@/lib/actividad';
 import type { UsuarioEquipo } from '@/lib/tipos';
 
@@ -17,9 +17,12 @@ import type { UsuarioEquipo } from '@/lib/tipos';
 export function ActividadDeLaCuenta({
   persona,
   esVos,
+  onCambio,
 }: {
   persona: UsuarioEquipo;
   esVos: boolean;
+  /** La persona cambió (se le quitó la verificación en dos pasos). */
+  onCambio?: (actualizada: UsuarioEquipo) => void;
 }) {
   const { token, cerrarSesion } = useAuth();
   const { cerrar } = useVentana();
@@ -27,6 +30,24 @@ export function ActividadDeLaCuenta({
   const [error, setError] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
   const [cerrando, setCerrando] = useState(false);
+  const [quitando, setQuitando] = useState<'confirmar' | 'enviando' | null>(null);
+  const [dosPasos, setDosPasos] = useState(persona.dosPasos);
+
+  // Perdió el celular y los códigos de recuperación: entra con su
+  // contraseña y la vuelve a activar.
+  async function quitarVerificacion() {
+    if (!token) return;
+    setQuitando('enviando');
+    try {
+      const actualizada = await quitarDosPasos(token, persona.id);
+      setDosPasos(false);
+      onCambio?.(actualizada);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo quitar la verificación');
+    } finally {
+      setQuitando(null);
+    }
+  }
   // Intentos sospechosos de la última semana, contados al llegar los datos.
   const [alertasRecientes, setAlertasRecientes] = useState(0);
 
@@ -79,8 +100,8 @@ export function ActividadDeLaCuenta({
           {alertasRecientes === 1
             ? 'Hubo un intento fallido'
             : `Hubo ${alertasRecientes} intentos fallidos`}{' '}
-          en la última semana. Si no {esVos ? 'fuiste tú' : `fue ${persona.nombre}`}, conviene cambiar la
-          contraseña.
+          en la última semana. Si no {esVos ? 'fuiste tú' : `fue ${persona.nombre}`}, conviene
+          cambiar la contraseña.
         </p>
       )}
 
@@ -110,6 +131,43 @@ export function ActividadDeLaCuenta({
             </li>
           ))}
         </ul>
+      )}
+
+      {!esVos && dosPasos && (
+        <div className="mt-5 rounded-xl border border-papel-linea px-3.5 py-3">
+          <p className="text-sm text-tinta">
+            <strong>Verificación en dos pasos activada.</strong>{' '}
+            {quitando === 'confirmar'
+              ? `${persona.nombre} va a poder entrar solo con su contraseña hasta que la vuelva a activar. Hazlo solo si perdió el celular y sus códigos de recuperación.`
+              : 'Si perdió el celular y sus códigos de recuperación, se la puedes quitar.'}
+          </p>
+          <div className="mt-2 flex gap-2">
+            {quitando === null ? (
+              <Button type="button" variant="secondary" onClick={() => setQuitando('confirmar')}>
+                Quitar la verificación
+              </Button>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="danger"
+                  onClick={quitarVerificacion}
+                  disabled={quitando === 'enviando'}
+                >
+                  {quitando === 'enviando' ? 'Quitando…' : 'Sí, quitarla'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setQuitando(null)}
+                  disabled={quitando === 'enviando'}
+                >
+                  No
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
       )}
 
       <h3 className="field-label mt-5">Lo último que pasó</h3>

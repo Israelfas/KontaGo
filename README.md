@@ -95,6 +95,9 @@ El backend no arranca si falta algo de esto (con `NODE_ENV=production`):
   distintos entre sí.
 - `DB_PASSWORD`: la de la base de producción.
 - `CORS_ORIGINS`: la dirección de la web (ej. `https://app.kontago.ec`).
+- `CLAVE_CIFRADO`: larga y al azar. Cifra en la base los secretos de la
+  verificación en dos pasos; si se cambia, quien la tenga activada tiene
+  que volver a activarla.
 
 Además:
 
@@ -102,13 +105,49 @@ Además:
   `backend/.env.example`), para que el límite de intentos de login use la
   IP real.
 - Correr `npm run migration:run` antes de cada versión nueva.
-- Web: `NEXT_PUBLIC_API_URL` con la dirección del backend.
+- Web: `NEXT_PUBLIC_API_URL` con la dirección del backend. La web y el
+  backend tienen que estar en el mismo dominio (pueden ser subdominios:
+  `app.kontago.ec` y `api.kontago.ec`), por https: la sesión de la web vive
+  en una cookie httpOnly `SameSite=Strict` que el navegador no manda entre
+  dominios distintos.
 - Web, página de inicio: `NEXT_PUBLIC_APP_ANDROID_URL` y
   `NEXT_PUBLIC_APP_IOS_URL` con el enlace de la tienda (o del `.apk`). Si
   están, los botones de descarga se activan y aparece el QR; si no, dicen
   "Muy pronto". Se leen al compilar la web.
 - App: `EXPO_PUBLIC_API_URL`, y el contacto de soporte
   (`EXPO_PUBLIC_SOPORTE_CORREO` / `_WHATSAPP`, ver `mobile/.env.example`).
+
+## Armar la app instalable (Android)
+
+Se compila en los servidores de Expo (EAS), con una cuenta gratis de
+[expo.dev](https://expo.dev). Perfiles en `mobile/eas.json`:
+
+| Perfil | Qué arma | Para qué |
+|---|---|---|
+| `prueba` | APK | Probar en celulares, contra el backend de la PC (misma red Wi-Fi) |
+| `produccion` | APK | Descargar desde la página de inicio, con el backend publicado |
+| `play-store` | AAB | Subir a Google Play |
+
+El `.env` de `mobile/` no se sube a Expo: las variables se cargan en cada
+entorno de EAS (`preview` para `prueba`, `production` para los otros dos).
+La primera vez, desde `mobile/`:
+
+```bash
+npx eas-cli login
+npx eas-cli init                               # crea el proyecto en expo.dev
+npx eas-cli env:push --environment preview --path .env
+npx eas-cli env:create --environment preview --name EXPO_PUBLIC_API_URL --value http://IP-DE-LA-PC:3000 --visibility plaintext
+npx eas-cli env:create --environment preview --name EXPO_PUBLIC_WEB_URL --value http://IP-DE-LA-PC:3001 --visibility plaintext
+npx eas-cli build --platform android --profile prueba
+```
+
+Al terminar, EAS da un enlace y un QR para instalarla. Ese enlace va en
+`NEXT_PUBLIC_APP_ANDROID_URL` de la web. Con una dirección `http` (la red
+local) la app permite tráfico sin cifrar; con `https`, no (ver
+`mobile/app.config.ts`).
+
+Para entrar con Google desde la app instalada, en el panel de Clerk
+(Native applications) hay que permitir la redirección `kontago://sso-callback`.
 
 ## Roadmap
 
@@ -119,4 +158,10 @@ Ver `docs/` para el spec completo del proyecto y el detalle de cada fase.
 - **Fase 2:** pérdidas, abastecimiento, notificaciones.
 - **Fase 3:** estadísticas históricas y primer plan de suscripción.
 - **Fase 4:** recomendaciones y analítica avanzada.
-- **Fase 5:** OCR de facturas, multi-sucursal, modo offline.
+- **Fase 5:** OCR de facturas, multi-sucursal.
+
+Ya se puede **vender sin internet** en la app y en la web: con la caja
+abierta, si se corta la red, los productos salen del catálogo guardado y
+cada venta queda en una cola que se envía sola al volver la conexión (con
+una clave para no cobrarla dos veces). En la web, la pestaña tiene que
+haberse abierto con conexión: recargarla sin red no funciona.
