@@ -9,5 +9,6 @@ import { CajaService } from './caja.service';
   imports: [TypeOrmModule.forFeature([TurnoCaja, MovimientoCaja])],
   controllers: [CajaController],
   providers: [CajaService],
+  exports: [CajaService],
 })
 export class CajaModule {}

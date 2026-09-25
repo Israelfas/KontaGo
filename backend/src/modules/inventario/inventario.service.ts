@@ -263,6 +263,11 @@ export class InventarioService {
       .where('movimiento.tenantId = :tenantId', { tenantId })
       .andWhere('movimiento.createdAt >= :inicio', { inicio: rango.inicio })
       .andWhere('movimiento.createdAt < :fin', { fin: rango.finExclusivo })
+      // En orden: al juntar "Pasteurizadora Quito" con "pasteurizadora
+      // quito ", se muestra como se escribió la primera vez. Sin orden,
+      // Postgres los devuelve como le toca y el nombre cambiaba.
+      .orderBy('movimiento.createdAt', 'ASC')
+      .addOrderBy('movimiento.id', 'ASC')
       .getMany();
 
     const total = (m: MovimientoInventario) =>

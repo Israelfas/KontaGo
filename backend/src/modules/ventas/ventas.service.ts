@@ -266,14 +266,20 @@ export class VentasService {
    * ganancia. Nunca el ingreso bruto tampoco (ver riesgo #2 del spec).
    */
   calcularGananciaCentavos(venta: Venta): number {
-    return venta.items.reduce((acc, item) => {
-      const cantidadVendida = item.cantidad - item.cantidadAnulada;
-      const ivaVendido = item.ivaCentavos - item.ivaAnuladoCentavos;
-      const subtotalLineaSinIva =
-        item.precioVentaCentavos * cantidadVendida - ivaVendido;
-      const costoLinea = item.costoUnitarioCentavos * cantidadVendida;
-      return acc + (subtotalLineaSinIva - costoLinea);
-    }, 0);
+    return venta.items.reduce(
+      (acc, item) => acc + this.calcularGananciaDeLineaCentavos(item),
+      0,
+    );
+  }
+
+  /** La ganancia de una línea (lo mismo que suma calcularGananciaCentavos). */
+  calcularGananciaDeLineaCentavos(item: VentaItem): number {
+    const cantidadVendida = item.cantidad - item.cantidadAnulada;
+    const ivaVendido = item.ivaCentavos - item.ivaAnuladoCentavos;
+    const subtotalLineaSinIva =
+      item.precioVentaCentavos * cantidadVendida - ivaVendido;
+    const costoLinea = item.costoUnitarioCentavos * cantidadVendida;
+    return subtotalLineaSinIva - costoLinea;
   }
 
   /**
@@ -398,6 +404,29 @@ export class VentasService {
       .getManyAndCount();
 
     return { ventas: ventas.map(aVentaDelHistorial), total };
+  }
+
+  /**
+   * Todas las ventas de un período, de la más vieja a la más nueva, con su
+   * vendedor y sus productos: lo que necesita el reporte en Excel. Sin
+   * paginar: 92 días de un minimarket son unos pocos miles de ventas.
+   */
+  async ventasDelPeriodo(
+    tenantId: string,
+    rango: RangoFechas,
+  ): Promise<Venta[]> {
+    return this.dataSource
+      .getRepository(Venta)
+      .createQueryBuilder('venta')
+      .leftJoinAndSelect('venta.usuario', 'vendedor')
+      .leftJoinAndSelect('venta.items', 'item')
+      .leftJoinAndSelect('item.producto', 'producto')
+      .where('venta.tenantId = :tenantId', { tenantId })
+      .andWhere('venta.createdAt >= :inicio', { inicio: rango.inicio })
+      .andWhere('venta.createdAt < :fin', { fin: rango.finExclusivo })
+      .orderBy('venta.createdAt', 'ASC')
+      .addOrderBy('item.id', 'ASC')
+      .getMany();
   }
 
   /**

@@ -22,6 +22,7 @@ import {
   UsersIcon,
 } from './icons';
 import { AppLogo } from './ui';
+import { MenuCuenta } from './menu-cuenta';
 
 // soloAdmin: el cajero vende, ve las ventas del día y consulta el catálogo;
 // resumen (ganancias), inventario y equipo son del dueño.
@@ -61,6 +62,8 @@ type Pastilla = { x: number; ancho: number };
 const recuerdo = {
   usuario: null as string | null,
   tienda: null as string | null,
+  nombre: null as string | null,
+  email: null as string | null,
   porVencer: 0,
   pastilla: null as Pastilla | null,
   indiceInferior: null as number | null,
@@ -194,7 +197,7 @@ function EnlaceNavegacion({
 
 export function Nav() {
   const pathname = usePathname();
-  const { usuario, token, cerrarSesion } = useAuth();
+  const { usuario, token } = useAuth();
   // Lo recordado vale solo para la misma cuenta.
   const mismaCuenta = !!usuario && recuerdo.usuario === usuario.sub;
   const [porVencer, setPorVencer] = useState(() => (mismaCuenta ? recuerdo.porVencer : 0));
@@ -202,6 +205,11 @@ export function Nav() {
   // había forma de saber en cuál estabas (y una tienda sin ventas parecía
   // un error).
   const [tienda, setTienda] = useState<string | null>(() => (mismaCuenta ? recuerdo.tienda : null));
+  // Quién está adentro, para el menú de la cuenta.
+  const [cuenta, setCuenta] = useState(() => ({
+    nombre: mismaCuenta ? recuerdo.nombre : null,
+    email: mismaCuenta ? recuerdo.email : null,
+  }));
   // Adónde se hizo clic, mientras la pantalla nueva todavía no llegó.
   const [elegido, setElegido] = useState<string | null>(null);
   const esAdmin = usuario?.rol === 'admin';
@@ -214,7 +222,10 @@ export function Nav() {
       .then((perfil) => {
         recuerdo.usuario = cuenta;
         recuerdo.tienda = perfil.tienda;
+        recuerdo.nombre = perfil.nombre;
+        recuerdo.email = perfil.email;
         setTienda(perfil.tienda);
+        setCuenta({ nombre: perfil.nombre, email: perfil.email });
       })
       .catch(() => setTienda(null));
   }, [token, usuario]);
@@ -317,18 +328,7 @@ export function Nav() {
                     {tienda}
                   </span>
                 ))}
-              {usuario && (
-                <span className="inline-flex rounded-full bg-ambar/15 px-2.5 py-1 font-ticket text-[0.65rem] font-semibold uppercase tracking-wider text-[#9a5b08]">
-                  {usuario.rol}
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={cerrarSesion}
-                className="button button-ghost min-h-0 px-2.5 py-2 text-xs sm:px-3 sm:text-sm"
-              >
-                Salir
-              </button>
+              <MenuCuenta nombre={cuenta.nombre} email={cuenta.email} rol={usuario?.rol} />
             </div>
           </div>
         </div>

@@ -925,6 +925,96 @@ select:focus-visible {
   background: #fff;
 }
 
+/* Acción secundaria sobre la franja oscura (al lado de un botón claro). */
+.button-sobre-oscuro {
+  border: 1px solid rgba(246, 243, 236, 0.22);
+  background: rgba(246, 243, 236, 0.08);
+  color: var(--papel);
+}
+
+.button-sobre-oscuro:hover:not(:disabled) {
+  background: rgba(246, 243, 236, 0.16);
+}
+
+/* Menú de la cuenta (menu-cuenta.tsx): crece desde el botón que lo abre. */
+.menu-cuenta-boton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 999px;
+  padding: 0.25rem 0.55rem 0.25rem 0.25rem;
+  transition:
+    background-color 160ms ease,
+    transform 100ms ease-out;
+}
+
+.menu-cuenta-boton:hover {
+  background: rgba(228, 221, 201, 0.6);
+}
+
+.menu-cuenta-boton:active {
+  transform: scale(0.96);
+}
+
+.menu-cuenta-avatar {
+  display: flex;
+  height: 2rem;
+  width: 2rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--tinta);
+  color: var(--papel);
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.menu-cuenta-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 60;
+  width: min(18rem, calc(100vw - 2rem));
+  overflow: hidden;
+  border: 1px solid var(--papel-linea);
+  border-radius: 1rem;
+  background: var(--superficie);
+  box-shadow:
+    0 24px 50px rgba(28, 43, 58, 0.18),
+    0 4px 12px rgba(28, 43, 58, 0.06);
+  transform-origin: top right;
+  animation: menu-abrir 220ms var(--ease-salida) both;
+}
+
+@keyframes menu-abrir {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(-4px);
+  }
+}
+
+.menu-cuenta-opcion {
+  display: block;
+  width: 100%;
+  border-radius: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  color: var(--tinta);
+  font-size: 0.875rem;
+  font-weight: 550;
+  text-align: left;
+  transition: background-color 120ms ease;
+}
+
+.menu-cuenta-opcion:hover,
+.menu-cuenta-opcion:focus-visible {
+  background: var(--superficie-suave);
+}
+
+.menu-cuenta-opcion:active {
+  background: rgba(228, 221, 201, 0.6);
+}
+
 /* Selector de período, sobre la franja oscura. En el celular es una fila
    que se desliza de costado (llega hasta el borde de la pantalla); en
    pantallas anchas, los botones se acomodan en varias líneas. */

@@ -10,5 +10,6 @@ import { InventarioService } from './inventario.service';
   imports: [TypeOrmModule.forFeature([MovimientoInventario, Producto, Lote])],
   controllers: [InventarioController],
   providers: [InventarioService],
+  exports: [InventarioService],
 })
 export class InventarioModule {}

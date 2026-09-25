@@ -7,6 +7,7 @@ import { Button, EmptyState, ErrorState, LoadingState } from '@/components/ui';
 import { Banda, Hoja } from '@/components/banda';
 import { ReceiptIcon, RefreshIcon } from '@/components/icons';
 import { SelectorPeriodo, usePeriodoDeLaURL } from '@/components/selector-periodo';
+import { BotonExcel } from '@/components/boton-excel';
 import { useAuth } from '@/lib/auth-context';
 import {
   obtenerVentasDeHoy,
@@ -449,10 +450,14 @@ function ContenidoVentas() {
           </>
         }
         accion={
-          <Button variant="claro" onClick={() => setIntento((n) => n + 1)} disabled={cargando}>
-            <RefreshIcon className="h-4 w-4" />
-            Actualizar
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* El Excel trae costos y ganancias: solo el admin. */}
+            {esAdmin && periodo && <BotonExcel periodo={periodo} />}
+            <Button variant="claro" onClick={() => setIntento((n) => n + 1)} disabled={cargando}>
+              <RefreshIcon className="h-4 w-4" />
+              Actualizar
+            </Button>
+          </div>
         }
         extra={esAdmin && periodo && <SelectorPeriodo periodo={periodo} onCambiar={setPeriodo} />}
       />

@@ -20,5 +20,6 @@ import { VentasService } from './ventas.service';
   ],
   controllers: [VentasController],
   providers: [VentasService],
+  exports: [VentasService],
 })
 export class VentasModule {}

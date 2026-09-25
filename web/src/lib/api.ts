@@ -70,14 +70,13 @@ function refrescarUnaVez(): Promise<string | null> {
 }
 
 /**
- * Wrapper central de fetch. Todas las llamadas al backend pasan por acá,
- * así el manejo de errores, el header de auth y la base URL están en un
- * solo lugar.
+ * El pedido con el token y la base URL. Si el token venció (401), renueva
+ * la sesión y reintenta una vez. Lo usan apiFetch (JSON) y las descargas.
  */
-async function apiFetch<T>(
+async function pedirConSesion(
   path: string,
   options: RequestInit & { token?: string } = {},
-): Promise<T> {
+): Promise<{ response: Response; fetchOptions: RequestInit }> {
   const { token, headers, ...resto } = options;
 
   const construirOpciones = (tokenActual?: string): RequestInit => ({
@@ -101,15 +100,30 @@ async function apiFetch<T>(
       response = await fetch(`${API_URL}${path}`, fetchOptions);
     }
   }
+  return { response, fetchOptions };
+}
 
-  if (!response.ok) {
-    // El backend siempre devuelve { message, error, statusCode } en errores.
-    const body = await response.json().catch(() => null);
-    const mensaje = Array.isArray(body?.message)
-      ? body.message.join(' ') // errores de validación: oraciones en español
-      : (body?.message ?? `Error ${response.status}`);
-    throw new ApiError(mensaje, response.status);
-  }
+/** El backend siempre devuelve { message, error, statusCode } en errores. */
+async function errorDeLaRespuesta(response: Response): Promise<ApiError> {
+  const body = await response.json().catch(() => null);
+  const mensaje = Array.isArray(body?.message)
+    ? body.message.join(' ') // errores de validación: oraciones en español
+    : (body?.message ?? `Error ${response.status}`);
+  return new ApiError(mensaje, response.status);
+}
+
+/**
+ * Wrapper central de fetch. Todas las llamadas al backend pasan por acá,
+ * así el manejo de errores, el header de auth y la base URL están en un
+ * solo lugar.
+ */
+async function apiFetch<T>(
+  path: string,
+  options: RequestInit & { token?: string } = {},
+): Promise<T> {
+  const { response, fetchOptions } = await pedirConSesion(path, options);
+
+  if (!response.ok) throw await errorDeLaRespuesta(response);
 
   // Algunos endpoints (204) no devuelven body.
   if (response.status === 204) {
@@ -629,6 +643,26 @@ export function obtenerResumenInventario(
 ): Promise<ResumenInventarioPeriodo> {
   const q = consulta({ desde: rango.desde, hasta: rango.hasta });
   return apiFetch<ResumenInventarioPeriodo>(`/inventario/resumen?${q}`, { token });
+}
+
+// --- Reporte en Excel (solo admin) ---
+
+/**
+ * El reporte del período para el contador: ventas, productos vendidos,
+ * caja, compras y mermas, y el stock actual. El nombre del archivo lo arma
+ * el backend (lleva el nombre de la tienda).
+ */
+export async function descargarReporteExcel(
+  token: string,
+  rango: RangoDeFechas,
+): Promise<{ archivo: Blob; nombre: string }> {
+  const q = new URLSearchParams({ desde: rango.desde, hasta: rango.hasta });
+  const { response } = await pedirConSesion(`/reportes/excel?${q}`, { token });
+  if (!response.ok) throw await errorDeLaRespuesta(response);
+  const nombre =
+    /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') ?? '')?.[1] ??
+    `kontago-${rango.desde}-a-${rango.hasta}.xlsx`;
+  return { archivo: await response.blob(), nombre };
 }
 
 // --- Actividad de seguridad (solo admin, salvo cerrar las propias) ---

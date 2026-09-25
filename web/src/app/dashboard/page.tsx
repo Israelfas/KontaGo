@@ -8,6 +8,7 @@ import { Button, ErrorState, LoadingState } from '@/components/ui';
 import { Banda, Hoja, Pieza } from '@/components/banda';
 import { CartIcon, ReceiptIcon } from '@/components/icons';
 import { SelectorPeriodo, usePeriodoDeLaURL } from '@/components/selector-periodo';
+import { BotonExcel } from '@/components/boton-excel';
 import { GraficoIngreso, GraficoTopProductos } from '@/components/graficos';
 import { useAuth } from '@/lib/auth-context';
 import { obtenerResumen, ApiError } from '@/lib/api';
@@ -133,10 +134,13 @@ function ContenidoDashboard() {
             : undefined
         }
         accion={
-          <Link href="/venta" className="button button-claro">
-            <CartIcon className="h-4 w-4" />
-            Vender
-          </Link>
+          <div className="flex items-center gap-2">
+            {periodo && <BotonExcel periodo={periodo} />}
+            <Link href="/venta" className="button button-claro">
+              <CartIcon className="h-4 w-4" />
+              Vender
+            </Link>
+          </div>
         }
         extra={periodo && <SelectorPeriodo periodo={periodo} onCambiar={setPeriodo} />}
       />

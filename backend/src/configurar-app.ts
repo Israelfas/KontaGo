@@ -22,6 +22,8 @@ export function configurarApp(app: NestExpressApplication): void {
     origin: config.get<string[] | true>('corsOrigins'),
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+    // Para que la web lea el nombre del archivo de las descargas (Excel).
+    exposedHeaders: ['Content-Disposition'],
     maxAge: 600,
   });
   // No anunciar que el servidor es Express.
