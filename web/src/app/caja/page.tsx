@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
 import { Button, ErrorState, LoadingState, SectionHeader } from '@/components/ui';
-import { Banda, Hoja, Pieza } from '@/components/banda';
+import { Banda, Hoja } from '@/components/banda';
+import { Ficha } from '@/components/ficha';
 import { CartIcon, CashIcon, MinusIcon, ReceiptIcon } from '@/components/icons';
 import { Ventana } from '@/components/ventana';
 import {
@@ -53,14 +54,23 @@ function TarjetaTurno({
   const dia = fecha[0].toUpperCase() + fecha.slice(1);
 
   return (
-    <li className="app-card p-4">
+    <li
+      className={`app-card tarjeta-turno tarjeta-turno-${
+        turno.diferenciaCentavos === undefined
+          ? 'abierta'
+          : tonoDiferencia(turno.diferenciaCentavos)
+      } p-4`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-medium text-tinta">{turno.cajero}</p>
-          <p className="text-xs text-tinta-suave">
-            {dia} · {horaDe(turno.abiertoEn)}
-            {turno.cerradoEn ? ` a ${horaDe(turno.cerradoEn)}` : ' · abierta'}
-          </p>
+        <div className="flex min-w-0 items-center gap-3">
+          <Ficha nombre={turno.cajero} tamano="chica" redonda />
+          <div className="min-w-0">
+            <p className="font-medium text-tinta">{turno.cajero}</p>
+            <p className="text-xs text-tinta-suave">
+              {dia} · {horaDe(turno.abiertoEn)}
+              {turno.cerradoEn ? ` a ${horaDe(turno.cerradoEn)}` : ' · abierta'}
+            </p>
+          </div>
         </div>
         {turno.diferenciaCentavos !== undefined ? (
           <span
@@ -69,47 +79,43 @@ function TarjetaTurno({
             {textoDiferencia(turno.diferenciaCentavos)}
           </span>
         ) : (
-          <span className="status-pill status-pill-neutral text-xs">Abierta</span>
+          <span className="status-pill status-pill-abierta text-xs">
+            <span className="punto-vivo" aria-hidden />
+            Abierta
+          </span>
         )}
       </div>
 
-      <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
+      <dl className="datos-turno mt-3">
         <div>
-          <dt className="text-tinta-suave">Ventas</dt>
-          <dd className="font-ticket text-sm text-tinta">{turno.cantidadVentas}</dd>
+          <dt>Ventas</dt>
+          <dd>{turno.cantidadVentas}</dd>
         </div>
         <div>
-          <dt className="text-tinta-suave">
-            {turno.estado === 'abierto' ? 'Debería haber' : 'Debía haber'}
-          </dt>
-          <dd className="font-ticket text-sm text-tinta">
-            {formatearCentavos(turno.efectivoEsperadoCentavos ?? 0)}
-          </dd>
+          <dt>{turno.estado === 'abierto' ? 'Hay en el cajón' : 'Tenía que haber'}</dt>
+          <dd>{formatearCentavos(turno.efectivoEsperadoCentavos ?? 0)}</dd>
         </div>
-        <div>
-          <dt className="text-tinta-suave">Transferencias</dt>
-          <dd className="font-ticket text-sm text-tinta">
-            {formatearCentavos(turno.ventasTransferenciaCentavos)}
-          </dd>
-        </div>
+        {turno.efectivoContadoCentavos !== undefined ? (
+          <div>
+            <dt>Se contó</dt>
+            <dd>{formatearCentavos(turno.efectivoContadoCentavos)}</dd>
+          </div>
+        ) : (
+          <div>
+            <dt>Transferencias</dt>
+            <dd>{formatearCentavos(turno.ventasTransferenciaCentavos)}</dd>
+          </div>
+        )}
       </dl>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => setViendo(true)}
-          className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10"
-        >
-          <ReceiptIcon className="h-3 w-3" />
+        <button type="button" onClick={() => setViendo(true)} className="boton-tarjeta">
+          <ReceiptIcon className="h-3.5 w-3.5" />
           Ver el detalle
         </button>
         {turno.estado === 'abierto' && !propio && (
-          <button
-            type="button"
-            onClick={() => setCerrando(true)}
-            className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10"
-          >
-            <CashIcon className="h-3 w-3" />
+          <button type="button" onClick={() => setCerrando(true)} className="boton-tarjeta">
+            <CashIcon className="h-3.5 w-3.5" />
             Cerrar esta caja
           </button>
         )}
@@ -223,6 +229,91 @@ function CajasDelEquipo({ usuarioId, version }: { usuarioId: string; version: nu
 
 // --- Mi caja ---
 
+/**
+ * De dónde sale lo que tiene que haber en el cajón, como una suma:
+ * cambio inicial + ventas en efectivo + lo puesto − lo sacado. Lo que se
+ * cobró por transferencia o al fiado va aparte: no entra al cajón.
+ *
+ * El cajero no ve las ventas en efectivo ni el total (conteo a ciegas:
+ * lo ve al cerrar, después de contar).
+ */
+function CuentaDelCajon({ turno }: { turno: TurnoCaja }) {
+  const ciega = turno.efectivoEsperadoCentavos === undefined;
+  const pasos: { signo: string; etiqueta: string; valor: string; nota: string }[] = [
+    {
+      signo: '',
+      etiqueta: 'Cambio inicial',
+      valor: formatearCentavos(turno.fondoInicialCentavos),
+      nota: `Desde las ${horaDe(turno.abiertoEn)}`,
+    },
+    {
+      signo: '+',
+      etiqueta: 'Ventas en efectivo',
+      valor: ciega
+        ? `${turno.cantidadVentas} venta${turno.cantidadVentas === 1 ? '' : 's'}`
+        : formatearCentavos(turno.ventasEfectivoCentavos ?? 0),
+      nota: ciega
+        ? 'El monto lo ves al cerrar'
+        : `${turno.cantidadVentas} venta${turno.cantidadVentas === 1 ? '' : 's'} en total`,
+    },
+    {
+      signo: '+',
+      etiqueta: 'Puesto',
+      valor: formatearCentavos(turno.ingresosCentavos),
+      nota: 'Cambio que trajiste',
+    },
+    {
+      signo: '−',
+      etiqueta: 'Sacado',
+      valor: formatearCentavos(turno.retirosCentavos),
+      nota: 'Pagos, depósitos',
+    },
+  ];
+  return (
+    <section className="app-card p-4 sm:p-5" aria-label="Cuenta del cajón">
+      <div className="cuenta-cajon">
+        {pasos.map((paso) => (
+          <div key={paso.etiqueta} className="cuenta-paso">
+            {paso.signo && (
+              <span className="cuenta-signo" aria-hidden>
+                {paso.signo}
+              </span>
+            )}
+            <div>
+              <p className="cuenta-etiqueta">{paso.etiqueta}</p>
+              <p className="cuenta-valor">{paso.valor}</p>
+              <p className="cuenta-nota">{paso.nota}</p>
+            </div>
+          </div>
+        ))}
+        <div className="cuenta-paso cuenta-total">
+          <span className="cuenta-signo" aria-hidden>
+            =
+          </span>
+          <div>
+            <p className="cuenta-etiqueta">En el cajón</p>
+            <p className="cuenta-valor">
+              {ciega ? '¿?' : formatearCentavos(turno.efectivoEsperadoCentavos ?? 0)}
+            </p>
+            <p className="cuenta-nota">
+              {ciega ? 'Se ve al cerrar la caja' : 'Lo que hay que contar'}
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2 border-t border-dashed border-papel-linea pt-3 text-xs text-tinta-suave">
+        <span className="font-medium">No entran al cajón:</span>
+        <span className="chip-pago chip-pago-transferencia">
+          Transferencias {formatearCentavos(turno.ventasTransferenciaCentavos)}
+        </span>
+        <span className="chip-pago chip-pago-fiado">
+          Al fiado {formatearCentavos(turno.ventasFiadoCentavos)}
+        </span>
+      </div>
+    </section>
+  );
+}
+
 function ContenidoCaja() {
   const { token, usuario } = useAuth();
   const esAdmin = usuario?.rol === 'admin';
@@ -283,7 +374,7 @@ function ContenidoCaja() {
         detalle={
           abierta
             ? esAdmin
-              ? `Efectivo que debería haber en el cajón · empezaste con ${formatearCentavos(turno!.fondoInicialCentavos)}.`
+              ? `Efectivo que debería haber en el cajón ahora. Abajo, de dónde sale.`
               : `Empezaste con ${formatearCentavos(turno!.fondoInicialCentavos)} de cambio. Lo que debería haber lo ves al cerrar, después de contar.`
             : cierre
               ? 'Caja cerrada. Abre otra cuando vuelvas a vender.'
@@ -334,37 +425,7 @@ function ContenidoCaja() {
 
           {abierta && (
             <>
-              <div className="mosaico">
-                <Pieza
-                  etiqueta="Cambio inicial"
-                  valor={formatearCentavos(turno!.fondoInicialCentavos)}
-                  detalle={`Desde las ${horaDe(turno!.abiertoEn)}`}
-                />
-                <Pieza
-                  etiqueta="Ventas"
-                  valor={String(turno!.cantidadVentas)}
-                  detalle={
-                    esAdmin
-                      ? `${formatearCentavos(turno!.ventasEfectivoCentavos ?? 0)} en efectivo`
-                      : 'Cobradas en esta caja'
-                  }
-                />
-                <Pieza
-                  etiqueta="Transferencias"
-                  valor={formatearCentavos(turno!.ventasTransferenciaCentavos)}
-                  detalle="No entran al cajón"
-                />
-                <Pieza
-                  etiqueta="Efectivo sacado"
-                  valor={formatearCentavos(turno!.retirosCentavos)}
-                  tono={turno!.retirosCentavos > 0 ? 'rojo' : 'neutro'}
-                  detalle={
-                    turno!.ingresosCentavos > 0
-                      ? `${formatearCentavos(turno!.ingresosCentavos)} puesto`
-                      : 'Pagos, depósitos'
-                  }
-                />
-              </div>
+              <CuentaDelCajon turno={turno!} />
 
               <section className="app-card p-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">

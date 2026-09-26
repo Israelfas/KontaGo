@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -16,6 +18,12 @@ import {
   generarSecreto,
   verificarCodigo,
 } from '../../common/seguridad/totp';
+import {
+  anotarIntentoFallido,
+  estaBloqueada,
+  mensajeDeBloqueo,
+  revocarSesiones,
+} from './bloqueo-de-cuenta';
 
 /** Cuántos códigos de recuperación se entregan al activarla. */
 const CANTIDAD_DE_CODIGOS = 8;
@@ -126,7 +134,14 @@ export class DosPasosService {
     return { codigosRecuperacion: codigos };
   }
 
-  /** La apaga quien la tiene, con un código de la app o de recuperación. */
+  /**
+   * La apaga quien la tiene, con un código de la app o de recuperación.
+   *
+   * Los códigos equivocados cuentan para el bloqueo de la cuenta, igual
+   * que al ingresar: si no, alguien con una sesión robada podía probar
+   * códigos (desde muchas IP) hasta apagarla. Al bloquearse se cortan
+   * además todas las sesiones, así esa sesión robada deja de servir.
+   */
   async desactivar(
     usuarioId: string,
     codigo: string,
@@ -138,7 +153,28 @@ export class DosPasosService {
         'No tienes activada la verificación en dos pasos.',
       );
     }
+    if (estaBloqueada(usuario)) {
+      throw new HttpException(
+        mensajeDeBloqueo(usuario.bloqueadoHasta),
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
     if (!(await this.gastarCodigo(usuario, codigo))) {
+      const manager = this.usuarios.manager;
+      const bloqueada = await anotarIntentoFallido(
+        manager,
+        this.seguridad,
+        usuario,
+        contexto,
+        'codigo_dos_pasos_fallido',
+      );
+      if (bloqueada) {
+        await revocarSesiones(manager, usuarioId, 'codigos_equivocados');
+        throw new HttpException(
+          'Por seguridad, después de varios códigos equivocados cerramos la sesión en todos tus dispositivos y bloqueamos el ingreso por 15 minutos.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
       throw new BadRequestException(CODIGO_INCORRECTO);
     }
     await this.limpiar(usuarioId);
@@ -204,6 +240,7 @@ export class DosPasosService {
 
   private async limpiar(usuarioId: string) {
     await this.usuarios.update(usuarioId, {
+      intentosFallidos: 0,
       dosPasosSecreto: null,
       dosPasosPendiente: null,
       dosPasosActivoDesde: null,

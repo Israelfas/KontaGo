@@ -1,4 +1,5 @@
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { DataSource } from 'typeorm';
 import { MailService } from '../src/modules/mail/mail.service';
 import {
   codigoDelPaso,
@@ -256,5 +257,29 @@ describe('Verificación en dos pasos (e2e)', () => {
 
     // Con el código de recuperación (válido) y el desafío viejo: no.
     await conCodigo(desafio, codigosRecuperacion[0]).expect(401);
+  });
+  it('con una sesión robada no se pueden probar códigos sin fin para apagarla', async () => {
+    const { tienda, token } = await cuentaConDosPasos();
+    const apagar = (codigo: string) =>
+      cliente(app, token).post('/auth/dos-pasos/desactivar', { codigo });
+
+    for (let i = 0; i < 4; i++) await apagar('000000').expect(400);
+    // Al quinto: la cuenta se bloquea y esa sesión deja de servir.
+    const res = await apagar('000000').expect(429);
+    expect((res.body as { message: string }).message).toMatch(
+      /cerramos la sesión/,
+    );
+    await cliente(app, token).get('/auth/perfil').expect(401);
+    await cliente(app)
+      .post('/auth/login', { email: tienda.email, password: CLAVE })
+      .expect(429);
+    // Sigue activa.
+    const [fila] = await app
+      .get(DataSource)
+      .query<{ activa: boolean }[]>(
+        `SELECT dos_pasos_activo_desde IS NOT NULL AS activa FROM usuarios WHERE email = $1`,
+        [tienda.email],
+      );
+    expect(fila.activa).toBe(true);
   });
 });

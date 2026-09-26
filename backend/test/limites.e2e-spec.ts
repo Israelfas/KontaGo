@@ -91,17 +91,21 @@ describe('Límites y datos del dueño (e2e)', () => {
     });
     await abrirCaja(app, admin);
 
+    const vender = async () =>
+      (
+        await cliente(app, admin)
+          .post('/ventas', {
+            items: [{ productoId: p.id, cantidad: 1 }],
+            montoRecibidoCentavos: 115,
+          })
+          .expect(201)
+      ).body as { id: string };
+    // La primera sola (es la más vieja); las demás de a 25 a la vez.
+    const primera = await vender();
     const ventas = 501;
-    for (let i = 0; i < ventas; i += 25) {
+    for (let i = 1; i < ventas; i += 25) {
       await Promise.all(
-        Array.from({ length: Math.min(25, ventas - i) }, () =>
-          cliente(app, admin)
-            .post('/ventas', {
-              items: [{ productoId: p.id, cantidad: 1 }],
-              montoRecibidoCentavos: 115,
-            })
-            .expect(201),
-        ),
+        Array.from({ length: Math.min(25, ventas - i) }, vender),
       );
     }
 
@@ -121,10 +125,10 @@ describe('Límites y datos del dueño (e2e)', () => {
     });
 
     const hoy = (await cliente(app, admin).get('/ventas/hoy').expect(200))
-      .body as { numero: number }[];
+      .body as { id: string }[];
     expect(hoy).toHaveLength(500);
     // Las más recientes: falta solo la primera.
-    expect(Math.min(...hoy.map((v) => v.numero))).toBe(2);
+    expect(hoy.map((v) => v.id)).not.toContain(primera.id);
   }, 120_000);
 
   it('un Excel con demasiadas líneas se pide por partes, en vez de dejar sin memoria al servidor', async () => {

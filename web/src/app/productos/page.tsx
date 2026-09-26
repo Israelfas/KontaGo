@@ -7,6 +7,8 @@ import { AvisoDeCampo, Button, EmptyState, ErrorState, LoadingState } from '@/co
 import { Banda, Hoja } from '@/components/banda';
 import { BoxIcon, PencilIcon, PlusIcon } from '@/components/icons';
 import { Ventana, VentanaPie, useVentana } from '@/components/ventana';
+import { Ficha } from '@/components/ficha';
+import { estadoDelVencimiento } from '@/lib/vencimiento';
 import { useAuth } from '@/lib/auth-context';
 import {
   listarProductos,
@@ -17,7 +19,7 @@ import {
   listarProductosDadosDeBaja,
   ApiError,
 } from '@/lib/api';
-import { formatearCentavos, formatearFechaCorta } from '@/lib/formato';
+import { formatearCentavos } from '@/lib/formato';
 import Link from 'next/link';
 import { resumenDeLotes, tieneVariosLotes } from '@/lib/lotes';
 import { usePantallaChica } from '@/lib/use-pantalla-chica';
@@ -531,63 +533,12 @@ function FormularioEditarProducto({
 // debajo del costo).
 // ---------------------------------------------------------------------
 
-// Tonos para la ficha de cada producto: siempre el mismo para el mismo
-// producto, así se reconoce de un vistazo en la lista.
-const TONOS_FICHA = [
-  { fondo: 'rgba(217, 140, 43, 0.16)', texto: '#9a5f14' },
-  { fondo: 'rgba(47, 143, 176, 0.14)', texto: '#1f6a85' },
-  { fondo: 'rgba(47, 111, 79, 0.14)', texto: '#2f6f4f' },
-  { fondo: 'rgba(138, 99, 201, 0.14)', texto: '#6a45a8' },
-  { fondo: 'rgba(182, 70, 47, 0.12)', texto: '#a03d28' },
-  { fondo: 'rgba(28, 43, 58, 0.09)', texto: '#1c2b3a' },
-];
-
-function tonoDe(texto: string) {
-  let suma = 0;
-  for (const letra of texto) suma = (suma * 31 + letra.charCodeAt(0)) >>> 0;
-  return TONOS_FICHA[suma % TONOS_FICHA.length];
-}
-
-/** "Aceite La Favorita 1 L" → "AL": las dos primeras palabras con letras. */
-function iniciales(nombre: string): string {
-  const palabras = nombre.split(/\s+/).filter((p) => /\p{L}/u.test(p));
-  return (palabras[0]?.[0] ?? '?').concat(palabras[1]?.[0] ?? '').toUpperCase();
-}
-
-/** Días desde hoy hasta la fecha 'AAAA-MM-DD' (negativo si ya pasó). */
-function diasHasta(fecha: string): number {
-  const [anio, mes, dia] = fecha.split('-').map(Number);
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
-  return Math.round((new Date(anio, mes - 1, dia).getTime() - hoy.getTime()) / 86_400_000);
-}
-
-/** El vencimiento como se lee de un vistazo, con su urgencia. */
-function estadoDelVencimiento(fecha: string): {
-  texto: string;
-  tono: 'danger' | 'warning' | 'neutral';
-} {
-  const dias = diasHasta(fecha);
-  if (dias < 0) return { texto: `Vencido · ${formatearFechaCorta(fecha)}`, tono: 'danger' };
-  if (dias === 0) return { texto: 'Vence hoy', tono: 'danger' };
-  if (dias === 1) return { texto: 'Vence mañana', tono: 'warning' };
-  if (dias <= 7) return { texto: `Vence en ${dias} días`, tono: 'warning' };
-  return { texto: formatearFechaCorta(fecha), tono: 'neutral' };
-}
-
 /** Iniciales, nombre y, debajo, lo que lo identifica. */
 function FichaProducto({ producto }: { producto: Producto }) {
-  const tono = tonoDe(producto.categoria || producto.nombre);
   const sinCodigo = esCodigoInterno(producto.codigoBarras);
   return (
     <div className="flex min-w-0 items-center gap-3">
-      <span
-        className="ficha-producto"
-        style={{ background: tono.fondo, color: tono.texto }}
-        aria-hidden
-      >
-        {iniciales(producto.nombre)}
-      </span>
+      <Ficha nombre={producto.nombre} semilla={producto.categoria || undefined} />
       <div className="min-w-0">
         <p className="truncate font-medium text-tinta">{producto.nombre}</p>
         <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-tinta-suave">

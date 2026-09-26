@@ -5,6 +5,8 @@ import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
 import { Button, EmptyState, ErrorState, LoadingState } from '@/components/ui';
 import { Banda, Hoja } from '@/components/banda';
+import { Ficha } from '@/components/ficha';
+import { ChipMetodoPago } from '@/components/metodo-pago';
 import { ReceiptIcon, RefreshIcon } from '@/components/icons';
 import { SelectorPeriodo, usePeriodoDeLaURL } from '@/components/selector-periodo';
 import { BotonExcel } from '@/components/boton-excel';
@@ -41,8 +43,10 @@ import {
 // De a cuántas ventas se traen en el historial (un mes pasa de mil).
 const POR_PAGINA = 50;
 
-const ESTADO: Record<VentaDelHistorial['estado'], { texto: string; clase: string }> = {
-  completa: { texto: 'Completa', clase: 'status-pill-ok' },
+// Solo se marca lo que tiene algo anulado: "Completa" en cada tarjeta era
+// ruido (es lo normal).
+const ESTADO: Record<VentaDelHistorial['estado'], { texto: string; clase: string } | null> = {
+  completa: null,
   parcialmente_anulada: { texto: 'Anulada en parte', clase: 'status-pill-warning' },
   anulada: { texto: 'Anulada', clase: 'status-pill-danger' },
 };
@@ -198,16 +202,27 @@ function TarjetaVenta({
   const netoCentavos = venta.totalCentavos - venta.totalAnuladoCentavos;
 
   return (
-    <div className="app-card flex h-full flex-col p-4 sm:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="font-ticket text-sm text-tinta">
-            <span className="font-semibold">{numeroDeTicket(venta.numero)}</span> ·{' '}
-            {hora(venta.createdAt)} · <span className="text-tinta-suave">{venta.vendedor}</span>
-          </p>
-          <span className={`status-pill ${estado.clase} mt-1 text-xs`}>{estado.texto}</span>
+    <div
+      className={`app-card tarjeta-venta flex h-full flex-col p-4 sm:p-5 ${
+        venta.estado === 'anulada' ? 'tarjeta-venta-anulada' : ''
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <Ficha nombre={venta.vendedor} tamano="chica" redonda />
+          <div className="min-w-0">
+            <p className="flex flex-wrap items-center gap-2">
+              <span className="font-ticket text-sm font-semibold text-tinta">
+                {numeroDeTicket(venta.numero)}
+              </span>
+              {estado && <span className={`status-pill ${estado.clase}`}>{estado.texto}</span>}
+            </p>
+            <p className="truncate text-xs text-tinta-suave">
+              {hora(venta.createdAt)} · {venta.vendedor}
+            </p>
+          </div>
         </div>
-        <div className="text-right">
+        <div className="shrink-0 text-right">
           <p className="font-ticket text-lg font-semibold text-tinta">
             {formatearCentavos(netoCentavos)}
           </p>
@@ -219,7 +234,7 @@ function TarjetaVenta({
         </div>
       </div>
 
-      <ul className="mt-3 space-y-1 text-sm">
+      <ul className="mt-3 space-y-1 border-t border-dashed border-papel-linea pt-3 text-sm">
         {venta.items.map((item) => (
           <li key={item.id} className="flex justify-between gap-3">
             <span className="text-tinta">
@@ -243,18 +258,18 @@ function TarjetaVenta({
         ))}
       </ul>
 
-      <p className="mt-2 font-ticket text-xs text-tinta-suave">
-        {venta.metodoPago === 'transferencia' ? (
-          'Pagado por transferencia'
-        ) : venta.metodoPago === 'fiado' ? (
-          `Al fiado · ${venta.cliente?.nombre ?? 'cliente'}`
-        ) : (
-          <>
-            Efectivo · recibido {formatearCentavos(venta.montoRecibidoCentavos)} · vuelto{' '}
-            {formatearCentavos(venta.vueltoCentavos)}
-          </>
-        )}
-      </p>
+      <div className="mt-3">
+        <ChipMetodoPago
+          metodo={venta.metodoPago}
+          detalle={
+            venta.metodoPago === 'fiado'
+              ? (venta.cliente?.nombre ?? 'cliente')
+              : venta.metodoPago === 'efectivo'
+                ? `recibió ${formatearCentavos(venta.montoRecibidoCentavos)}, vuelto ${formatearCentavos(venta.vueltoCentavos)}`
+                : undefined
+          }
+        />
+      </div>
 
       {venta.anulaciones.length > 0 && (
         <ul className="mt-3 space-y-1 border-t border-papel-linea pt-3 text-xs text-tinta-suave">
@@ -275,15 +290,16 @@ function TarjetaVenta({
             href={`/ticket/${venta.id}?imprimir=1`}
             target="_blank"
             rel="noopener"
-            className="rounded-lg border border-papel-linea px-3 py-1.5 text-xs font-medium text-tinta-suave transition-colors hover:border-tinta hover:text-tinta"
+            className="boton-tarjeta"
           >
+            <ReceiptIcon className="h-3.5 w-3.5" />
             Imprimir ticket
           </a>
           {puedeAnular && venta.estado !== 'anulada' && (
             <button
               type="button"
               onClick={onAnular}
-              className="rounded-lg border border-papel-linea px-3 py-1.5 text-xs font-medium text-tinta-suave transition-colors hover:border-rojo-perdida/40 hover:text-rojo-perdida"
+              className="boton-tarjeta boton-tarjeta-peligro"
             >
               Anular…
             </button>
@@ -429,6 +445,24 @@ function ContenidoVentas() {
     resumen?.cantidadVentas ?? ventas.filter((v) => v.estado !== 'anulada').length;
   const anuladoCentavos =
     resumen?.anuladoCentavos ?? ventas.reduce((acc, v) => acc + v.totalAnuladoCentavos, 0);
+  // Lo cobrado según cómo se pagó (el cajero lo saca de las de hoy).
+  const netoDe = (metodo: VentaDelHistorial['metodoPago']) =>
+    ventas
+      .filter((v) => v.metodoPago === metodo)
+      .reduce((acc, v) => acc + v.totalCentavos - v.totalAnuladoCentavos, 0);
+  const porMetodo = [
+    {
+      clave: 'efectivo',
+      nombre: 'Efectivo',
+      centavos: resumen?.efectivoCentavos ?? netoDe('efectivo'),
+    },
+    {
+      clave: 'transferencia',
+      nombre: 'Transferencia',
+      centavos: resumen?.transferenciaCentavos ?? netoDe('transferencia'),
+    },
+    { clave: 'fiado', nombre: 'Al fiado', centavos: resumen?.fiadoCentavos ?? netoDe('fiado') },
+  ];
   const porDia = new Map(
     resumen?.agrupadoPor === 'dia' ? resumen.serie.map((p) => [p.etiqueta, p.centavos]) : [],
   );
@@ -459,8 +493,7 @@ function ContenidoVentas() {
         valor={formatearCentavos(cobradoCentavos)}
         detalle={
           <>
-            Cobrado en {cantidadCobradas} venta{cantidadCobradas === 1 ? '' : 's'}
-            {anuladoCentavos > 0 && ` · ${formatearCentavos(anuladoCentavos)} anulados`}.{' '}
+            Cobrado en {cantidadCobradas} venta{cantidadCobradas === 1 ? '' : 's'}.{' '}
             {!esAdmin
               ? 'Si hay que anular una venta, avísale al administrador.'
               : hoy
@@ -478,7 +511,34 @@ function ContenidoVentas() {
             </Button>
           </div>
         }
-        extra={esAdmin && periodo && <SelectorPeriodo periodo={periodo} onCambiar={setPeriodo} />}
+        extra={
+          <>
+            {!cargando && cantidadCobradas + anuladoCentavos > 0 && (
+              <div className="banda-datos">
+                {porMetodo.map((m) => (
+                  <div key={m.clave} className="banda-dato">
+                    <span className="banda-dato-etiqueta">
+                      <span className={`punto-pago punto-pago-${m.clave}`} aria-hidden />
+                      {m.nombre}
+                    </span>
+                    <span className="banda-dato-valor">{formatearCentavos(m.centavos)}</span>
+                  </div>
+                ))}
+                {anuladoCentavos > 0 && (
+                  <div className="banda-dato banda-dato-alerta">
+                    <span className="banda-dato-etiqueta">Anulado</span>
+                    <span className="banda-dato-valor">{formatearCentavos(anuladoCentavos)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+            {esAdmin && periodo && (
+              <div className="mt-4">
+                <SelectorPeriodo periodo={periodo} onCambiar={setPeriodo} />
+              </div>
+            )}
+          </>
+        }
       />
 
       <Hoja>

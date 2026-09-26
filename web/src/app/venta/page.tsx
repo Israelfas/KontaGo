@@ -830,6 +830,7 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
         onClick={confirmarVenta}
         disabled={procesando || !puedeCobrar}
         className="mt-4 w-full"
+        aria-describedby={!puedeCobrar ? 'falta-para-cobrar' : undefined}
       >
         {procesando
           ? 'Confirmando…'
@@ -839,6 +840,18 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
               ? 'Anotar al fiado'
               : 'Cobrar por transferencia'}
       </Button>
+      {/* Un botón apagado sin explicación no dice qué falta. */}
+      {!puedeCobrar && !procesando && (
+        <p id="falta-para-cobrar" className="mt-2 text-center text-xs text-tinta-suave">
+          {carrito.length === 0
+            ? 'Agrega productos para cobrar.'
+            : fiado
+              ? 'Elige a quién se le fía.'
+              : montoRecibidoCentavos === null
+                ? 'Escribe cuánto te dio el cliente.'
+                : 'Lo recibido no alcanza para el total.'}
+        </p>
+      )}
 
       {carrito.length > 0 && (
         <button
@@ -952,19 +965,21 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
 
             {sinCodigo.length > 0 && (
               <div className="mt-3">
-                <p className="field-label">Sin código de barras</p>
+                <p className="field-label">Sin código de barras · toca para agregar</p>
                 <div className="flex flex-wrap gap-2">
                   {sinCodigo.map((p) => (
                     <button
                       key={p.id}
                       type="button"
                       onClick={() => agregarDelCatalogo(p)}
-                      className="rounded-full border border-papel-linea bg-white px-3 py-1.5 text-xs font-semibold text-tinta transition-colors hover:border-tinta"
+                      className="chip-producto"
                     >
                       {p.nombre}{' '}
                       <span className="font-ticket font-normal text-tinta-suave">
                         {formatearCentavos(p.precioVentaCentavos)}
+                        {precioPor(p.unidad)}
                       </span>
+                      <PlusIcon className="chip-producto-mas h-3 w-3" aria-hidden />
                     </button>
                   ))}
                 </div>
@@ -1008,7 +1023,7 @@ function ContenidoVenta({ onCajaCerrada }: { onCajaCerrada: () => void }) {
                 <EmptyState
                   icon={<CartIcon className="h-6 w-6" />}
                   title="El carrito está vacío"
-                  description="Busca un producto por su código de barras para empezar."
+                  description="Escanea un código, búscalo por nombre o toca uno de los productos sin código."
                 />
               </div>
             ) : pantallaChica ? (

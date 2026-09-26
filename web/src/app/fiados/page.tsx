@@ -5,6 +5,8 @@ import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
 import { Button, EmptyState, ErrorState, LoadingState } from '@/components/ui';
 import { Banda, Hoja } from '@/components/banda';
+import { Ficha } from '@/components/ficha';
+import { haceCuanto } from '@/lib/vencimiento';
 import { NotebookIcon, PlusIcon } from '@/components/icons';
 import { Ventana, VentanaPie, useVentana } from '@/components/ventana';
 import { useAuth } from '@/lib/auth-context';
@@ -387,6 +389,53 @@ function ContenidoFiados() {
   const porCobrar = deudores.reduce((acc, c) => acc + c.saldoCentavos, 0);
   const q = normalizar(busqueda);
   const visibles = (clientes ?? []).filter((c) => !q || normalizar(c.nombre).includes(q));
+  // Primero los que deben (de más a menos), después los que están al día.
+  const conDeuda = visibles
+    .filter((c) => c.saldoCentavos > 0)
+    .sort((a, b) => b.saldoCentavos - a.saldoCentavos);
+  const alDia = visibles.filter((c) => c.saldoCentavos <= 0);
+  const deudaMayor = Math.max(1, ...deudores.map((c) => c.saldoCentavos));
+  // La deuda que lleva más tiempo sin moverse: la primera a cobrar.
+  const masQuieta = [...deudores]
+    .filter((c) => c.ultimoMovimiento)
+    .sort((a, b) => a.ultimoMovimiento!.localeCompare(b.ultimoMovimiento!))[0];
+
+  const filaDeCliente = (c: ClienteFiado) => (
+    <li key={c.id}>
+      <button
+        type="button"
+        onClick={() => setAbierto(c)}
+        className="app-card fila-cliente flex w-full items-center gap-3 p-4 text-left"
+      >
+        <Ficha nombre={c.nombre} redonda />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold text-tinta">{c.nombre}</span>
+          <span className="block text-xs text-tinta-suave">
+            {c.ultimoMovimiento
+              ? `Último movimiento ${haceCuanto(c.ultimoMovimiento)} · ${fechaYHora(c.ultimoMovimiento)}`
+              : 'Sin movimientos todavía'}
+            {c.telefono && ' · con WhatsApp'}
+          </span>
+          {c.saldoCentavos > 0 && (
+            <span className="barra-deuda mt-2" aria-hidden>
+              <span style={{ width: `${Math.max(4, (c.saldoCentavos / deudaMayor) * 100)}%` }} />
+            </span>
+          )}
+        </span>
+        <span
+          className={`status-pill shrink-0 font-ticket first-letter:uppercase ${
+            c.saldoCentavos > 0
+              ? 'status-pill-danger'
+              : c.saldoCentavos < 0
+                ? 'status-pill-abierta'
+                : 'status-pill-ok'
+          }`}
+        >
+          {textoDelSaldo(c.saldoCentavos)}
+        </span>
+      </button>
+    </li>
+  );
 
   return (
     <div>
@@ -398,8 +447,47 @@ function ContenidoFiados() {
           clientes
             ? deudores.length === 0
               ? 'Nadie debe nada.'
-              : `${deudores.length} cliente${deudores.length === 1 ? '' : 's'} con deuda`
+              : 'Lo que te deben entre todos los clientes.'
             : undefined
+        }
+        extra={
+          clientes &&
+          clientes.length > 0 && (
+            <div className="banda-datos">
+              <div className={`banda-dato ${deudores.length > 0 ? 'banda-dato-alerta' : ''}`}>
+                <span className="banda-dato-etiqueta">Con deuda</span>
+                <span className="banda-dato-valor">
+                  {deudores.length}
+                  <span className="banda-dato-nota">
+                    {' '}
+                    de {clientes.length} cliente{clientes.length === 1 ? '' : 's'}
+                  </span>
+                </span>
+              </div>
+              {deudores.length > 0 && (
+                <div className="banda-dato">
+                  <span className="banda-dato-etiqueta">Debe más</span>
+                  <span className="banda-dato-valor">
+                    {formatearCentavos(deudaMayor)}
+                    <span className="banda-dato-nota">
+                      {' '}
+                      · {deudores.find((c) => c.saldoCentavos === deudaMayor)?.nombre}
+                    </span>
+                  </span>
+                </div>
+              )}
+              {/* Solo si hay una deuda que lleva días sin moverse. */}
+              {masQuieta && haceCuanto(masQuieta.ultimoMovimiento!) !== 'hoy' && (
+                <div className="banda-dato">
+                  <span className="banda-dato-etiqueta">Sin moverse hace más</span>
+                  <span className="banda-dato-valor">
+                    {haceCuanto(masQuieta.ultimoMovimiento!)}
+                    <span className="banda-dato-nota"> · {masQuieta.nombre}</span>
+                  </span>
+                </div>
+              )}
+            </div>
+          )
         }
         accion={
           <Button variant="claro" onClick={() => setCreando(true)}>
@@ -433,39 +521,29 @@ function ContenidoFiados() {
             <input
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              className="field"
+              className="field md:max-w-sm"
               placeholder="Buscar cliente"
               aria-label="Buscar cliente"
             />
-            <ul className="space-y-2">
-              {visibles.map((c) => (
-                <li key={c.id}>
-                  <button
-                    type="button"
-                    onClick={() => setAbierto(c)}
-                    className="app-card flex w-full items-center justify-between gap-3 p-4 text-left transition-colors hover:border-tinta"
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-semibold text-tinta">
-                        {c.nombre}
-                      </span>
-                      <span className="block text-xs text-tinta-suave">
-                        {c.ultimoMovimiento
-                          ? `Último movimiento: ${fechaYHora(c.ultimoMovimiento)}`
-                          : 'Sin movimientos todavía'}
-                      </span>
-                    </span>
-                    <span
-                      className={`shrink-0 font-ticket text-sm font-semibold ${
-                        c.saldoCentavos > 0 ? 'text-rojo-perdida' : 'text-tinta-suave'
-                      }`}
-                    >
-                      {textoDelSaldo(c.saldoCentavos)}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            {visibles.length === 0 && (
+              <p className="text-sm text-tinta-suave">Ningún cliente con ese nombre.</p>
+            )}
+            {conDeuda.length > 0 && (
+              <section className="mt-2">
+                <h2 className="titulo-grupo">
+                  Te deben <span>{conDeuda.length}</span>
+                </h2>
+                <ul className="grid gap-2 lg:grid-cols-2">{conDeuda.map(filaDeCliente)}</ul>
+              </section>
+            )}
+            {alDia.length > 0 && (
+              <section className="mt-6">
+                <h2 className="titulo-grupo">
+                  Al día <span>{alDia.length}</span>
+                </h2>
+                <ul className="grid gap-2 lg:grid-cols-2">{alDia.map(filaDeCliente)}</ul>
+              </section>
+            )}
           </>
         )}
       </Hoja>

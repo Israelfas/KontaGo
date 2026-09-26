@@ -5,6 +5,7 @@ import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
 import { AvisoDeCampo, Button, ErrorState, LoadingState } from '@/components/ui';
 import { Banda, Hoja } from '@/components/banda';
+import { Ficha } from '@/components/ficha';
 import { ActivityIcon, LockIcon, PencilIcon, PlusIcon, UsersIcon } from '@/components/icons';
 import { ActividadDeLaCuenta } from '@/components/actividad-cuenta';
 import { haceCuanto } from '@/lib/actividad';
@@ -255,6 +256,44 @@ function FormularioCambiarPassword({
   );
 }
 
+/** Ficha, nombre y correo de alguien del equipo. */
+function DatosDePersona({ persona, esVos }: { persona: UsuarioEquipo; esVos: boolean }) {
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <Ficha nombre={persona.nombre} redonda />
+      <div className="min-w-0">
+        <p className="truncate font-medium text-tinta">
+          {persona.nombre}
+          {esVos && <span className="ml-1.5 text-xs font-normal text-tinta-suave">(tú)</span>}
+        </p>
+        <p className="truncate text-xs text-tinta-suave" title={persona.email}>
+          {persona.email}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** Si puede entrar: activa, bloqueada por intentos o desactivada. */
+function EstadoDePersona({ persona }: { persona: UsuarioEquipo }) {
+  if (!persona.activo) {
+    return <span className="status-pill status-pill-neutral">Desactivada</span>;
+  }
+  if (persona.bloqueadoHasta) {
+    return <span className="status-pill status-pill-danger">Bloqueada</span>;
+  }
+  return (
+    <span className="flex flex-wrap gap-1.5">
+      <span className="status-pill status-pill-ok">Activa</span>
+      {persona.dosPasos && (
+        <span className="status-pill status-pill-abierta" title="Usa la verificación en dos pasos">
+          <LockIcon className="h-3 w-3" />2 pasos
+        </span>
+      )}
+    </span>
+  );
+}
+
 function ContenidoEquipo() {
   const { token, usuario } = useAuth();
   const pantallaChica = usePantallaChica();
@@ -324,6 +363,58 @@ function ContenidoEquipo() {
     }
   }
 
+  // Las mismas acciones en la tabla y en las tarjetas del celular.
+  function acciones(persona: UsuarioEquipo, esVos: boolean, alinear?: 'derecha') {
+    return (
+      <div className={`flex gap-2 ${alinear === 'derecha' ? 'justify-end' : 'flex-wrap'}`}>
+        {persona.bloqueadoHasta && (
+          <button
+            type="button"
+            disabled={procesandoId !== null}
+            onClick={() => desbloquear(persona)}
+            className="boton-tarjeta boton-tarjeta-alerta disabled:opacity-50"
+          >
+            <LockIcon className="h-3.5 w-3.5" />
+            Desbloquear
+          </button>
+        )}
+        <button type="button" onClick={() => setViendoActividad(persona)} className="boton-tarjeta">
+          <ActivityIcon className="h-3.5 w-3.5" />
+          Actividad
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setAviso(null);
+            setCambiandoPassword(persona);
+          }}
+          className="boton-tarjeta"
+        >
+          <PencilIcon className="h-3.5 w-3.5" />
+          Cambiar contraseña
+        </button>
+        {/* Uno no puede desactivarse a sí mismo: la tienda podría quedar
+            sin nadie que la administre. */}
+        {!esVos && (
+          <button
+            type="button"
+            disabled={procesandoId !== null}
+            onClick={() => alternarActivo(persona)}
+            className={`boton-tarjeta disabled:opacity-50 ${persona.activo ? 'boton-tarjeta-peligro' : ''}`}
+          >
+            {procesandoId === persona.id
+              ? 'Guardando…'
+              : persona.activo
+                ? 'Desactivar'
+                : 'Reactivar'}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  const activas = equipo.filter((p) => p.activo);
+
   return (
     <div>
       <Banda
@@ -332,8 +423,46 @@ function ContenidoEquipo() {
         valor={equipo.length > 0 ? String(equipo.length) : undefined}
         detalle={
           equipo.length > 0
-            ? `${equipo.filter((p) => p.activo).length} con acceso · los cajeros venden y consultan productos, no ven ganancias ni inventario.`
+            ? 'Los cajeros venden y consultan productos; no ven ganancias ni inventario.'
             : 'Las personas que usan KontaGo en tu tienda.'
+        }
+        extra={
+          equipo.length > 0 && (
+            <div className="banda-datos">
+              <div className="banda-dato">
+                <span className="banda-dato-etiqueta">Con acceso</span>
+                <span className="banda-dato-valor">
+                  {activas.length}
+                  <span className="banda-dato-nota">
+                    {' '}
+                    · {activas.filter((p) => p.rol === 'admin').length} admin,{' '}
+                    {activas.filter((p) => p.rol === 'cajero').length} cajeros
+                  </span>
+                </span>
+              </div>
+              <div className="banda-dato">
+                <span className="banda-dato-etiqueta">Con verificación en 2 pasos</span>
+                <span className="banda-dato-valor">
+                  {activas.filter((p) => p.dosPasos).length}
+                  <span className="banda-dato-nota"> de {activas.length}</span>
+                </span>
+              </div>
+              {equipo.some((p) => p.bloqueadoHasta) && (
+                <div className="banda-dato banda-dato-alerta">
+                  <span className="banda-dato-etiqueta">Bloqueadas</span>
+                  <span className="banda-dato-valor">
+                    {equipo.filter((p) => p.bloqueadoHasta).length}
+                  </span>
+                </div>
+              )}
+              {equipo.length > activas.length && (
+                <div className="banda-dato">
+                  <span className="banda-dato-etiqueta">Desactivadas</span>
+                  <span className="banda-dato-valor">{equipo.length - activas.length}</span>
+                </div>
+              )}
+            </div>
+          )
         }
         accion={
           <Button variant="claro" onClick={() => setAgregando(true)}>
@@ -433,76 +562,20 @@ function ContenidoEquipo() {
                     className={`app-card p-4 ${persona.activo ? '' : 'opacity-60'}`}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-medium text-tinta">
-                          {persona.nombre}
-                          {esVos && <span className="ml-1 text-xs text-tinta-suave">(tú)</span>}
-                        </p>
-                        <p className="break-all text-xs text-tinta-suave">{persona.email}</p>
-                        <p className="mt-1 text-xs text-tinta-suave">
-                          {persona.ultimoIngreso
-                            ? `Entró ${haceCuanto(persona.ultimoIngreso)}`
-                            : 'Todavía no entró'}
-                        </p>
-                        {!persona.activo && (
-                          <p className="mt-1 text-xs text-rojo-perdida">Desactivado</p>
-                        )}
-                        {persona.bloqueadoHasta && (
-                          <p className="mt-1 text-xs font-medium text-rojo-perdida">
-                            Bloqueada por intentos fallidos
-                          </p>
-                        )}
-                      </div>
+                      <DatosDePersona persona={persona} esVos={esVos} />
                       <span className={`status-pill ${CLASE_ROL[persona.rol]} shrink-0 text-xs`}>
                         {ETIQUETA_ROL[persona.rol]}
                       </span>
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setViendoActividad(persona)}
-                        className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10 disabled:opacity-50"
-                      >
-                        <ActivityIcon className="h-3 w-3" />
-                        Actividad
-                      </button>
-                      {persona.bloqueadoHasta && (
-                        <button
-                          type="button"
-                          disabled={procesandoId !== null}
-                          onClick={() => desbloquear(persona)}
-                          className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10 disabled:opacity-50 !bg-rojo-perdida/10 !text-rojo-perdida"
-                        >
-                          <LockIcon className="h-3 w-3" />
-                          Desbloquear
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAviso(null);
-                          setCambiandoPassword(persona);
-                        }}
-                        className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10 disabled:opacity-50"
-                      >
-                        <PencilIcon className="h-3 w-3" />
-                        Cambiar contraseña
-                      </button>
-                      {!esVos && (
-                        <button
-                          type="button"
-                          disabled={procesandoId !== null}
-                          onClick={() => alternarActivo(persona)}
-                          className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10 disabled:opacity-50"
-                        >
-                          {procesandoId === persona.id
-                            ? 'Guardando…'
-                            : persona.activo
-                              ? 'Desactivar'
-                              : 'Reactivar'}
-                        </button>
-                      )}
+                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-papel-linea pt-3">
+                      <EstadoDePersona persona={persona} />
+                      <span className="text-xs text-tinta-suave">
+                        {persona.ultimoIngreso
+                          ? `Entró ${haceCuanto(persona.ultimoIngreso)}`
+                          : 'Todavía no entró'}
+                      </span>
                     </div>
+                    <div className="mt-3">{acciones(persona, esVos)}</div>
                   </li>
                 );
               })}
@@ -511,14 +584,23 @@ function ContenidoEquipo() {
 
           {!cargando && !error && !pantallaChica && (
             <div className="table-shell">
-              <table className="w-full text-left text-sm">
+              <table className="w-full table-fixed text-left text-sm">
+                <colgroup>
+                  <col />
+                  <col className="w-24" />
+                  <col className="w-40" />
+                  <col className="w-36" />
+                  <col className="w-[26rem]" />
+                </colgroup>
                 <thead>
                   <tr className="table-header">
-                    <th className="px-4 py-3">Nombre</th>
-                    <th className="px-4 py-3">Email</th>
+                    <th className="px-4 py-3">Persona</th>
                     <th className="px-4 py-3">Rol</th>
+                    <th className="px-4 py-3">Estado</th>
                     <th className="px-4 py-3">Último ingreso</th>
-                    <th className="px-4 py-3" />
+                    <th className="px-4 py-3">
+                      <span className="sr-only">Acciones</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -529,77 +611,21 @@ function ContenidoEquipo() {
                         key={persona.id}
                         className={`border-t border-papel-linea ${persona.activo ? '' : 'opacity-60'}`}
                       >
-                        <td className="px-4 py-3 text-tinta">
-                          {persona.nombre}
-                          {esVos && <span className="ml-2 text-xs text-tinta-suave">(tú)</span>}
-                          {!persona.activo && (
-                            <span className="ml-2 text-xs text-rojo-perdida">Desactivado</span>
-                          )}
-                          {persona.bloqueadoHasta && (
-                            <span className="status-pill status-pill-danger ml-2 text-[0.65rem]">
-                              Bloqueada
-                            </span>
-                          )}
+                        <td className="px-4 py-3">
+                          <DatosDePersona persona={persona} esVos={esVos} />
                         </td>
-                        <td className="px-4 py-3 text-tinta-suave">{persona.email}</td>
                         <td className="px-4 py-3">
                           <span className={`status-pill ${CLASE_ROL[persona.rol]} text-xs`}>
                             {ETIQUETA_ROL[persona.rol]}
                           </span>
                         </td>
+                        <td className="px-4 py-3">
+                          <EstadoDePersona persona={persona} />
+                        </td>
                         <td className="px-4 py-3 text-xs text-tinta-suave">
                           {persona.ultimoIngreso ? haceCuanto(persona.ultimoIngreso) : 'Nunca'}
                         </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex flex-wrap justify-end gap-2">
-                            {persona.bloqueadoHasta && (
-                              <button
-                                type="button"
-                                disabled={procesandoId !== null}
-                                onClick={() => desbloquear(persona)}
-                                className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10 disabled:opacity-50 !bg-rojo-perdida/10 !text-rojo-perdida"
-                              >
-                                <LockIcon className="h-3 w-3" />
-                                Desbloquear
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => setViendoActividad(persona)}
-                              className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10 disabled:opacity-50"
-                            >
-                              <ActivityIcon className="h-3 w-3" />
-                              Actividad
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setAviso(null);
-                                setCambiandoPassword(persona);
-                              }}
-                              className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10 disabled:opacity-50"
-                            >
-                              <PencilIcon className="h-3 w-3" />
-                              Cambiar contraseña
-                            </button>
-                            {/* Uno no puede desactivarse a sí mismo: la tienda
-                                podría quedar sin nadie que la administre. */}
-                            {!esVos && (
-                              <button
-                                type="button"
-                                disabled={procesandoId !== null}
-                                onClick={() => alternarActivo(persona)}
-                                className="inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10 disabled:opacity-50"
-                              >
-                                {procesandoId === persona.id
-                                  ? 'Guardando…'
-                                  : persona.activo
-                                    ? 'Desactivar'
-                                    : 'Reactivar'}
-                              </button>
-                            )}
-                          </div>
-                        </td>
+                        <td className="px-4 py-3">{acciones(persona, esVos, 'derecha')}</td>
                       </tr>
                     );
                   })}

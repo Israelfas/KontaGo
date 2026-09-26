@@ -1934,7 +1934,8 @@ html:has(dialog.ventana[open]) {
 /* =================================================================
    Catálogo de productos: cada dato con su contexto.
    ================================================================= */
-.ficha-producto {
+/* Ficha con iniciales (productos, personas, clientes). */
+.ficha {
   display: grid;
   flex-shrink: 0;
   place-items: center;
@@ -1945,6 +1946,419 @@ html:has(dialog.ventana[open]) {
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: -0.02em;
+}
+
+.ficha-chica {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.65rem;
+  font-size: 0.7rem;
+}
+
+.ficha-redonda {
+  border-radius: 999px;
+}
+
+/* Cómo se pagó: el mismo color en toda la app. */
+.chip-pago {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1.1;
+}
+
+.chip-pago-detalle {
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.chip-pago-efectivo {
+  background: rgba(217, 140, 43, 0.14);
+  color: #8f560f;
+}
+
+.chip-pago-transferencia {
+  background: rgba(47, 143, 176, 0.13);
+  color: #1f6a85;
+}
+
+.chip-pago-fiado {
+  background: rgba(138, 99, 201, 0.13);
+  color: #6a45a8;
+}
+
+.punto-pago {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.35rem;
+  border-radius: 999px;
+  vertical-align: 0.05rem;
+}
+
+.punto-pago-efectivo {
+  background: #f2a93b;
+}
+
+.punto-pago-transferencia {
+  background: #5bb8d6;
+}
+
+.punto-pago-fiado {
+  background: #b394e6;
+}
+
+/* La cuenta del cajón: cambio + ventas + puesto − sacado = en el cajón. */
+.cuenta-cajon {
+  display: grid;
+  gap: 0.75rem;
+}
+
+@media (min-width: 900px) {
+  .cuenta-cajon {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.15fr);
+    gap: 0;
+  }
+}
+
+.cuenta-paso {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+@media (min-width: 900px) {
+  .cuenta-paso {
+    padding: 0 0.9rem;
+  }
+
+  .cuenta-paso + .cuenta-paso {
+    border-left: 1px dashed var(--papel-linea);
+  }
+}
+
+.cuenta-signo {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-top: 0.15rem;
+  border-radius: 999px;
+  background: rgba(28, 43, 58, 0.07);
+  color: var(--tinta-suave);
+  font-family: var(--font-ticket);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.cuenta-etiqueta {
+  color: var(--tinta-suave);
+  font-size: 0.66rem;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.cuenta-valor {
+  margin-top: 0.3rem;
+  color: var(--tinta);
+  font-family: var(--font-ticket);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+}
+
+.cuenta-nota {
+  margin-top: 0.15rem;
+  color: var(--tinta-suave);
+  font-size: 0.7rem;
+}
+
+.cuenta-total {
+  border-radius: 0.9rem;
+  background: linear-gradient(145deg, #22384b, #16232f);
+  padding: 0.75rem 0.9rem;
+}
+
+.cuenta-total .cuenta-signo {
+  background: rgba(255, 208, 138, 0.18);
+  color: #ffd08a;
+}
+
+.cuenta-total .cuenta-etiqueta,
+.cuenta-total .cuenta-nota {
+  color: rgba(246, 243, 236, 0.66);
+}
+
+.cuenta-total .cuenta-valor {
+  color: #ffd08a;
+}
+
+@media (min-width: 900px) {
+  .cuenta-total {
+    margin-left: 0.6rem;
+  }
+
+  .cuenta-paso + .cuenta-total {
+    border-left: 0;
+  }
+}
+
+/* Cajas del equipo: el borde izquierdo dice cómo cerró. */
+.tarjeta-turno {
+  border-left-width: 4px;
+}
+
+.tarjeta-turno-abierta {
+  border-left-color: #5bb8d6;
+}
+
+.tarjeta-turno-ok {
+  border-left-color: var(--verde-ganancia);
+}
+
+.tarjeta-turno-falta {
+  border-left-color: var(--rojo-perdida);
+}
+
+.tarjeta-turno-sobra {
+  border-left-color: var(--ambar);
+}
+
+.datos-turno {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  border-radius: 0.8rem;
+  background: rgba(28, 43, 58, 0.035);
+  padding: 0.6rem 0.75rem;
+}
+
+.datos-turno dt {
+  color: var(--tinta-suave);
+  font-size: 0.68rem;
+}
+
+.datos-turno dd {
+  color: var(--tinta);
+  font-family: var(--font-ticket);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.status-pill-abierta {
+  background: rgba(47, 143, 176, 0.13);
+  color: #1f6a85;
+}
+
+.punto-vivo {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: #2f8fb0;
+  animation: latido-suave 1.8s ease-in-out infinite;
+}
+
+@keyframes latido-suave {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Encabezado de un grupo de alertas, con su color y cuántas son. */
+.titulo-alerta {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-bottom: 1px solid var(--papel-linea);
+  padding: 0.65rem 1rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.titulo-alerta-rojo {
+  background: linear-gradient(90deg, rgba(182, 70, 47, 0.1), rgba(182, 70, 47, 0.02));
+  color: var(--rojo-perdida);
+}
+
+.titulo-alerta-ambar {
+  background: linear-gradient(90deg, rgba(217, 140, 43, 0.14), rgba(217, 140, 43, 0.03));
+  color: #8f560f;
+}
+
+.titulo-alerta-cantidad {
+  margin-left: auto;
+  border-radius: 999px;
+  background: currentColor;
+  padding: 0.1rem 0.5rem;
+  font-family: var(--font-ticket);
+  letter-spacing: 0;
+}
+
+.titulo-alerta-cantidad {
+  color: var(--papel);
+}
+
+.titulo-alerta-rojo .titulo-alerta-cantidad {
+  background: var(--rojo-perdida);
+}
+
+.titulo-alerta-ambar .titulo-alerta-cantidad {
+  background: #b87417;
+}
+
+/* Un título de grupo dentro de una lista ("Te deben 3"). */
+.titulo-grupo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+  color: var(--tinta-suave);
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.titulo-grupo span {
+  border-radius: 999px;
+  background: rgba(28, 43, 58, 0.07);
+  padding: 0.1rem 0.45rem;
+  font-family: var(--font-ticket);
+  letter-spacing: 0;
+}
+
+.fila-cliente {
+  transition:
+    border-color 150ms ease,
+    box-shadow 180ms ease,
+    transform 180ms var(--ease-salida, ease);
+}
+
+.fila-cliente:hover {
+  border-color: rgba(28, 43, 58, 0.25);
+  box-shadow: 0 14px 30px rgba(28, 43, 58, 0.09);
+  transform: translateY(-1px);
+}
+
+.barra-deuda {
+  display: block;
+  height: 0.28rem;
+  max-width: 14rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(182, 70, 47, 0.1);
+}
+
+.barra-deuda > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #d9735c, var(--rojo-perdida));
+  transform-origin: 0 50%;
+  animation: crecer-horizontal 700ms var(--ease-salida) 200ms both;
+}
+
+/* Un producto sin código para agregar a la venta con un toque. */
+.chip-producto {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--papel-linea);
+  border-radius: 999px;
+  background: var(--superficie);
+  padding: 0.4rem 0.55rem 0.4rem 0.8rem;
+  color: var(--tinta);
+  font-size: 0.75rem;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(28, 43, 58, 0.04);
+  transition:
+    border-color 150ms ease,
+    transform 150ms var(--ease-salida, ease),
+    box-shadow 150ms ease;
+}
+
+.chip-producto:hover {
+  border-color: var(--ambar);
+  box-shadow: 0 6px 14px rgba(217, 140, 43, 0.16);
+  transform: translateY(-1px);
+}
+
+.chip-producto:active {
+  transform: scale(0.97);
+}
+
+.chip-producto-mas {
+  display: grid;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 999px;
+  background: rgba(217, 140, 43, 0.16);
+  padding: 0.15rem;
+  color: #9a5f14;
+}
+
+/* Botones chicos al pie de una tarjeta (imprimir, anular…). */
+.boton-tarjeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--papel-linea);
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  color: var(--tinta-suave);
+  font-size: 0.72rem;
+  font-weight: 600;
+  transition:
+    border-color 150ms ease,
+    color 150ms ease,
+    background-color 150ms ease;
+}
+
+.boton-tarjeta:hover {
+  border-color: var(--tinta);
+  color: var(--tinta);
+}
+
+.boton-tarjeta-alerta {
+  border-color: rgba(182, 70, 47, 0.35);
+  background: rgba(182, 70, 47, 0.08);
+  color: var(--rojo-perdida);
+}
+
+.boton-tarjeta-peligro:hover {
+  border-color: rgba(182, 70, 47, 0.4);
+  background: rgba(182, 70, 47, 0.06);
+  color: var(--rojo-perdida);
+}
+
+.tarjeta-venta {
+  transition:
+    box-shadow 180ms ease,
+    transform 180ms var(--ease-salida, ease);
+}
+
+.tarjeta-venta:hover {
+  box-shadow: 0 16px 36px rgba(28, 43, 58, 0.1);
+  transform: translateY(-1px);
+}
+
+/* Anulada entera: se ve apagada, para no confundirla con lo cobrado. */
+.tarjeta-venta-anulada {
+  background: repeating-linear-gradient(
+      135deg,
+      transparent 0 12px,
+      rgba(182, 70, 47, 0.025) 12px 24px
+    ),
+    var(--superficie);
 }
 
 .etiqueta-dato {

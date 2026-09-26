@@ -32,6 +32,8 @@ import { Rol } from '../../common/enums/rol.enum';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 import { RegistroDto } from './dto/registro.dto';
 import { bloquearEmail } from '../../common/db/bloquear-email';
+import * as bloqueo from './bloqueo-de-cuenta';
+import type { MotivoRevocacion } from './bloqueo-de-cuenta';
 
 interface TokenPair {
   accessToken: string;
@@ -52,11 +54,6 @@ const SESION_VENCIDA = 'Sesión vencida, inicia sesión de nuevo';
 // El mismo mensaje exista o no el email: si no, sirve para averiguar
 // qué emails tienen cuenta.
 const CREDENCIALES_INVALIDAS = 'Email o contraseña incorrectos.';
-
-// Tras 5 contraseñas equivocadas seguidas, la cuenta espera 15 minutos.
-// Frena a quien prueba contraseñas desde muchas IP (el límite por IP solo
-// frena a una). Recuperar la contraseña la desbloquea.
-const INTENTOS_ANTES_DE_BLOQUEAR = 5;
 
 /** Cuánto dura el paso del código después de la contraseña. */
 const SEGUNDOS_PARA_EL_CODIGO = 5 * 60;
@@ -82,7 +79,6 @@ interface PayloadDesafio {
   verificadoEn?: number;
   iat?: number;
 }
-const MINUTOS_DE_BLOQUEO = 15;
 
 // Enlace de "olvidé mi contraseña": una sola vez, 30 minutos, y como
 // mucho 3 pedidos por hora por cuenta (que no sirva para llenarle el
@@ -105,13 +101,7 @@ const HASH_FICTICIO =
 const hashDeToken = (token: string) =>
   createHash('sha256').update(token).digest('hex');
 
-export type MotivoRevocacion =
-  | 'cierre'
-  | 'reuso'
-  | 'usuario_desactivado'
-  | 'password_cambiada'
-  | 'cerradas_por_el_usuario'
-  | 'cerradas_por_admin';
+export type { MotivoRevocacion };
 
 @Injectable()
 export class AuthService {
@@ -363,34 +353,18 @@ export class AuthService {
     usuario: Usuario,
     contexto: ContextoPedido,
     tipo: TipoEventoSeguridad = 'ingreso_fallido',
-  ) {
-    // Suma en la base (no en memoria): dos intentos simultáneos cuentan dos.
-    const [filas] = await this.dataSource.query<
-      [{ intentos_fallidos: number }[], number]
-    >(
-      `UPDATE usuarios SET intentos_fallidos = intentos_fallidos + 1
-       WHERE id = $1 RETURNING intentos_fallidos`,
-      [usuario.id],
+  ): Promise<void> {
+    await bloqueo.anotarIntentoFallido(
+      this.dataSource.manager,
+      this.seguridad,
+      usuario,
+      contexto,
+      tipo,
     );
-    const intentos = filas[0]?.intentos_fallidos ?? 0;
-    await this.seguridad.registrar(tipo, { usuario, contexto });
-    if (intentos >= INTENTOS_ANTES_DE_BLOQUEAR) {
-      await this.usuarioRepo.update(usuario.id, {
-        intentosFallidos: 0,
-        bloqueadoHasta: new Date(Date.now() + MINUTOS_DE_BLOQUEO * 60_000),
-      });
-      await this.seguridad.registrar('cuenta_bloqueada', { usuario, contexto });
-    }
   }
 
   private mensajeDeBloqueo(hasta: Date): string {
-    const minutos = Math.max(
-      1,
-      Math.ceil((hasta.getTime() - Date.now()) / 60_000),
-    );
-    return `Por seguridad bloqueamos el ingreso por ${minutos} minuto${
-      minutos === 1 ? '' : 's'
-    } después de varios intentos fallidos. Prueba de nuevo después o cambia tu contraseña con "¿Olvidaste tu contraseña?".`;
+    return bloqueo.mensajeDeBloqueo(hasta);
   }
 
   // --- Recuperar la contraseña ---
@@ -843,19 +817,7 @@ export class AuthService {
     motivo: MotivoRevocacion,
     manager: EntityManager = this.dataSource.manager,
   ): Promise<void> {
-    // Primero la marca (toma la fila del usuario): un ingreso que ya había
-    // verificado la contraseña espera, o encuentra la marca y se rechaza.
-    // Después se cortan las sesiones que ya existían.
-    const ahora = new Date();
-    await manager
-      .getRepository(Usuario)
-      .update(usuarioId, { sesionesValidasDesde: ahora });
-    await manager
-      .getRepository(Sesion)
-      .update(
-        { usuarioId, revocadaEn: IsNull() },
-        { revocadaEn: ahora, motivoRevocacion: motivo },
-      );
+    await bloqueo.revocarSesiones(manager, usuarioId, motivo);
   }
 
   private async verificarRefresh(

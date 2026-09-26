@@ -34,6 +34,8 @@ import {
   type FilaDeLote,
 } from '@/lib/api';
 import { formatearCentavos, formatearFechaCorta } from '@/lib/formato';
+import { Ficha } from '@/components/ficha';
+import { estadoDelVencimiento } from '@/lib/vencimiento';
 import { aCentavos, avisoDelMargen, avisoDelVencimiento } from '@/lib/validacion';
 import {
   lotesPorVencer,
@@ -555,6 +557,34 @@ function ConfirmarBajaVencido({
   );
 }
 
+/** "1 u. · vence en 3 días", "28 u. · vence 4 may 2027", "6 u. · sin fecha". */
+function textoDelLote(lote: { cantidad: number; fechaVencimiento: string | null }): string {
+  if (!lote.fechaVencimiento) return `${unidades(lote.cantidad)} · sin fecha`;
+  const estado = estadoDelVencimiento(lote.fechaVencimiento);
+  return `${unidades(lote.cantidad)} · ${
+    estado.tono === 'neutral' ? `vence ${estado.texto}` : estado.texto.toLowerCase()
+  }`;
+}
+
+/** Encabezado de un grupo de alertas, con cuántas son. */
+function TituloAlerta({
+  texto,
+  cantidad,
+  tono,
+}: {
+  texto: string;
+  cantidad: number;
+  tono: 'rojo' | 'ambar';
+}) {
+  return (
+    <div className={`titulo-alerta titulo-alerta-${tono}`}>
+      <AlertIcon className="h-3.5 w-3.5" />
+      {texto}
+      <span className="titulo-alerta-cantidad">{cantidad}</span>
+    </div>
+  );
+}
+
 function TablaAlertas({
   alertas,
   onAbastecer,
@@ -593,10 +623,7 @@ function TablaAlertas({
     <div className="grid gap-5 sm:grid-cols-2">
       {vencidos.length > 0 && (
         <div className="table-shell sm:col-span-2">
-          <div className="table-header flex items-center gap-1.5 px-4 py-2.5">
-            <AlertIcon className="h-3.5 w-3.5 text-rojo-perdida" />
-            Vencidos en el estante
-          </div>
+          <TituloAlerta texto="Vencidos en el estante" cantidad={vencidos.length} tono="rojo" />
           <table className="w-full text-left text-sm">
             <tbody>
               {vencidos.map(({ producto, lote }) => (
@@ -615,25 +642,41 @@ function TablaAlertas({
 
       {alertas.stockBajo.length > 0 && (
         <div className="table-shell">
-          <div className="table-header flex items-center gap-1.5 px-4 py-2.5">
-            <AlertIcon className="h-3.5 w-3.5 text-ambar" />
-            Stock bajo
-          </div>
+          <TituloAlerta texto="Stock bajo" cantidad={alertas.stockBajo.length} tono="ambar" />
           <table className="w-full text-left text-sm">
             <tbody>
               {alertas.stockBajo.map((p) => (
                 <tr key={p.id} className="border-t border-papel-linea">
-                  <td className="px-4 py-3 text-tinta">{p.nombre}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Ficha nombre={p.nombre} tamano="chica" />
+                      <div className="min-w-0">
+                        <p className="truncate text-tinta">{p.nombre}</p>
+                        <p className="mt-1 flex items-center gap-1.5">
+                          <span
+                            className={`nivel-stock ${p.stock <= 0 ? 'nivel-stock-agotado' : 'nivel-stock-bajo'}`}
+                            aria-hidden
+                          >
+                            <span
+                              style={{
+                                width: `${Math.max(4, Math.min(1, p.stock / (p.stockMinimo * 3)) * 100)}%`,
+                              }}
+                            />
+                          </span>
+                          <span className="font-ticket text-[11px] text-tinta-suave">
+                            quedan {formatearCantidad(p.stock, p.unidad)} · mín.{' '}
+                            {formatearCantidad(p.stockMinimo, p.unidad)}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-right">
-                    <span className="status-pill status-pill-warning font-ticket">
-                      {formatearCantidad(p.stock, p.unidad)} / mín.{' '}
-                      {formatearCantidad(p.stockMinimo, p.unidad)}
-                    </span>
                     {onAbastecer && (
                       <button
                         type="button"
                         onClick={() => onAbastecer(p.id)}
-                        className="ml-3 inline-flex items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10"
+                        className="boton-tarjeta"
                       >
                         <PlusIcon className="h-3 w-3" />
                         Abastecer
@@ -649,26 +692,31 @@ function TablaAlertas({
 
       {porVencer.length > 0 && (
         <div className="table-shell">
-          <div className="table-header flex items-center gap-1.5 px-4 py-2.5">
-            <AlertIcon className="h-3.5 w-3.5 text-rojo-perdida" />
-            Por vencer
-          </div>
+          <TituloAlerta texto="Por vencer" cantidad={porVencer.length} tono="ambar" />
           <table className="w-full text-left text-sm">
             <tbody>
               {porVencer.map(({ producto, lote }) => (
                 <tr key={lote.id} className="border-t border-papel-linea">
                   <td className="px-4 py-3 text-tinta">
-                    {producto.nombre}
-                    {/* Con varias fechas, cuántas son las que vencen. */}
-                    {producto.stock !== lote.cantidad && (
-                      <span className="block font-ticket text-xs text-tinta-suave">
-                        {unidades(lote.cantidad)} de {producto.stock}
-                      </span>
-                    )}
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Ficha nombre={producto.nombre} tamano="chica" />
+                      <div className="min-w-0">
+                        <p className="truncate">{producto.nombre}</p>
+                        {/* Con varias fechas, cuántas son las que vencen. */}
+                        <span className="block font-ticket text-xs text-tinta-suave">
+                          {producto.stock !== lote.cantidad
+                            ? `${unidades(lote.cantidad)} de ${producto.stock}`
+                            : unidades(lote.cantidad)}
+                        </span>
+                      </div>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <span className="status-pill status-pill-danger font-ticket">
-                      {formatearFechaCorta(lote.fechaVencimiento!)}
+                    <span
+                      className={`status-pill status-pill-${estadoDelVencimiento(lote.fechaVencimiento!).tono}`}
+                      title={formatearFechaCorta(lote.fechaVencimiento!)}
+                    >
+                      {estadoDelVencimiento(lote.fechaVencimiento!).texto}
                     </span>
                   </td>
                 </tr>
@@ -859,22 +907,26 @@ function SeccionLotes({ productos, onCambio }: { productos: Producto[]; onCambio
           {conLotes.map((p) => (
             <li key={p.id} className="app-card p-4">
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-medium text-tinta">{p.nombre}</p>
-                  <p className="font-ticket text-xs text-tinta-suave">
-                    {unidades(p.stock)} en stock
-                  </p>
+                <div className="flex min-w-0 items-center gap-3">
+                  <Ficha nombre={p.nombre} semilla={p.categoria || undefined} tamano="chica" />
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-tinta">{p.nombre}</p>
+                    <p className="font-ticket text-xs text-tinta-suave">
+                      {unidades(p.stock)} en stock ·{' '}
+                      {p.lotes!.length === 1 ? 'una fecha' : `${p.lotes!.length} fechas`}
+                    </p>
+                  </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setEditando(p)}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full bg-tinta/5 px-2.5 py-1 text-xs font-medium text-tinta transition-colors hover:bg-tinta/10"
+                  className="boton-tarjeta shrink-0"
                 >
                   <PencilIcon className="h-3 w-3" />
                   Corregir
                 </button>
               </div>
-              <ul className="mt-2 flex flex-wrap gap-1.5">
+              <ul className="mt-3 flex flex-wrap gap-1.5">
                 {p.lotes!.map((l) => {
                   const vencido = lotesVencidos(p).includes(l);
                   const pronto = lotesPorVencer(p).includes(l);
@@ -889,7 +941,7 @@ function SeccionLotes({ productos, onCambio }: { productos: Producto[]; onCambio
                             : 'status-pill-neutral'
                       }`}
                     >
-                      {unidades(l.cantidad)} · {textoVencimiento(l)}
+                      {textoDelLote(l)}
                     </li>
                   );
                 })}
@@ -960,8 +1012,41 @@ function ContenidoInventario() {
         valor={resumen ? formatearCentavos(resumen.egresoCentavos) : undefined}
         detalle={
           resumen
-            ? `Gastado hoy en abastecimiento · ${formatearCentavos(resumen.perdidaCentavos)} perdidos por merma.`
+            ? 'Gastado hoy en mercadería (abastecimientos).'
             : 'Entradas y pérdidas de mercadería, y las alertas de tu catálogo.'
+        }
+        extra={
+          resumen &&
+          alertas && (
+            <div className="banda-datos">
+              <div
+                className={`banda-dato ${resumen.perdidaCentavos > 0 ? 'banda-dato-alerta' : ''}`}
+              >
+                <span className="banda-dato-etiqueta">Perdido hoy por merma</span>
+                <span className="banda-dato-valor">
+                  {formatearCentavos(resumen.perdidaCentavos)}
+                </span>
+              </div>
+              <div
+                className={`banda-dato ${alertas.vencidos.length > 0 ? 'banda-dato-alerta' : ''}`}
+              >
+                <span className="banda-dato-etiqueta">Vencidos en el estante</span>
+                <span className="banda-dato-valor">{alertas.vencidos.length}</span>
+              </div>
+              <div
+                className={`banda-dato ${alertas.stockBajo.length > 0 ? 'banda-dato-alerta' : ''}`}
+              >
+                <span className="banda-dato-etiqueta">Stock bajo</span>
+                <span className="banda-dato-valor">{alertas.stockBajo.length}</span>
+              </div>
+              <div
+                className={`banda-dato ${alertas.porVencer.length > 0 ? 'banda-dato-alerta' : ''}`}
+              >
+                <span className="banda-dato-etiqueta">Vencen en 7 días</span>
+                <span className="banda-dato-valor">{alertas.porVencer.length}</span>
+              </div>
+            </div>
+          )
         }
         accion={
           <Link href="/inventario/historial" className="button button-claro">
