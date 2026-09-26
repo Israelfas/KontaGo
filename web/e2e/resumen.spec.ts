@@ -16,7 +16,7 @@ test.describe('Resumen y ventas (admin)', () => {
     const r = await consultar<Resumen>(`/ventas/resumen?desde=${hoy()}&hasta=${hoy()}`, sesion);
     await page.goto('/dashboard');
     await expect(valorDeLaFranja(page)).toHaveText(monto(r.gananciaCentavos));
-    await expect(page.locator('.barra-columna').first()).toBeVisible();
+    await expect(page.locator('.grafico-linea').first()).toBeVisible();
   });
 
   test('cambiar a 7 días: URL, título y montos del período', async ({ page }) => {

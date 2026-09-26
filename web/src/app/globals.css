@@ -913,6 +913,205 @@ select:focus-visible {
   color: var(--rojo-perdida);
 }
 
+/* Etiqueta a la izquierda y un ícono o anillo chico a la derecha. */
+.pieza-cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.pieza-icono {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  margin: -0.25rem -0.2rem 0 0;
+  border-radius: 0.8rem;
+  background: linear-gradient(145deg, rgba(242, 169, 59, 0.22), rgba(217, 140, 43, 0.1));
+  color: #9a5f14;
+}
+
+.anillo {
+  position: relative;
+  flex-shrink: 0;
+  width: 3.1rem;
+  height: 3.1rem;
+  margin: -0.45rem -0.35rem 0 0;
+}
+
+.anillo-texto {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--tinta);
+  font-family: var(--font-ticket);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+/* =================================================================
+   Gráficos del resumen: el principal va en una tarjeta oscura, como la
+   franja de arriba, para que sea lo primero que se mira.
+   ================================================================= */
+.pieza-oscura {
+  border-color: rgba(255, 255, 255, 0.06);
+  background:
+    radial-gradient(circle at 92% -35%, rgba(242, 169, 59, 0.3), transparent 20rem),
+    radial-gradient(circle at -4% 125%, rgba(47, 111, 79, 0.28), transparent 18rem),
+    linear-gradient(150deg, #22384b 0%, #16232f 100%);
+  color: var(--papel);
+  box-shadow: 0 22px 48px rgba(22, 35, 47, 0.24);
+  padding: 1.1rem 1.1rem 0.9rem;
+}
+
+@media (min-width: 768px) {
+  .pieza-oscura {
+    padding: 1.35rem 1.5rem 1rem;
+  }
+}
+
+.pieza-oscura .pieza-etiqueta {
+  color: rgba(246, 243, 236, 0.7);
+}
+
+.grafico-dato {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.85rem;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.4rem 0.75rem;
+  backdrop-filter: blur(4px);
+}
+
+.grafico-dato-etiqueta {
+  color: rgba(246, 243, 236, 0.6);
+  font-size: 0.6rem;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.grafico-dato-valor {
+  color: #ffd08a;
+  font-family: var(--font-ticket);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.grafico-tooltip {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(15, 24, 33, 0.92);
+  color: var(--papel);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
+}
+
+/* Ranking de productos: puesto, barra y lo cobrado. */
+.puesto {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.6rem;
+  font-family: var(--font-ticket);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.puesto-1 {
+  background: linear-gradient(145deg, #f5bd5c, #d98c2b);
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(217, 140, 43, 0.35);
+}
+
+.puesto-2 {
+  background: linear-gradient(145deg, #2d4a62, #1c2b3a);
+  color: var(--papel);
+}
+
+.puesto-3 {
+  background: rgba(217, 140, 43, 0.16);
+  color: #9a5f14;
+}
+
+.puesto-4 {
+  border: 1px solid var(--papel-linea);
+  color: var(--tinta-suave);
+}
+
+.producto-pista {
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(28, 43, 58, 0.07);
+}
+
+.producto-relleno {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f5bd5c 0%, #d98c2b 55%, #b8651c 100%);
+  box-shadow: 0 2px 10px rgba(217, 140, 43, 0.35);
+}
+
+.producto-top {
+  transition: transform 180ms var(--ease-salida, ease);
+}
+
+.producto-top:hover {
+  transform: translateX(3px);
+}
+
+/* Formas de pago, al lado de la dona. */
+.pago-fila {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  border: 1px solid transparent;
+  border-radius: 0.85rem;
+  padding: 0.5rem 0.65rem;
+  outline: none;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.pago-fila:hover,
+.pago-fila:focus-visible,
+.pago-fila-activa {
+  border-color: var(--papel-linea);
+  background: var(--superficie-suave);
+}
+
+.pago-pista {
+  display: block;
+  height: 0.3rem;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(28, 43, 58, 0.07);
+}
+
+.pago-relleno {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.pago-color {
+  width: 0.7rem;
+  height: 0.7rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  box-shadow: 0 0 0 3px rgba(28, 43, 58, 0.05);
+}
+
 /* Botón para usar sobre la franja oscura: el primario es tinta sobre
    tinta y ahí no se ve. */
 .button-claro {
@@ -1283,6 +1482,68 @@ select:focus-visible {
   animation: crecer-horizontal 700ms var(--ease-salida) both;
   animation-delay: calc(200ms + var(--i, 0) * 50ms);
   transition: opacity 150ms ease;
+}
+
+/* La curva se dibuja de izquierda a derecha y el relleno aparece atrás. */
+.grafico-linea {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: dibujar 1200ms var(--ease-salida) 250ms forwards;
+}
+
+.grafico-area {
+  animation: fundir-area 900ms ease 550ms both;
+}
+
+.grafico-punto {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: aparecer-escala 380ms var(--ease-salida) both;
+  animation-delay: calc(700ms + var(--i, 0) * 25ms);
+  transition: opacity 150ms ease;
+}
+
+/* El pico late suave, para que el ojo vaya ahí primero. */
+.grafico-pulso {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pulso 2.2s ease-out 1.2s infinite both;
+}
+
+.anillo-arco,
+.dona-segmento {
+  animation: llenar-anillo 900ms var(--ease-salida) both;
+  animation-delay: calc(300ms + var(--i, 0) * 140ms);
+}
+
+.dona-segmento {
+  cursor: pointer;
+  transition:
+    stroke-width 200ms var(--ease-salida),
+    opacity 200ms ease;
+}
+
+@keyframes fundir-area {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes pulso {
+  from {
+    opacity: 0.65;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(3.2);
+  }
+}
+
+@keyframes llenar-anillo {
+  from {
+    stroke-dasharray: 0 100;
+  }
 }
 
 /* Algo que se agrega (una fila del carrito) entra; un número que cambia
@@ -1670,6 +1931,155 @@ html:has(dialog.ventana[open]) {
 }
 
 /* Filas que abren algo al tocarlas. */
+/* =================================================================
+   Catálogo de productos: cada dato con su contexto.
+   ================================================================= */
+.ficha-producto {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 0.8rem;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.etiqueta-dato {
+  border-radius: 0.4rem;
+  background: rgba(28, 43, 58, 0.06);
+  padding: 0.1rem 0.4rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.etiqueta-dato-ambar {
+  background: rgba(217, 140, 43, 0.14);
+  color: #9a5f14;
+}
+
+.nivel-stock {
+  display: block;
+  width: 3.5rem;
+  height: 0.28rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(28, 43, 58, 0.08);
+}
+
+.nivel-stock > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--verde-ganancia);
+  transform-origin: 0 50%;
+  animation: crecer-horizontal 700ms var(--ease-salida) 200ms both;
+}
+
+.nivel-stock-bajo > span {
+  background: var(--ambar);
+}
+
+.nivel-stock-agotado > span {
+  background: var(--rojo-perdida);
+}
+
+.boton-fecha {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px dashed var(--papel-linea);
+  border-radius: 999px;
+  padding: 0.28rem 0.6rem;
+  color: var(--tinta-suave);
+  font-size: 0.7rem;
+  font-weight: 600;
+  opacity: 0.75;
+  transition:
+    opacity 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+}
+
+.boton-fecha:hover,
+.boton-fecha:focus-visible,
+.fila-tocable:hover .boton-fecha {
+  border-color: var(--tinta-suave);
+  color: var(--tinta);
+  opacity: 1;
+}
+
+.boton-editar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  background: rgba(28, 43, 58, 0.05);
+  padding: 0.35rem 0.7rem;
+  color: var(--tinta);
+  font-size: 0.72rem;
+  font-weight: 600;
+  transition: background-color 150ms ease;
+}
+
+.boton-editar:hover,
+.fila-tocable:hover .boton-editar {
+  background: var(--tinta);
+  color: var(--papel);
+}
+
+.tabla-productos td {
+  vertical-align: middle;
+}
+
+/* Datos del catálogo sobre la franja oscura. */
+.banda-datos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.banda-dato {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 0.5rem 0.85rem;
+  backdrop-filter: blur(4px);
+  animation: entrar 480ms var(--ease-salida) 160ms both;
+}
+
+.banda-dato-etiqueta {
+  color: rgba(246, 243, 236, 0.62);
+  font-size: 0.6rem;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.banda-dato-valor {
+  color: var(--papel);
+  font-family: var(--font-ticket);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.banda-dato-nota {
+  color: rgba(246, 243, 236, 0.62);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.banda-dato-alerta .banda-dato-valor {
+  color: #ffd08a;
+}
+
 .fila-tocable {
   cursor: pointer;
   transition: background-color 120ms ease;

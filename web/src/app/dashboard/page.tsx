@@ -6,10 +6,16 @@ import { RutaProtegida } from '@/components/ruta-protegida';
 import { Nav } from '@/components/nav';
 import { Button, ErrorState, LoadingState } from '@/components/ui';
 import { Banda, Hoja, Pieza } from '@/components/banda';
-import { CartIcon, ReceiptIcon } from '@/components/icons';
+import { CartIcon, CashIcon, ReceiptIcon } from '@/components/icons';
 import { SelectorPeriodo, usePeriodoDeLaURL } from '@/components/selector-periodo';
 import { BotonExcel } from '@/components/boton-excel';
-import { GraficoIngreso, GraficoTopProductos } from '@/components/graficos';
+import {
+  Anillo,
+  GraficoIngreso,
+  GraficoPagos,
+  GraficoTopProductos,
+  Sparkline,
+} from '@/components/graficos';
 import { useAuth } from '@/lib/auth-context';
 import { obtenerResumen, ApiError } from '@/lib/api';
 import { formatearCentavos } from '@/lib/formato';
@@ -112,6 +118,17 @@ function ContenidoDashboard() {
   const diasConVentas =
     resumen?.agrupadoPor === 'dia' ? resumen.serie.filter((p) => p.centavos > 0).length : 1;
   const enlaceVentas = `/ventas${periodo ? busquedaDelPeriodo(periodo) : ''}`;
+  // Qué parte de lo cobrado es IVA, y qué parte de lo que se había vendido
+  // se anuló (lo cobrado ya viene sin lo anulado).
+  const ivaPorcentaje =
+    resumen && resumen.ingresoBrutoCentavos > 0
+      ? (resumen.ivaCentavos / resumen.ingresoBrutoCentavos) * 100
+      : 0;
+  const vendidoAntesDeAnular = resumen ? resumen.ingresoBrutoCentavos + resumen.anuladoCentavos : 0;
+  const anuladoPorcentaje =
+    resumen && vendidoAntesDeAnular > 0
+      ? (resumen.anuladoCentavos / vendidoAntesDeAnular) * 100
+      : 0;
   const frente = resumen ? comparacion(resumen, anterior) : null;
 
   return (
@@ -169,6 +186,11 @@ function ContenidoDashboard() {
               <Pieza
                 etiqueta="Ingreso bruto"
                 valor={formatearCentavos(resumen.ingresoBrutoCentavos)}
+                adorno={
+                  <span className="pieza-icono" aria-hidden>
+                    <CashIcon className="h-4 w-4" />
+                  </span>
+                }
                 detalle={
                   <>
                     <Link href={enlaceVentas} className="font-medium text-tinta underline">
@@ -178,30 +200,51 @@ function ContenidoDashboard() {
                       ` · ${formatearCentavos(Math.round(resumen.ingresoBrutoCentavos / diasConVentas))} por día${diasConVentas < resumen.dias ? ' con ventas' : ''}`}
                   </>
                 }
-              />
+              >
+                <Sparkline
+                  datos={resumen.serie.map((p) => p.centavos)}
+                  etiqueta={
+                    resumen.agrupadoPor === 'hora'
+                      ? 'Cómo se repartió lo cobrado durante el día'
+                      : 'Cómo se repartió lo cobrado en el período'
+                  }
+                />
+              </Pieza>
               <Pieza
                 etiqueta="Ticket promedio"
                 valor={formatearCentavos(ticketPromedioCentavos)}
-                detalle={`Por cliente · ${
-                  [
-                    resumen.transferenciaCentavos > 0 &&
-                      `${formatearCentavos(resumen.transferenciaCentavos)} por transferencia`,
-                    resumen.fiadoCentavos > 0 &&
-                      `${formatearCentavos(resumen.fiadoCentavos)} al fiado`,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ') || 'todo en efectivo'
+                adorno={
+                  <span className="pieza-icono" aria-hidden>
+                    <ReceiptIcon className="h-4 w-4" />
+                  </span>
+                }
+                detalle={`Lo que gasta cada cliente, en ${resumen.cantidadVentas} venta${
+                  resumen.cantidadVentas === 1 ? '' : 's'
                 }`}
               />
               <Pieza
                 etiqueta="IVA incluido"
                 valor={formatearCentavos(resumen.ivaCentavos)}
-                detalle="Para tu declaración al SRI"
+                adorno={
+                  <Anillo
+                    porcentaje={ivaPorcentaje}
+                    color="#2f8fb0"
+                    etiqueta="Parte de lo cobrado que es IVA"
+                  />
+                }
+                detalle="De lo cobrado · para tu declaración al SRI"
               />
               <Pieza
                 etiqueta={hoy ? 'Anulado hoy' : 'Anulado'}
                 valor={formatearCentavos(resumen.anuladoCentavos)}
                 tono={resumen.anuladoCentavos > 0 ? 'rojo' : 'neutro'}
+                adorno={
+                  <Anillo
+                    porcentaje={anuladoPorcentaje}
+                    color="var(--rojo-perdida)"
+                    etiqueta="Parte de lo vendido que se anuló"
+                  />
+                }
                 detalle={
                   resumen.anuladoCentavos > 0 ? (
                     <Link href={enlaceVentas} className="font-medium text-tinta underline">
@@ -213,21 +256,22 @@ function ContenidoDashboard() {
                 }
               />
 
-              <div className="pieza pieza-mitad">
-                <p className="pieza-etiqueta">
-                  {resumen.agrupadoPor === 'hora' ? '¿A qué hora vendes?' : 'Ingreso por día'}
-                </p>
-                <div className="mt-3">
-                  <GraficoIngreso datos={resumen.serie} agrupadoPor={resumen.agrupadoPor} />
-                </div>
+              <div className="pieza pieza-completa pieza-oscura">
+                <GraficoIngreso
+                  datos={resumen.serie}
+                  agrupadoPor={resumen.agrupadoPor}
+                  titulo={
+                    resumen.agrupadoPor === 'hora' ? '¿A qué hora vendes?' : 'Ingreso por día'
+                  }
+                />
                 {resumen.serie.length > 0 && (
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-xs text-tinta-suave">
+                  <details className="mt-3">
+                    <summary className="cursor-pointer text-xs text-papel/65">
                       Ver los datos
                     </summary>
-                    <table className="mt-2 w-full text-left text-xs">
+                    <table className="mt-2 w-full text-left text-xs text-papel/90">
                       <thead>
-                        <tr className="text-tinta-suave">
+                        <tr className="text-papel/60">
                           <th className="py-1 font-medium">
                             {resumen.agrupadoPor === 'hora' ? 'Hora' : 'Día'}
                           </th>
@@ -236,7 +280,7 @@ function ContenidoDashboard() {
                       </thead>
                       <tbody>
                         {resumen.serie.map((punto) => (
-                          <tr key={punto.etiqueta} className="border-t border-papel-linea">
+                          <tr key={punto.etiqueta} className="border-t border-white/10">
                             <td className="py-1">
                               {resumen.agrupadoPor === 'hora'
                                 ? `${punto.etiqueta}:00`
@@ -255,10 +299,21 @@ function ContenidoDashboard() {
 
               <div className="pieza pieza-mitad">
                 <p className="pieza-etiqueta">Lo que más sale</p>
-                <div className="mt-3">
+                <div className="mt-4">
                   <GraficoTopProductos
                     datos={resumen.topProductos}
                     cuando={hoy ? 'hoy' : rangoLegible(periodo)}
+                  />
+                </div>
+              </div>
+
+              <div className="pieza pieza-mitad">
+                <p className="pieza-etiqueta">¿Cómo te pagan?</p>
+                <div className="mt-4">
+                  <GraficoPagos
+                    efectivoCentavos={resumen.efectivoCentavos}
+                    transferenciaCentavos={resumen.transferenciaCentavos}
+                    fiadoCentavos={resumen.fiadoCentavos}
                   />
                 </div>
               </div>

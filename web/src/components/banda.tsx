@@ -64,6 +64,7 @@ export function Pieza({
   detalle,
   tono = 'neutro',
   ancho,
+  adorno,
   children,
 }: {
   etiqueta: string;
@@ -71,6 +72,8 @@ export function Pieza({
   detalle?: ReactNode;
   tono?: 'neutro' | 'verde' | 'rojo';
   ancho?: 'normal' | 'mitad' | 'completa';
+  /** Un ícono o un anillo chico, arriba a la derecha. */
+  adorno?: ReactNode;
   children?: ReactNode;
 }) {
   const clases = [
@@ -85,7 +88,14 @@ export function Pieza({
 
   return (
     <article className={clases}>
-      <p className="pieza-etiqueta">{etiqueta}</p>
+      {adorno ? (
+        <div className="pieza-cabecera">
+          <p className="pieza-etiqueta">{etiqueta}</p>
+          {adorno}
+        </div>
+      ) : (
+        <p className="pieza-etiqueta">{etiqueta}</p>
+      )}
       {valor !== undefined && <p className="pieza-valor">{animar(valor)}</p>}
       {children}
       {detalle && <p className="pieza-detalle">{detalle}</p>}
