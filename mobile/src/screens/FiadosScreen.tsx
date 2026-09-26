@@ -16,7 +16,10 @@ import { formatearCantidad } from '../lib/cantidad';
 import { normalizar } from '../lib/filtro-productos';
 import { enlaceWhatsApp, fechaYHora, textoDelSaldo } from '../lib/fiado';
 import { AvisoDeCampo, Boton, Etiqueta, EstadoCargando, EstadoError, EstadoVacio, estilosCampo } from '../components/ui';
-import { Banda, Hoja } from '../components/banda';
+import { Banda, DatosBanda, Hoja } from '../components/banda';
+import { Ficha } from '../components/ficha';
+import { BarraFina, Pildora, TituloGrupo } from '../components/estado';
+import { haceCuanto } from '../lib/vencimiento';
 import { HojaModal, HojaPie, useHoja } from '../components/hoja-modal';
 import { vibrar } from '../components/movimiento';
 import { colores, espaciado, radios } from '../theme/colores';
@@ -274,6 +277,48 @@ export function FiadosScreen() {
   const porCobrar = deudores.reduce((acc, c) => acc + c.saldoCentavos, 0);
   const q = normalizar(busqueda);
   const visibles = (clientes ?? []).filter((c) => !q || normalizar(c.nombre).includes(q));
+  // Primero los que deben (de más a menos), después los que están al día.
+  const conDeuda = visibles.filter((c) => c.saldoCentavos > 0).sort((a, b) => b.saldoCentavos - a.saldoCentavos);
+  const alDia = visibles.filter((c) => c.saldoCentavos <= 0);
+  const deudaMayor = Math.max(1, ...deudores.map((c) => c.saldoCentavos));
+  // La deuda que lleva más tiempo sin moverse: la primera a cobrar.
+  const masQuieta = [...deudores]
+    .filter((c) => c.ultimoMovimiento)
+    .sort((a, b) => a.ultimoMovimiento!.localeCompare(b.ultimoMovimiento!))[0];
+
+  const filaDeCliente = (c: ClienteFiado, i: number) => (
+    <Pressable
+      key={c.id}
+      onPress={() => setAbierto(c)}
+      style={({ pressed }) => [styles.fila, pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] }]}
+      accessibilityRole="button"
+    >
+      <Ficha nombre={c.nombre} redonda />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.filaNombre} numberOfLines={1}>
+          {c.nombre}
+        </Text>
+        <Text style={styles.movimientoDetalle} numberOfLines={1}>
+          {c.ultimoMovimiento ? `Último movimiento ${haceCuanto(c.ultimoMovimiento)}` : 'Sin movimientos todavía'}
+          {c.telefono ? ' · con WhatsApp' : ''}
+        </Text>
+        {c.saldoCentavos > 0 && (
+          <View style={{ marginTop: 6, maxWidth: 180 }}>
+            <BarraFina
+              fraccion={c.saldoCentavos / deudaMayor}
+              color={colores.rojoPerdida}
+              fondo="rgba(182,70,47,0.1)"
+              orden={i}
+            />
+          </View>
+        )}
+      </View>
+      <Pildora
+        texto={textoDelSaldo(c.saldoCentavos).replace(/^./, (l) => l.toUpperCase())}
+        tono={c.saldoCentavos > 0 ? 'danger' : c.saldoCentavos < 0 ? 'info' : 'ok'}
+      />
+    </Pressable>
+  );
 
   return (
     <SafeAreaView style={styles.contenedor} edges={['bottom']}>
@@ -283,13 +328,28 @@ export function FiadosScreen() {
           titulo="Por cobrar"
           valor={clientes ? formatearCentavos(porCobrar) : undefined}
           detalle={
-            clientes
-              ? deudores.length === 0
-                ? 'Nadie debe nada.'
-                : `${deudores.length} cliente${deudores.length === 1 ? '' : 's'} con deuda`
-              : undefined
+            clientes ? (deudores.length === 0 ? 'Nadie debe nada.' : 'Lo que te deben entre todos los clientes.') : undefined
           }
-        />
+        >
+          {clientes && clientes.length > 0 && (
+            <DatosBanda
+              datos={[
+                {
+                  etiqueta: 'Con deuda',
+                  valor: String(deudores.length),
+                  nota: `de ${clientes.length} cliente${clientes.length === 1 ? '' : 's'}`,
+                  alerta: deudores.length > 0,
+                },
+                ...(deudores.length > 0
+                  ? [{ etiqueta: 'Debe más', valor: formatearCentavos(deudaMayor) }]
+                  : []),
+                ...(masQuieta && haceCuanto(masQuieta.ultimoMovimiento!) !== 'hoy'
+                  ? [{ etiqueta: 'Sin moverse', valor: haceCuanto(masQuieta.ultimoMovimiento!) }]
+                  : []),
+              ]}
+            />
+          )}
+        </Banda>
         <Hoja style={styles.hoja}>
           <Boton onPress={() => setCreando(true)}>Nuevo cliente</Boton>
           {error && <EstadoError mensaje={error} onReintentar={cargar} />}
@@ -310,26 +370,19 @@ export function FiadosScreen() {
                 placeholder="Buscar cliente"
                 placeholderTextColor={colores.tintaSuave}
               />
-              {visibles.map((c) => (
-                <Pressable
-                  key={c.id}
-                  onPress={() => setAbierto(c)}
-                  style={({ pressed }) => [styles.fila, pressed && { opacity: 0.85 }]}
-                  accessibilityRole="button"
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.filaNombre} numberOfLines={1}>
-                      {c.nombre}
-                    </Text>
-                    <Text style={styles.movimientoDetalle}>
-                      {c.ultimoMovimiento ? `Último movimiento: ${fechaYHora(c.ultimoMovimiento)}` : 'Sin movimientos todavía'}
-                    </Text>
-                  </View>
-                  <Text style={[styles.filaSaldo, c.saldoCentavos > 0 && { color: colores.rojoPerdida }]}>
-                    {textoDelSaldo(c.saldoCentavos)}
-                  </Text>
-                </Pressable>
-              ))}
+              {visibles.length === 0 && <Text style={styles.ayuda}>Ningún cliente con ese nombre.</Text>}
+              {conDeuda.length > 0 && (
+                <View style={{ marginTop: espaciado.sm, gap: espaciado.sm }}>
+                  <TituloGrupo texto="Te deben" cantidad={conDeuda.length} />
+                  {conDeuda.map(filaDeCliente)}
+                </View>
+              )}
+              {alDia.length > 0 && (
+                <View style={{ marginTop: espaciado.md, gap: espaciado.sm }}>
+                  <TituloGrupo texto="Al día" cantidad={alDia.length} />
+                  {alDia.map(filaDeCliente)}
+                </View>
+              )}
             </>
           )}
         </Hoja>
@@ -360,11 +413,11 @@ const styles = StyleSheet.create({
   fila: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: espaciado.sm,
-    backgroundColor: '#fff',
+    gap: espaciado.md,
+    backgroundColor: colores.superficie,
     borderWidth: 1,
     borderColor: colores.papelLinea,
-    borderRadius: radios.md,
+    borderRadius: radios.lg,
     padding: espaciado.md,
   },
   filaNombre: { fontSize: 15, fontWeight: '700', color: colores.tinta },

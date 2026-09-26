@@ -28,13 +28,13 @@ async function agregarPersona(page: Page, nombre: string) {
 }
 
 // Por email: sin seed, las corridas anteriores dejan personas con el mismo nombre.
-const filaDe = (page: Page, email: string) => page.locator('tbody tr', { hasText: email });
+const filaDe = (page: Page, email: string) => page.locator(`[data-persona="${email}"]`);
 
 test.describe('Equipo y actividad de seguridad (admin)', () => {
   test.beforeEach(async ({ page }) => {
     await entrarComo(page, 'admin');
     await page.goto('/equipo');
-    await expect(page.locator('tbody tr').first()).toBeVisible();
+    await expect(page.locator('[data-persona]').first()).toBeVisible();
   });
 
   test('agregar a alguien: ventana, política de contraseña y aparece sin ingresos', async ({
@@ -62,7 +62,7 @@ test.describe('Equipo y actividad de seguridad (admin)', () => {
 
   test('en la actividad propia, "Este dispositivo"', async ({ page }) => {
     await page
-      .locator('tbody tr', { hasText: '(tú)' })
+      .locator('[data-persona]', { hasText: '(tú)' })
       .getByRole('button', { name: 'Actividad' })
       .click();
     await esperarVentana(page, 'Tu actividad');

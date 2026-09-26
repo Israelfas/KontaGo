@@ -26,10 +26,12 @@ import { colores, espaciado, radios } from '../theme/colores';
 import { HojaModal, HojaPie, useHoja } from '../components/hoja-modal';
 import { vibrar } from '../components/movimiento';
 import type { UsuarioEquipo } from '../lib/tipos';
-import { Banda, LabioHoja } from '../components/banda';
+import { Banda, DatosBanda, LabioHoja } from '../components/banda';
 import { useCamposTocados } from '../lib/use-campos-tocados';
 import { ActividadDeLaCuenta } from '../components/actividad-cuenta';
 import { haceCuanto } from '../lib/actividad';
+import { Ficha } from '../components/ficha';
+import { Pildora } from '../components/estado';
 import {
   LARGO_MINIMO_CONTRASENA,
   ayudaDeLaContrasena,
@@ -175,27 +177,71 @@ function FilaPersona({
   onDesbloquear: () => void;
 }) {
   const bloqueada = estaBloqueada(persona);
+  const estado = !persona.activo ? 'desactivada' : bloqueada ? 'bloqueada' : 'activa';
   return (
+    // Franja arriba según el rol (ámbar el admin, azul el cajero) y un
+    // punto de estado sobre la ficha, igual que en la web.
     <Tarjeta style={[styles.filaTarjeta, !persona.activo && { opacity: 0.6 }]}>
+      <View
+        style={[
+          styles.franja,
+          {
+            backgroundColor: !persona.activo
+              ? colores.papelLinea
+              : persona.rol === 'admin'
+                ? colores.ambar
+                : '#2f8fb0',
+          },
+        ]}
+      />
       <View style={styles.filaCabecera}>
-        <View style={{ flex: 1 }}>
+        <View>
+          <Ficha nombre={persona.nombre} redonda tamano="grande" />
+          <View
+            style={[
+              styles.puntoEstado,
+              {
+                backgroundColor:
+                  estado === 'activa' ? '#3f9a6a' : estado === 'bloqueada' ? colores.rojoPerdida : '#b5ad9a',
+              },
+            ]}
+          />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.filaNombre} numberOfLines={1}>
             {persona.nombre}
-            {esVos ? ' (tú)' : ''}
+            {esVos ? <Text style={styles.filaTu}> (tú)</Text> : null}
           </Text>
           <Text style={styles.filaEmail} numberOfLines={1}>
             {persona.email}
           </Text>
-          <Text style={styles.filaIngreso}>
-            Último ingreso: {persona.ultimoIngreso ? haceCuanto(persona.ultimoIngreso) : 'nunca'}
-          </Text>
-          {!persona.activo && <Text style={styles.filaDesactivado}>Desactivado</Text>}
-          {bloqueada && (
-            <Text style={styles.filaDesactivado}>Bloqueada por intentos fallidos</Text>
-          )}
         </View>
-        <View style={styles.rolPill}>
-          <Text style={styles.rolPillTexto}>{ETIQUETA_ROL[persona.rol]}</Text>
+        <View style={[styles.rolPill, persona.rol === 'cajero' && styles.rolPillCajero]}>
+          <Text style={[styles.rolPillTexto, persona.rol === 'cajero' && { color: '#1f6a85' }]}>
+            {ETIQUETA_ROL[persona.rol]}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.datos}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.datoEtiqueta}>Estado</Text>
+          <View style={{ marginTop: 3 }}>
+            <Pildora
+              texto={estado === 'activa' ? 'Activa' : estado === 'bloqueada' ? 'Bloqueada' : 'Desactivada'}
+              tono={estado === 'activa' ? 'ok' : estado === 'bloqueada' ? 'danger' : 'neutral'}
+            />
+          </View>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.datoEtiqueta}>Último ingreso</Text>
+          <Text style={styles.datoValor}>
+            {persona.ultimoIngreso ? haceCuanto(persona.ultimoIngreso) : 'Nunca'}
+          </Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.datoEtiqueta}>Para entrar</Text>
+          <Text style={styles.datoValor}>{persona.dosPasos ? 'Clave + código' : 'Solo clave'}</Text>
         </View>
       </View>
 
@@ -386,10 +432,29 @@ export function EquipoScreen() {
         valor={equipo.length > 0 ? String(equipo.length) : undefined}
         detalle={
           equipo.length > 0
-            ? `${equipo.filter((p) => p.activo).length} con acceso · los cajeros venden y consultan productos, no ven ganancias ni inventario`
+            ? 'Los cajeros venden y consultan productos; no ven ganancias ni inventario.'
             : undefined
         }
-      />
+      >
+        {equipo.length > 0 && (
+          <DatosBanda
+            datos={[
+              {
+                etiqueta: 'Con acceso',
+                valor: String(equipo.filter((p) => p.activo).length),
+                nota: `· ${equipo.filter((p) => p.activo && p.rol === 'admin').length} admin`,
+              },
+              {
+                etiqueta: 'Con 2 pasos',
+                valor: String(equipo.filter((p) => p.activo && p.dosPasos).length),
+              },
+              ...(equipo.some((p) => estaBloqueada(p))
+                ? [{ etiqueta: 'Bloqueadas', valor: String(equipo.filter(estaBloqueada).length), alerta: true }]
+                : []),
+            ]}
+          />
+        )}
+      </Banda>
       <LabioHoja />
       <FlatList
         data={cargando || error ? [] : equipo}
@@ -511,9 +576,39 @@ const styles = StyleSheet.create({
   opcionRolActiva: { backgroundColor: colores.tinta, borderColor: colores.tinta },
   opcionRolTexto: { fontSize: 13, fontWeight: '600', color: colores.tinta },
   opcionRolTextoActivo: { color: colores.papel },
-  filaTarjeta: { paddingVertical: espaciado.md },
-  filaCabecera: { flexDirection: 'row', alignItems: 'center', gap: espaciado.sm },
-  filaNombre: { fontSize: 14, color: colores.tinta, fontWeight: '600' },
+  filaTarjeta: { paddingTop: espaciado.md + 6, paddingBottom: espaciado.md, overflow: 'hidden' },
+  franja: { position: 'absolute', top: 0, left: 0, right: 0, height: 5 },
+  filaCabecera: { flexDirection: 'row', alignItems: 'center', gap: espaciado.md },
+  filaNombre: { fontSize: 16, color: colores.tinta, fontWeight: '800' },
+  filaTu: { fontSize: 12, fontWeight: '400', color: colores.tintaSuave },
+  puntoEstado: {
+    position: 'absolute',
+    right: -1,
+    bottom: -1,
+    width: 14,
+    height: 14,
+    borderRadius: 999,
+    borderWidth: 2.5,
+    borderColor: colores.superficie,
+  },
+  datos: {
+    flexDirection: 'row',
+    gap: espaciado.sm,
+    marginTop: espaciado.md,
+    borderRadius: radios.md,
+    backgroundColor: 'rgba(28,43,58,0.035)',
+    paddingHorizontal: espaciado.md,
+    paddingVertical: espaciado.sm,
+  },
+  datoEtiqueta: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    color: colores.tintaSuave,
+  },
+  datoValor: { marginTop: 4, fontSize: 12.5, fontWeight: '700', color: colores.tinta },
+  rolPillCajero: { backgroundColor: 'rgba(47,143,176,0.13)' },
   filaEmail: { fontSize: 12, color: colores.tintaSuave, marginTop: 2 },
   filaIngreso: { fontSize: 11, color: colores.tintaSuave, marginTop: 2 },
   pildoraDesbloquear: { backgroundColor: colores.tinta },
@@ -525,6 +620,14 @@ const styles = StyleSheet.create({
     borderRadius: radios.full,
   },
   rolPillTexto: { fontSize: 11, fontWeight: '700', color: '#9a5b08', textTransform: 'uppercase' },
-  acciones: { flexDirection: 'row', flexWrap: 'wrap', gap: espaciado.sm, marginTop: espaciado.sm },
+  acciones: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: espaciado.sm,
+    marginTop: espaciado.md,
+    paddingTop: espaciado.sm,
+    borderTopWidth: 1,
+    borderTopColor: colores.papelLinea,
+  },
   accionTexto: { fontSize: 13, color: colores.tintaSuave, fontWeight: '600', textDecorationLine: 'underline' },
 });

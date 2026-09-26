@@ -34,14 +34,14 @@ export function Ficha({
   nombre: string;
   /** Lo que decide el color (la categoría, por ejemplo); si no, el nombre. */
   semilla?: string;
-  tamano?: 'chica' | 'normal';
+  tamano?: 'chica' | 'normal' | 'grande';
   /** Redonda para personas, cuadrada para cosas. */
   redonda?: boolean;
 }) {
   const tono = tonoDe(semilla || nombre);
   return (
     <span
-      className={`ficha ${tamano === 'chica' ? 'ficha-chica' : ''} ${redonda ? 'ficha-redonda' : ''}`}
+      className={`ficha-iniciales ${tamano === 'normal' ? '' : `ficha-iniciales-${tamano}`} ${redonda ? 'ficha-iniciales-redonda' : ''}`}
       style={{ background: tono.fondo, color: tono.texto }}
       aria-hidden
     >

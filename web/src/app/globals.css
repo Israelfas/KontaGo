@@ -1935,7 +1935,7 @@ html:has(dialog.ventana[open]) {
    Catálogo de productos: cada dato con su contexto.
    ================================================================= */
 /* Ficha con iniciales (productos, personas, clientes). */
-.ficha {
+.ficha-iniciales {
   display: grid;
   flex-shrink: 0;
   place-items: center;
@@ -1948,14 +1948,21 @@ html:has(dialog.ventana[open]) {
   letter-spacing: -0.02em;
 }
 
-.ficha-chica {
+.ficha-iniciales-chica {
   width: 2rem;
   height: 2rem;
   border-radius: 0.65rem;
   font-size: 0.7rem;
 }
 
-.ficha-redonda {
+.ficha-iniciales-grande {
+  width: 3.1rem;
+  height: 3.1rem;
+  border-radius: 1rem;
+  font-size: 1rem;
+}
+
+.ficha-iniciales-redonda {
   border-radius: 999px;
 }
 
@@ -2215,6 +2222,106 @@ html:has(dialog.ventana[open]) {
   background: #b87417;
 }
 
+/* Cuenta regresiva de un vencimiento: los días, en grande. */
+.cuenta-regresiva {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 2.9rem;
+  height: 2.9rem;
+  border-radius: 0.9rem;
+  line-height: 1;
+}
+
+.cuenta-regresiva strong {
+  font-family: var(--font-ticket);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.cuenta-regresiva small {
+  margin-top: 0.12rem;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cuenta-regresiva-rojo {
+  background: linear-gradient(150deg, #d9735c, #b6462f);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(182, 70, 47, 0.3);
+}
+
+.cuenta-regresiva-ambar {
+  background: linear-gradient(150deg, #f5bd5c, #d98c2b);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(217, 140, 43, 0.3);
+}
+
+.cuenta-regresiva-suave {
+  background: rgba(217, 140, 43, 0.14);
+  color: #8f560f;
+}
+
+/* Cuánto queda frente al mínimo. */
+.barra-reponer {
+  display: block;
+  width: 100%;
+  max-width: 16rem;
+  height: 0.5rem;
+  margin-top: 0.45rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(217, 140, 43, 0.14);
+}
+
+.barra-reponer > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f5bd5c, #d98c2b);
+  transform-origin: 0 50%;
+  animation: crecer-horizontal 700ms var(--ease-salida) 200ms both;
+}
+
+.barra-reponer > .barra-reponer-agotado {
+  background: var(--rojo-perdida);
+}
+
+/* El stock de un producto repartido por fecha de vencimiento. */
+.barra-lotes {
+  display: flex;
+  gap: 3px;
+  height: 0.6rem;
+}
+
+.tramo-lote {
+  min-width: 0.6rem;
+  border-radius: 999px;
+  transform-origin: 0 50%;
+  animation: crecer-horizontal 600ms var(--ease-salida) 200ms both;
+}
+
+.tramo-lote-vencido {
+  background: var(--rojo-perdida);
+}
+
+.tramo-lote-pronto {
+  background: linear-gradient(90deg, #f5bd5c, #d98c2b);
+}
+
+.tramo-lote-bien {
+  background: var(--verde-ganancia);
+}
+
+.tramo-lote-sin-fecha {
+  background: repeating-linear-gradient(135deg, #cfc6b0 0 4px, #e4ddc9 4px 8px);
+}
+
 /* Un título de grupo dentro de una lista ("Te deben 3"). */
 .titulo-grupo {
   display: flex;
@@ -2304,6 +2411,212 @@ html:has(dialog.ventana[open]) {
   background: rgba(217, 140, 43, 0.16);
   padding: 0.15rem;
   color: #9a5f14;
+}
+
+/* =================================================================
+   Una venta como un ticket: franja de color arriba (cómo se pagó) y un
+   corte perforado con muescas entre el encabezado y lo que se llevó.
+   ================================================================= */
+.tarjeta-ticket {
+  --relleno-ticket: 1.1rem;
+  --acento-ticket: linear-gradient(90deg, #f2a93b, #d98c2b);
+  position: relative;
+  border: 1px solid var(--papel-linea);
+  border-radius: 1.15rem;
+  background: var(--superficie);
+  padding: calc(var(--relleno-ticket) + 0.25rem) var(--relleno-ticket) var(--relleno-ticket);
+  box-shadow: 0 10px 26px rgba(28, 43, 58, 0.06);
+  transition:
+    box-shadow 200ms ease,
+    transform 200ms var(--ease-salida, ease);
+}
+
+@media (min-width: 640px) {
+  .tarjeta-ticket {
+    --relleno-ticket: 1.35rem;
+  }
+}
+
+.tarjeta-ticket::before {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  left: -1px;
+  height: 6px;
+  border-radius: 1.15rem 1.15rem 0 0;
+  background: var(--acento-ticket);
+  content: '';
+}
+
+.tarjeta-ticket:hover {
+  box-shadow: 0 18px 38px rgba(28, 43, 58, 0.11);
+  transform: translateY(-2px);
+}
+
+.tarjeta-ticket-transferencia {
+  --acento-ticket: linear-gradient(90deg, #7cc8e0, #2f8fb0);
+}
+
+.tarjeta-ticket-fiado {
+  --acento-ticket: linear-gradient(90deg, #c2a6ee, #8a63c9);
+}
+
+.tarjeta-ticket-anulada {
+  --acento-ticket: repeating-linear-gradient(135deg, #b6462f 0 8px, #dd8a76 8px 16px);
+  background:
+    repeating-linear-gradient(135deg, transparent 0 14px, rgba(182, 70, 47, 0.03) 14px 28px),
+    var(--superficie);
+}
+
+.tarjeta-ticket-anulada .ticket-total {
+  color: var(--rojo-perdida);
+}
+
+.ticket-numero {
+  color: var(--tinta);
+  font-family: var(--font-ticket);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.ticket-total {
+  color: var(--tinta);
+  font-family: var(--font-ticket);
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 1.1;
+}
+
+.ticket-cantidad {
+  display: inline-block;
+  min-width: 2.2rem;
+  border-radius: 0.4rem;
+  background: rgba(28, 43, 58, 0.06);
+  padding: 0.05rem 0.35rem;
+  color: var(--tinta-suave);
+  font-family: var(--font-ticket);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* El corte perforado, con una muesca a cada lado. */
+.ticket-corte {
+  position: relative;
+  margin: 1rem calc(-1 * var(--relleno-ticket));
+  border-top: 2px dashed var(--papel-linea);
+}
+
+.ticket-corte::before,
+.ticket-corte::after {
+  position: absolute;
+  top: -11px;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--papel-linea);
+  border-radius: 999px;
+  background: var(--papel);
+  content: '';
+}
+
+.ticket-corte::before {
+  left: -11px;
+  clip-path: inset(0 0 0 50%);
+}
+
+.ticket-corte::after {
+  right: -11px;
+  clip-path: inset(0 50% 0 0);
+}
+
+/* Una persona del equipo: franja arriba según el rol (ámbar el admin,
+   azul el cajero) y un punto de estado sobre su ficha. */
+.tarjeta-persona {
+  position: relative;
+  border: 1px solid var(--papel-linea);
+  border-radius: 1.15rem;
+  background: var(--superficie);
+  padding: 1.25rem;
+  box-shadow: 0 10px 26px rgba(28, 43, 58, 0.06);
+  transition:
+    box-shadow 200ms ease,
+    transform 200ms var(--ease-salida, ease);
+}
+
+.tarjeta-persona::before {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  left: -1px;
+  height: 5px;
+  border-radius: 1.15rem 1.15rem 0 0;
+  background: linear-gradient(90deg, #7cc8e0, #2f8fb0);
+  content: '';
+}
+
+.tarjeta-persona-admin::before {
+  background: linear-gradient(90deg, #f5bd5c, #d98c2b);
+}
+
+.tarjeta-persona:hover {
+  box-shadow: 0 18px 38px rgba(28, 43, 58, 0.1);
+  transform: translateY(-2px);
+}
+
+.tarjeta-persona-apagada {
+  opacity: 0.62;
+}
+
+.tarjeta-persona-apagada::before {
+  background: var(--papel-linea);
+}
+
+.punto-estado {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 2.5px solid var(--superficie);
+  border-radius: 999px;
+}
+
+.punto-estado-activa {
+  background: #3f9a6a;
+}
+
+.punto-estado-bloqueada {
+  background: var(--rojo-perdida);
+}
+
+.punto-estado-desactivada {
+  background: #b5ad9a;
+}
+
+.datos-persona {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  border-radius: 0.8rem;
+  background: rgba(28, 43, 58, 0.035);
+  padding: 0.6rem 0.75rem;
+}
+
+.datos-persona dt {
+  color: var(--tinta-suave);
+  font-size: 0.64rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.datos-persona dd {
+  margin-top: 0.25rem;
+  color: var(--tinta);
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
 /* Botones chicos al pie de una tarjeta (imprimir, anular…). */

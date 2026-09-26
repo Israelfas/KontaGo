@@ -7,6 +7,7 @@ import { Button, EmptyState, ErrorState, LoadingState } from '@/components/ui';
 import { Banda, Hoja } from '@/components/banda';
 import { Ficha } from '@/components/ficha';
 import { ChipMetodoPago } from '@/components/metodo-pago';
+import { GraficoIngreso } from '@/components/graficos';
 import { ReceiptIcon, RefreshIcon } from '@/components/icons';
 import { SelectorPeriodo, usePeriodoDeLaURL } from '@/components/selector-periodo';
 import { BotonExcel } from '@/components/boton-excel';
@@ -202,19 +203,19 @@ function TarjetaVenta({
   const netoCentavos = venta.totalCentavos - venta.totalAnuladoCentavos;
 
   return (
-    <div
-      className={`app-card tarjeta-venta flex h-full flex-col p-4 sm:p-5 ${
-        venta.estado === 'anulada' ? 'tarjeta-venta-anulada' : ''
+    // Cada venta como un ticket: una franja con el color de cómo se pagó y
+    // el corte perforado entre el encabezado y lo que se llevó.
+    <article
+      className={`tarjeta-ticket tarjeta-ticket-${venta.metodoPago} flex h-full flex-col ${
+        venta.estado === 'anulada' ? 'tarjeta-ticket-anulada' : ''
       }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <Ficha nombre={venta.vendedor} tamano="chica" redonda />
+          <Ficha nombre={venta.vendedor} redonda />
           <div className="min-w-0">
             <p className="flex flex-wrap items-center gap-2">
-              <span className="font-ticket text-sm font-semibold text-tinta">
-                {numeroDeTicket(venta.numero)}
-              </span>
+              <span className="ticket-numero">{numeroDeTicket(venta.numero)}</span>
               {estado && <span className={`status-pill ${estado.clase}`}>{estado.texto}</span>}
             </p>
             <p className="truncate text-xs text-tinta-suave">
@@ -223,9 +224,7 @@ function TarjetaVenta({
           </div>
         </div>
         <div className="shrink-0 text-right">
-          <p className="font-ticket text-lg font-semibold text-tinta">
-            {formatearCentavos(netoCentavos)}
-          </p>
+          <p className="ticket-total">{formatearCentavos(netoCentavos)}</p>
           {venta.totalAnuladoCentavos > 0 && (
             <p className="font-ticket text-xs text-tinta-suave line-through">
               {formatearCentavos(venta.totalCentavos)}
@@ -234,11 +233,16 @@ function TarjetaVenta({
         </div>
       </div>
 
-      <ul className="mt-3 space-y-1 border-t border-dashed border-papel-linea pt-3 text-sm">
+      <div className="ticket-corte" aria-hidden />
+
+      <ul className="space-y-1.5 text-sm">
         {venta.items.map((item) => (
-          <li key={item.id} className="flex justify-between gap-3">
-            <span className="text-tinta">
-              {formatearCantidad(item.cantidad, item.unidad)} × {item.nombre}
+          <li key={item.id} className="flex items-baseline justify-between gap-3">
+            <span className="min-w-0 text-tinta">
+              <span className="ticket-cantidad">
+                {formatearCantidad(item.cantidad, item.unidad)} ×
+              </span>{' '}
+              {item.nombre}
               {item.cantidadAnulada > 0 && (
                 <span className="ml-1 text-xs text-rojo-perdida">
                   (
@@ -258,7 +262,7 @@ function TarjetaVenta({
         ))}
       </ul>
 
-      <div className="mt-3">
+      <div className="mt-4">
         <ChipMetodoPago
           metodo={venta.metodoPago}
           detalle={
@@ -310,7 +314,7 @@ function TarjetaVenta({
       {anulando && (
         <PanelAnulacion venta={venta} onAnulada={onAnulada} onCerrar={onCerrarAnulacion} />
       )}
-    </div>
+    </article>
   );
 }
 
@@ -543,6 +547,23 @@ function ContenidoVentas() {
 
       <Hoja>
         <div className="mt-4 space-y-4">
+          {esAdmin &&
+            resumen &&
+            encontradas === null &&
+            !cargando &&
+            resumen.serie.some((p) => p.centavos > 0) && (
+              <div className="pieza pieza-oscura">
+                <GraficoIngreso
+                  datos={resumen.serie}
+                  agrupadoPor={resumen.agrupadoPor}
+                  titulo={
+                    resumen.agrupadoPor === 'hora' ? 'Ritmo de ventas del día' : 'Ventas por día'
+                  }
+                  compacto
+                />
+              </div>
+            )}
+
           <form onSubmit={buscarTicket} className="flex max-w-sm gap-2" role="search">
             <label htmlFor="buscar-ticket" className="sr-only">
               Número de ticket

@@ -1,5 +1,6 @@
 import { Children, cloneElement, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { CifraAnimada, Entrada } from './movimiento';
 import { colores, espaciado, radios } from '../theme/colores';
 
@@ -93,6 +94,7 @@ export function Pieza({
   tono = 'neutro',
   ancho = 'mitad',
   orden = 0,
+  adorno,
   children,
 }: {
   etiqueta: string;
@@ -102,6 +104,8 @@ export function Pieza({
   ancho?: 'mitad' | 'completa';
   /** Lugar en el mosaico, para entrar escalonada (lo pone Mosaico). */
   orden?: number;
+  /** Un ícono o un anillo chico, arriba a la derecha. */
+  adorno?: ReactNode;
   children?: ReactNode;
 }) {
   const color =
@@ -109,7 +113,14 @@ export function Pieza({
 
   return (
     <Entrada orden={orden + 1} style={[styles.pieza, ancho === 'completa' && styles.piezaCompleta]}>
-      <Text style={styles.piezaEtiqueta}>{etiqueta}</Text>
+      {adorno ? (
+        <View style={styles.piezaCabecera}>
+          <Text style={[styles.piezaEtiqueta, { flex: 1 }]}>{etiqueta}</Text>
+          {adorno}
+        </View>
+      ) : (
+        <Text style={styles.piezaEtiqueta}>{etiqueta}</Text>
+      )}
       {valor !== undefined && <CifraAnimada texto={valor} style={[styles.piezaValor, { color }]} />}
       {children}
       {detalle && <Text style={styles.piezaDetalle}>{detalle}</Text>}
@@ -117,7 +128,99 @@ export function Pieza({
   );
 }
 
+export interface DatoDeBanda {
+  etiqueta: string;
+  valor: string;
+  /** Texto chico al lado del valor ("de 7", "· Vecina"). */
+  nota?: string;
+  /** El valor en ámbar: hay algo que mirar. */
+  alerta?: boolean;
+  /** Un punto de color antes de la etiqueta (la forma de pago). */
+  punto?: string;
+}
+
+/**
+ * Los números que acompañan al principal, sobre la franja oscura: de a
+ * dos o tres por fila, en recuadros translúcidos (como en la web).
+ */
+export function DatosBanda({ datos }: { datos: DatoDeBanda[] }) {
+  return (
+    <View style={styles.datos}>
+      {datos.map((d, i) => (
+        <Entrada key={d.etiqueta} orden={3 + i} style={styles.dato}>
+          <View style={styles.datoCabecera}>
+            {d.punto && <View style={[styles.datoPunto, { backgroundColor: d.punto }]} />}
+            <Text style={styles.datoEtiqueta} numberOfLines={1}>
+              {d.etiqueta}
+            </Text>
+          </View>
+          <Text style={[styles.datoValor, d.alerta && styles.datoValorAlerta]} numberOfLines={1}>
+            {d.valor}
+            {d.nota ? <Text style={styles.datoNota}> {d.nota}</Text> : null}
+          </Text>
+        </Entrada>
+      ))}
+    </View>
+  );
+}
+
+/** Ícono sobre un fondo ámbar suave, para el rincón de una pieza. */
+export function IconoPieza({ nombre }: { nombre: keyof typeof Ionicons.glyphMap }) {
+  return (
+    <View style={styles.iconoPieza}>
+      <Ionicons name={nombre} size={15} color="#9a5f14" />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  datos: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: espaciado.sm,
+    marginTop: espaciado.md,
+  },
+  dato: {
+    flexGrow: 1,
+    minWidth: '30%',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: radios.md,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    paddingHorizontal: espaciado.md,
+    paddingVertical: espaciado.sm,
+  },
+  datoCabecera: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  datoPunto: { width: 7, height: 7, borderRadius: 999 },
+  datoEtiqueta: {
+    flexShrink: 1,
+    color: 'rgba(246,243,236,0.62)',
+    fontSize: 9.5,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  datoValor: {
+    marginTop: 2,
+    color: colores.papel,
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    fontVariant: ['tabular-nums'],
+  },
+  datoValorAlerta: { color: '#ffd08a' },
+  datoNota: { color: 'rgba(246,243,236,0.62)', fontSize: 11, fontWeight: '500' },
+  iconoPieza: {
+    width: 30,
+    height: 30,
+    marginTop: -4,
+    marginRight: -4,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(242,169,59,0.18)',
+  },
+  piezaCabecera: { flexDirection: 'row', alignItems: 'flex-start', gap: espaciado.sm },
   banda: {
     overflow: 'hidden',
     backgroundColor: '#1b2c3c',

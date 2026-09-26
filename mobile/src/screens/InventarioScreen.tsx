@@ -46,7 +46,10 @@ import { colores, espaciado, radios } from '../theme/colores';
 import { HojaModal, HojaPie, useHoja } from '../components/hoja-modal';
 import { vibrar } from '../components/movimiento';
 import { SelectorProducto } from '../components/selector-producto';
-import { Banda, Hoja, Mosaico, Pieza } from '../components/banda';
+import { Banda, DatosBanda, Hoja, Mosaico, Pieza } from '../components/banda';
+import { Ficha } from '../components/ficha';
+import { BarraFina, CuentaRegresiva } from '../components/estado';
+import { estadoDelVencimiento } from '../lib/vencimiento';
 import {
   ETIQUETAS_MOTIVO_MERMA,
   type AlertasProductos,
@@ -364,18 +367,21 @@ function SeccionAlertas({
     <View style={{ gap: espaciado.md }}>
       {vencidos.length > 0 && (
         <View style={styles.alertaBloque}>
-          <Text style={[styles.alertaTitulo, { color: colores.rojoPerdida }]}>Vencidos en el estante</Text>
+          <TituloAlerta texto="Vencidos en el estante" cantidad={vencidos.length} tono="rojo" />
           {vencidos.map(({ p, lote }) => (
             <View key={lote.id} style={styles.alertaFila}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.alertaNombre}>{p.nombre}</Text>
+              <CuentaRegresiva fecha={lote.fechaVencimiento!} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.alertaNombre} numberOfLines={1}>
+                  {p.nombre}
+                </Text>
                 <Text style={[styles.alertaDetalle, { color: colores.rojoPerdida }]}>
-                  {unidades(lote.cantidad)} · {textoVencimiento(lote)}
+                  {unidades(lote.cantidad)} · {textoVencimiento(lote)} · sácalo del estante
                 </Text>
               </View>
               {onDarDeBaja && (
-                <Pressable onPress={() => onDarDeBaja(p, lote)} hitSlop={8}>
-                  <Text style={styles.alertaAccion}>Dar de baja</Text>
+                <Pressable onPress={() => onDarDeBaja(p, lote)} hitSlop={8} style={styles.accionRoja}>
+                  <Text style={styles.accionRojaTexto}>Dar de baja</Text>
                 </Pressable>
               )}
             </View>
@@ -384,45 +390,83 @@ function SeccionAlertas({
       )}
       {alertas.stockBajo.length > 0 && (
         <View style={styles.alertaBloque}>
-          <Text style={[styles.alertaTitulo, { color: colores.ambar }]}>Stock bajo</Text>
-          {alertas.stockBajo.map((p) => (
+          <TituloAlerta texto="Stock bajo" cantidad={alertas.stockBajo.length} tono="ambar" />
+          {alertas.stockBajo.map((p, i) => (
             <View key={p.id} style={styles.alertaFila}>
-              <Text style={styles.alertaNombre}>{p.nombre}</Text>
-              <View style={styles.alertaDerecha}>
-                <Text style={[styles.alertaValor, { color: colores.ambar }]}>
-                  {formatearCantidad(p.stock, p.unidad)} / mín. {formatearCantidad(p.stockMinimo, p.unidad)}
+              <Ficha nombre={p.nombre} semilla={p.categoria} tamano="chica" />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.alertaNombre} numberOfLines={1}>
+                  {p.nombre}
                 </Text>
-                {onAbastecer && (
-                  <Pressable onPress={() => onAbastecer(p.id)} hitSlop={8}>
-                    <Text style={styles.alertaAccion}>Abastecer</Text>
-                  </Pressable>
-                )}
+                <View style={{ marginTop: 6, maxWidth: 200 }}>
+                  <BarraFina
+                    fraccion={p.stockMinimo > 0 ? Math.max(0, p.stock) / p.stockMinimo : 0}
+                    color={p.stock <= 0 ? colores.rojoPerdida : colores.ambar}
+                    fondo="rgba(217,140,43,0.14)"
+                    orden={i}
+                  />
+                </View>
+                <Text style={styles.alertaDetalle}>
+                  <Text style={{ fontWeight: '800', color: colores.tinta }}>
+                    {formatearCantidad(p.stock, p.unidad)}
+                  </Text>{' '}
+                  de {formatearCantidad(p.stockMinimo, p.unidad)} que es el mínimo
+                </Text>
               </View>
+              {onAbastecer && (
+                <Pressable onPress={() => onAbastecer(p.id)} hitSlop={8} style={styles.pildoraAccion}>
+                  <Ionicons name="add" size={12} color={colores.tinta} />
+                  <Text style={styles.pildoraAccionTexto}>Abastecer</Text>
+                </Pressable>
+              )}
             </View>
           ))}
         </View>
       )}
       {porVencer.length > 0 && (
         <View style={styles.alertaBloque}>
-          <Text style={[styles.alertaTitulo, { color: colores.rojoPerdida }]}>Por vencer</Text>
+          <TituloAlerta texto="Por vencer" cantidad={porVencer.length} tono="ambar" />
           {porVencer.map(({ p, lote }) => (
             <View key={lote.id} style={styles.alertaFila}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.alertaNombre}>{p.nombre}</Text>
+              <CuentaRegresiva fecha={lote.fechaVencimiento!} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.alertaNombre} numberOfLines={1}>
+                  {p.nombre}
+                </Text>
                 {/* Con varias fechas, cuántas son las que vencen. */}
-                {p.stock !== lote.cantidad && (
-                  <Text style={styles.alertaDetalle}>
-                    {unidades(lote.cantidad)} de {formatearCantidad(p.stock, p.unidad)}
-                  </Text>
-                )}
+                <Text style={styles.alertaDetalle}>
+                  {p.stock !== lote.cantidad
+                    ? `${unidades(lote.cantidad)} de ${formatearCantidad(p.stock, p.unidad)}`
+                    : unidades(lote.cantidad)}
+                </Text>
               </View>
-              <Text style={[styles.alertaValor, { color: colores.rojoPerdida }]}>
-                {formatearFechaCorta(lote.fechaVencimiento!)}
-              </Text>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={styles.venceEtiqueta}>Vence</Text>
+                <Text style={styles.alertaValor}>{formatearFechaCorta(lote.fechaVencimiento!)}</Text>
+              </View>
             </View>
           ))}
         </View>
       )}
+    </View>
+  );
+}
+
+/** Encabezado de un grupo de alertas, con su color y cuántas son. */
+function TituloAlerta({ texto, cantidad, tono }: { texto: string; cantidad: number; tono: 'rojo' | 'ambar' }) {
+  const color = tono === 'rojo' ? colores.rojoPerdida : '#8f560f';
+  return (
+    <View
+      style={[
+        styles.alertaCabecera,
+        { backgroundColor: tono === 'rojo' ? 'rgba(182,70,47,0.08)' : 'rgba(217,140,43,0.12)' },
+      ]}
+    >
+      <Ionicons name="alert-circle-outline" size={15} color={color} />
+      <Text style={[styles.alertaTitulo, { color }]}>{texto}</Text>
+      <View style={[styles.alertaCantidad, { backgroundColor: tono === 'rojo' ? colores.rojoPerdida : '#b87417' }]}>
+        <Text style={styles.alertaCantidadTexto}>{cantidad}</Text>
+      </View>
     </View>
   );
 }
@@ -581,9 +625,14 @@ function SeccionLotes({ productos, onCambio }: { productos: Producto[]; onCambio
             return (
               <View key={p.id} style={styles.loteTarjeta}>
                 <View style={styles.loteCabecera}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.loteNombre}>{p.nombre}</Text>
-                    <Text style={styles.alertaDetalle}>{unidades(p.stock)} en stock</Text>
+                  <Ficha nombre={p.nombre} semilla={p.categoria} tamano="chica" />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.loteNombre} numberOfLines={1}>
+                      {p.nombre}
+                    </Text>
+                    <Text style={styles.alertaDetalle}>
+                      {unidades(p.stock)} en stock · {p.lotes!.length === 1 ? 'una fecha' : `${p.lotes!.length} fechas`}
+                    </Text>
                   </View>
                   <Pressable
                     onPress={() => setEditando(p)}
@@ -594,6 +643,25 @@ function SeccionLotes({ productos, onCambio }: { productos: Producto[]; onCambio
                     <Text style={styles.pildoraAccionTexto}>Corregir</Text>
                   </Pressable>
                 </View>
+                {/* El stock repartido por fecha: cada tramo, del color de su urgencia. */}
+                <View style={styles.barraLotes}>
+                  {p.lotes!.map((l) => (
+                    <View
+                      key={l.id}
+                      style={[
+                        styles.tramo,
+                        { flexGrow: Math.max(l.cantidad, 0.001) },
+                        vencidos.includes(l)
+                          ? { backgroundColor: colores.rojoPerdida }
+                          : pronto.includes(l)
+                            ? { backgroundColor: colores.ambar }
+                            : l.fechaVencimiento
+                              ? { backgroundColor: colores.verdeGanancia }
+                              : { backgroundColor: '#d8d0bb' },
+                      ]}
+                    />
+                  ))}
+                </View>
                 <View style={styles.lotePildoras}>
                   {p.lotes!.map((l) => {
                     const tono = vencidos.includes(l)
@@ -601,9 +669,15 @@ function SeccionLotes({ productos, onCambio }: { productos: Producto[]; onCambio
                       : pronto.includes(l)
                         ? styles.pildoraAmbar
                         : null;
+                    const estado = l.fechaVencimiento ? estadoDelVencimiento(l.fechaVencimiento) : null;
                     return (
                       <Text key={l.id} style={[styles.pildora, tono]}>
-                        {unidades(l.cantidad)} · {textoVencimiento(l)}
+                        {unidades(l.cantidad)} ·{' '}
+                        {estado
+                          ? estado.tono === 'neutral'
+                            ? `vence ${estado.texto}`
+                            : estado.texto.toLowerCase()
+                          : 'sin fecha'}
                       </Text>
                     );
                   })}
@@ -741,11 +815,7 @@ export function InventarioScreen() {
           eyebrow="Control de stock"
           titulo="Inventario"
           valor={resumen ? formatearCentavos(resumen.egresoCentavos) : undefined}
-          detalle={
-            resumen
-              ? `Gastado hoy en abastecimiento · ${formatearCentavos(resumen.perdidaCentavos)} perdidos por merma`
-              : undefined
-          }
+          detalle={resumen ? 'Gastado hoy en mercadería (abastecimientos).' : undefined}
           accion={
             <Pressable
               onPress={() => navigation.navigate('HistorialInventario')}
@@ -757,7 +827,26 @@ export function InventarioScreen() {
               <Text style={styles.botonHistorialTexto}>Historial</Text>
             </Pressable>
           }
-        />
+        >
+          {resumen && alertas && (
+            <DatosBanda
+              datos={[
+                {
+                  etiqueta: 'Perdido hoy',
+                  valor: formatearCentavos(resumen.perdidaCentavos),
+                  alerta: resumen.perdidaCentavos > 0,
+                },
+                { etiqueta: 'Vencidos', valor: String(alertas.vencidos.length), alerta: alertas.vencidos.length > 0 },
+                { etiqueta: 'Stock bajo', valor: String(alertas.stockBajo.length), alerta: alertas.stockBajo.length > 0 },
+                {
+                  etiqueta: 'Vencen en 7 días',
+                  valor: String(alertas.porVencer.length),
+                  alerta: alertas.porVencer.length > 0,
+                },
+              ]}
+            />
+          )}
+        </Banda>
         <Hoja style={{ paddingHorizontal: espaciado.lg, paddingBottom: espaciado.xxl, gap: espaciado.lg }}>
         {cargando && <EstadoCargando texto="Cargando inventario…" />}
         {error && !cargando && <EstadoError mensaje={error} onReintentar={cargarTodo} />}
@@ -934,26 +1023,51 @@ const styles = StyleSheet.create({
     borderColor: colores.papelLinea,
     overflow: 'hidden',
   },
-  alertaTitulo: {
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    padding: espaciado.md,
-    paddingBottom: espaciado.xs,
+  alertaCabecera: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: espaciado.md,
+    paddingVertical: espaciado.sm + 2,
   },
+  alertaTitulo: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  alertaCantidad: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1 },
+  alertaCantidadTexto: { color: '#fff', fontSize: 11, fontWeight: '800' },
   alertaFila: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: espaciado.md,
     paddingHorizontal: espaciado.md,
-    paddingVertical: espaciado.sm,
+    paddingVertical: espaciado.md,
     borderTopWidth: 1,
     borderTopColor: colores.papelLinea,
   },
+  venceEtiqueta: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    color: colores.tintaSuave,
+  },
+  accionRoja: {
+    borderRadius: 999,
+    backgroundColor: 'rgba(182,70,47,0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  accionRojaTexto: { fontSize: 12, fontWeight: '700', color: colores.rojoPerdida },
+  barraLotes: { flexDirection: 'row', gap: 3, height: 8, marginTop: espaciado.md },
+  tramo: { minWidth: 8, borderRadius: 999 },
   alertaDerecha: { flexDirection: 'row', alignItems: 'center', gap: espaciado.md },
   alertaAccion: { fontSize: 13, fontWeight: '600', color: colores.tinta, textDecorationLine: 'underline' },
-  alertaNombre: { flex: 1, fontSize: 13, color: colores.tinta, marginRight: espaciado.sm },
-  alertaValor: { fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  alertaNombre: { fontSize: 14, fontWeight: '600', color: colores.tinta },
+  alertaValor: { fontSize: 13, fontWeight: '800', color: colores.tinta, fontVariant: ['tabular-nums'] },
   alertaDetalle: { fontSize: 12, color: colores.tintaSuave, marginTop: 2, fontVariant: ['tabular-nums'] },
   ayuda: { fontSize: 12, color: colores.tintaSuave, lineHeight: 17, marginBottom: espaciado.md },
   loteTarjeta: {
@@ -963,7 +1077,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colores.papelLinea,
   },
-  loteCabecera: { flexDirection: 'row', alignItems: 'flex-start', gap: espaciado.sm },
+  loteCabecera: { flexDirection: 'row', alignItems: 'center', gap: espaciado.md },
   loteNombre: { fontSize: 14, fontWeight: '600', color: colores.tinta },
   lotePildoras: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: espaciado.sm },
   pildora: {

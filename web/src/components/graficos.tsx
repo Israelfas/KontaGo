@@ -167,10 +167,13 @@ export function GraficoIngreso({
   datos,
   agrupadoPor,
   titulo,
+  compacto = false,
 }: {
   datos: PuntoSerie[];
   agrupadoPor: 'hora' | 'dia';
   titulo: string;
+  /** Más bajo, para acompañar una lista (Ventas) sin taparla. */
+  compacto?: boolean;
 }) {
   const [elegido, setActivo] = useState<number | null>(null);
   // Si cambió el período, el punto elegido puede no existir más.
@@ -199,7 +202,7 @@ export function GraficoIngreso({
     );
   }
 
-  const alto = pantallaChica ? 200 : 270;
+  const alto = pantallaChica ? (compacto ? 170 : 200) : compacto ? 190 : 270;
   const margen = { arriba: 30, derecha: 14, abajo: 26, izquierda: pantallaChica ? 38 : 48 };
   const anchoTrazado = ancho - margen.izquierda - margen.derecha;
   const altoTrazado = alto - margen.arriba - margen.abajo;

@@ -33,7 +33,10 @@ import {
 } from '../components/ui';
 import { colores, espaciado, radios } from '../theme/colores';
 import { HojaModal, HojaPie, useHoja } from '../components/hoja-modal';
-import { Banda, LabioHoja } from '../components/banda';
+import { Banda, DatosBanda, LabioHoja } from '../components/banda';
+import { Ficha } from '../components/ficha';
+import { NivelStock, Pildora } from '../components/estado';
+import { estadoDelVencimiento } from '../lib/vencimiento';
 import type { Producto } from '../lib/tipos';
 import {
   UNIDADES,
@@ -44,10 +47,11 @@ import {
   type UnidadDeVenta,
 } from '../lib/cantidad';
 import {
+  esCodigoInterno,
   estaPorVencer,
   filtrarProductos,
+  porReponer,
   textoDelCodigo,
-  tieneStockBajo,
   type FiltroProductos,
 } from '../lib/filtro-productos';
 
@@ -97,10 +101,14 @@ function ChipFechaVencimiento({
   // Varias fechas: no hay "una" fecha que editar acá (se corrigen en
   // Inventario → Lotes).
   if (tieneVariosLotes(producto)) {
+    const estado = estadoDelVencimiento(producto.fechaVencimiento!);
     return (
-      <Text style={styles.filaVencimiento} accessibilityLabel={resumenDeLotes(producto)}>
-        {`${producto.lotes!.length} fechas · próx. ${formatearFechaCorta(producto.fechaVencimiento!)}`}
-      </Text>
+      <View accessible accessibilityLabel={resumenDeLotes(producto)}>
+        <Pildora
+          texto={`${producto.lotes!.length} fechas · ${estado.texto.toLowerCase()}`}
+          tono={estado.tono}
+        />
+      </View>
     );
   }
 
@@ -134,25 +142,41 @@ function ChipFechaVencimiento({
     );
   }
 
-  const fechaLegible = producto.fechaVencimiento
-    ? formatearFechaCorta(producto.fechaVencimiento)
-    : null;
+  const estado = producto.fechaVencimiento ? estadoDelVencimiento(producto.fechaVencimiento) : null;
 
   if (soloLectura) {
-    return fechaLegible ? <Text style={styles.filaVencimiento}>Vence {fechaLegible}</Text> : null;
+    return estado ? (
+      <Pildora texto={estado.texto} tono={estado.tono} />
+    ) : (
+      <Text style={styles.noVence}>No vence</Text>
+    );
+  }
+
+  const abrir = () => {
+    setValor(producto.fechaVencimiento ?? '');
+    setEditando(true);
+  };
+
+  // Sin fecha: un botón discreto (antes, "Poner fecha de vencimiento" en
+  // cada producto parecía un error de todos).
+  if (!estado) {
+    return (
+      <Pressable
+        onPress={abrir}
+        hitSlop={6}
+        style={styles.botonFecha}
+        accessibilityRole="button"
+        accessibilityLabel={`Poner fecha de vencimiento a ${producto.nombre}`}
+      >
+        <Ionicons name="add" size={12} color={colores.tintaSuave} />
+        <Text style={styles.botonFechaTexto}>Fecha</Text>
+      </Pressable>
+    );
   }
 
   return (
-    <Pressable
-      onPress={() => {
-        setValor(producto.fechaVencimiento ?? '');
-        setEditando(true);
-      }}
-      hitSlop={4}
-    >
-      <Text style={styles.filaVencimiento}>
-        {fechaLegible ? `Vence ${fechaLegible}` : 'Poner fecha de vencimiento'}
-      </Text>
+    <Pressable onPress={abrir} hitSlop={6} accessibilityRole="button" accessibilityHint="Cambiar la fecha">
+      <Pildora texto={estado.texto} tono={estado.tono} />
     </Pressable>
   );
 }
@@ -168,40 +192,89 @@ function FilaProducto({
   onActualizado: (p: Producto) => void;
   soloLectura: boolean;
 }) {
-  const stockBajo = producto.stock <= producto.stockMinimo && producto.stockMinimo > 0;
+  const { stock, stockMinimo, unidad } = producto;
+  const estadoStock =
+    stock <= 0 ? 'agotado' : stockMinimo > 0 && stock <= stockMinimo ? 'bajo' : 'bien';
+  // El cajero no recibe el costo: solo ve el precio.
+  const costo = producto.costoUnitarioCentavos ?? 0;
+  const pierde = costo > 0 && producto.precioVentaCentavos < costo;
+  const sinCodigo = esCodigoInterno(producto.codigoBarras);
 
   const tarjeta = (
     <Tarjeta style={styles.filaTarjeta}>
-      <View style={styles.filaIconoFondo}>
-        <Ionicons name="cube-outline" size={18} color={colores.tintaSuave} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.filaNombre} numberOfLines={1}>
-          {producto.nombre}
-        </Text>
-        <Text style={styles.filaCodigo}>{textoDelCodigo(producto.codigoBarras)}</Text>
-        <ChipFechaVencimiento
-          producto={producto}
-          onActualizado={onActualizado}
-          soloLectura={soloLectura}
-        />
-      </View>
-      <View style={{ alignItems: 'flex-end' }}>
-        <Text style={styles.filaPrecio}>
-          {formatearCentavos(producto.precioVentaCentavos)}
-          {precioPor(producto.unidad)}
-        </Text>
-        <View style={[styles.stockPill, stockBajo && styles.stockPillBajo]}>
-          <Text style={[styles.filaStock, stockBajo && styles.filaStockBajo]}>
-            Stock {formatearCantidad(producto.stock, producto.unidad)}
+      <View style={styles.filaArriba}>
+        <Ficha nombre={producto.nombre} semilla={producto.categoria} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.filaNombre} numberOfLines={1}>
+            {producto.nombre}
           </Text>
+          <View style={styles.filaMeta}>
+            {producto.categoria ? <Text style={styles.filaCodigo}>{producto.categoria}</Text> : null}
+            {sinCodigo ? (
+              <View style={styles.etiquetaDato}>
+                <Text style={styles.etiquetaDatoTexto}>Sin código</Text>
+              </View>
+            ) : (
+              <Text style={styles.filaCodigo}>{producto.codigoBarras}</Text>
+            )}
+            {porPeso(unidad) && (
+              <View style={[styles.etiquetaDato, styles.etiquetaDatoAmbar]}>
+                <Text style={[styles.etiquetaDatoTexto, { color: '#9a5f14' }]}>
+                  Por {unidad === 'libra' ? 'libra' : 'kilo'}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={styles.filaPrecio}>
+            {formatearCentavos(producto.precioVentaCentavos)}
+            <Text style={styles.filaPrecioPor}>{precioPor(unidad)}</Text>
+          </Text>
+          {costo > 0 &&
+            (pierde ? (
+              <View style={{ marginTop: 3 }}>
+                <Pildora texto="Bajo el costo" tono="danger" />
+              </View>
+            ) : (
+              <Text style={styles.filaCosto}>costo {formatearCentavos(costo)}</Text>
+            ))}
         </View>
       </View>
-      {!soloLectura && (
-        <View style={styles.editarBoton}>
-          <Ionicons name="pencil-outline" size={16} color={colores.tintaSuave} />
+
+      <View style={styles.filaAbajo}>
+        <View style={{ flexShrink: 1 }}>
+          <View style={styles.filaStockFila}>
+            {estadoStock !== 'bien' && (
+              <Pildora
+                texto={estadoStock === 'agotado' ? 'Agotado' : 'Bajo'}
+                tono={estadoStock === 'agotado' ? 'danger' : 'warning'}
+              />
+            )}
+            <Text style={styles.filaStock}>
+              {formatearCantidad(stock, unidad)}
+              <Text style={styles.filaStockNota}> en stock</Text>
+            </Text>
+          </View>
+          <NivelStock
+            stock={stock}
+            minimo={stockMinimo}
+            nota={`mín ${formatearCantidad(stockMinimo, unidad)}`}
+          />
         </View>
-      )}
+        <View style={styles.filaAcciones}>
+          <ChipFechaVencimiento
+            producto={producto}
+            onActualizado={onActualizado}
+            soloLectura={soloLectura}
+          />
+          {!soloLectura && (
+            <View style={styles.editarBoton}>
+              <Ionicons name="pencil-outline" size={14} color={colores.tinta} />
+            </View>
+          )}
+        </View>
+      </View>
     </Tarjeta>
   );
 
@@ -687,7 +760,7 @@ function BarraBusqueda({
 }) {
   const opciones: { id: FiltroProductos; texto: string; cantidad?: number }[] = [
     { id: 'todos', texto: 'Todos' },
-    { id: 'stock_bajo', texto: 'Stock bajo', cantidad: productos.filter(tieneStockBajo).length },
+    { id: 'stock_bajo', texto: 'Por reponer', cantidad: productos.filter(porReponer).length },
     { id: 'por_vencer', texto: 'Por vencer', cantidad: productos.filter(estaPorVencer).length },
   ];
   return (
@@ -725,6 +798,38 @@ function BarraBusqueda({
         })}
       </View>
     </View>
+  );
+}
+
+/** Los números del catálogo que importan, en la franja de arriba. */
+function DatosDelCatalogo({ productos, esAdmin }: { productos: Producto[]; esAdmin: boolean }) {
+  const agotados = productos.filter((p) => p.stock <= 0).length;
+  const aReponer = productos.filter(porReponer).length;
+  const porVencer = productos.filter(estaPorVencer).length;
+  const valorACosto = productos.reduce(
+    (acc, p) => acc + Math.round((p.costoUnitarioCentavos ?? 0) * Math.max(0, p.stock)),
+    0,
+  );
+  const valorAPrecio = productos.reduce(
+    (acc, p) => acc + Math.round(p.precioVentaCentavos * Math.max(0, p.stock)),
+    0,
+  );
+  return (
+    <DatosBanda
+      datos={[
+        ...(esAdmin && valorACosto > 0
+          ? [{ etiqueta: 'Inventario a costo', valor: formatearCentavos(valorACosto) }]
+          : []),
+        { etiqueta: 'Si vendes todo', valor: formatearCentavos(valorAPrecio) },
+        {
+          etiqueta: 'Por reponer',
+          valor: String(aReponer),
+          nota: agotados > 0 ? `· ${agotados} agotado${agotados === 1 ? '' : 's'}` : undefined,
+          alerta: aReponer > 0,
+        },
+        { etiqueta: 'Vencen en 7 días', valor: String(porVencer), alerta: porVencer > 0 },
+      ]}
+    />
   );
 }
 
@@ -791,7 +896,7 @@ export function ProductosScreen() {
         valor={productos.length > 0 ? String(productos.length) : undefined}
         detalle={
           productos.length > 0
-            ? `${productos.length === 1 ? 'producto activo' : 'productos activos'}${
+            ? `${productos.length === 1 ? 'producto activo' : 'productos activos'} en el catálogo${
                 esAdmin ? '' : ' · solo consulta'
               }`
             : undefined
@@ -804,7 +909,9 @@ export function ProductosScreen() {
             </Pressable>
           ) : undefined
         }
-      />
+      >
+        {productos.length > 0 && <DatosDelCatalogo productos={productos} esAdmin={esAdmin} />}
+      </Banda>
       <LabioHoja />
 
       <FlatList
@@ -943,12 +1050,44 @@ const styles = StyleSheet.create({
   chipTextoActivo: { color: colores.papel },
   listaContenido: { padding: espaciado.lg, paddingTop: 0, flexGrow: 1 },
   error: { color: colores.rojoPerdida, fontSize: 13, marginBottom: espaciado.sm },
-  filaTarjeta: {
+  filaTarjeta: { paddingVertical: espaciado.md, gap: espaciado.sm },
+  filaArriba: { flexDirection: 'row', alignItems: 'center', gap: espaciado.md },
+  filaMeta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 2 },
+  etiquetaDato: {
+    borderRadius: 6,
+    backgroundColor: 'rgba(28,43,58,0.06)',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  etiquetaDatoAmbar: { backgroundColor: 'rgba(217,140,43,0.14)' },
+  etiquetaDatoTexto: { fontSize: 10.5, fontWeight: '700', color: colores.tintaSuave },
+  filaAbajo: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: espaciado.sm,
-    paddingVertical: espaciado.md,
+    borderTopWidth: 1,
+    borderTopColor: colores.papelLinea,
+    paddingTop: espaciado.sm,
   },
+  filaStockFila: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  filaStockNota: { fontSize: 11, fontWeight: '400', color: colores.tintaSuave },
+  filaAcciones: { flexDirection: 'row', alignItems: 'center', gap: espaciado.sm },
+  filaPrecioPor: { fontSize: 11, fontWeight: '400', color: colores.tintaSuave },
+  filaCosto: { marginTop: 2, fontSize: 11, color: colores.tintaSuave, fontVariant: ['tabular-nums'] },
+  noVence: { fontSize: 11, color: colores.tintaSuave },
+  botonFecha: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colores.papelLinea,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  botonFechaTexto: { fontSize: 11, fontWeight: '700', color: colores.tintaSuave },
   filaIconoFondo: {
     width: 38,
     height: 38,
@@ -986,7 +1125,14 @@ const styles = StyleSheet.create({
     backgroundColor: colores.blanco,
     width: 100,
   },
-  editarBoton: { marginLeft: espaciado.xs, padding: 4 },
+  editarBoton: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(28,43,58,0.06)',
+  },
   botonBaja: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1013,6 +1159,6 @@ const styles = StyleSheet.create({
   filaPrecio: { fontSize: 14, color: colores.tinta, fontVariant: ['tabular-nums'], fontWeight: '600' },
   stockPill: { marginTop: 4, paddingHorizontal: 8, paddingVertical: 2, borderRadius: radios.full },
   stockPillBajo: { backgroundColor: 'rgba(217,140,43,0.14)' },
-  filaStock: { fontSize: 11, color: colores.tintaSuave },
+  filaStock: { fontSize: 14, fontWeight: '700', color: colores.tinta, fontVariant: ['tabular-nums'] },
   filaStockBajo: { color: '#a8610b', fontWeight: '700' },
 });

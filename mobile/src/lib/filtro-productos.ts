@@ -19,6 +19,11 @@ export function tieneStockBajo(p: Producto): boolean {
   return p.stockMinimo > 0 && p.stock <= p.stockMinimo;
 }
 
+/** Hay que comprar: se agotó, o llegó a su mínimo. */
+export function porReponer(p: Producto): boolean {
+  return p.stock <= 0 || tieneStockBajo(p);
+}
+
 /**
  * Vence dentro de los próximos DIAS_POR_VENCER días — o ya venció: a
  * diferencia de las alertas, acá interesa también lo vencido que sigue
@@ -69,7 +74,7 @@ export function filtrarProductos(
 ): Producto[] {
   const q = normalizar(busqueda);
   return productos.filter((p) => {
-    if (filtro === 'stock_bajo' && !tieneStockBajo(p)) return false;
+    if (filtro === 'stock_bajo' && !porReponer(p)) return false;
     if (filtro === 'por_vencer' && !estaPorVencer(p)) return false;
     if (!q) return true;
     return normalizar(p.nombre).includes(q) || p.codigoBarras.includes(q);

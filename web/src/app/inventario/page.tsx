@@ -35,7 +35,7 @@ import {
 } from '@/lib/api';
 import { formatearCentavos, formatearFechaCorta } from '@/lib/formato';
 import { Ficha } from '@/components/ficha';
-import { estadoDelVencimiento } from '@/lib/vencimiento';
+import { diasHasta, estadoDelVencimiento } from '@/lib/vencimiento';
 import { aCentavos, avisoDelMargen, avisoDelVencimiento } from '@/lib/validacion';
 import {
   lotesPorVencer,
@@ -458,10 +458,15 @@ function FilaVencido({
   return (
     <tr className="border-t border-papel-linea">
       <td className="px-4 py-3 text-tinta">
-        {producto.nombre}
-        <span className="block font-ticket text-xs text-rojo-perdida">
-          {unidades(lote.cantidad)} · {textoVencimiento(lote)}
-        </span>
+        <div className="flex min-w-0 items-center gap-3">
+          <CuentaRegresiva fecha={lote.fechaVencimiento!} />
+          <div className="min-w-0">
+            <p className="truncate font-medium">{producto.nombre}</p>
+            <span className="block font-ticket text-xs text-rojo-perdida">
+              {unidades(lote.cantidad)} · {textoVencimiento(lote)} · sácalo del estante
+            </span>
+          </div>
+        </div>
       </td>
       <td className="px-4 py-3 text-right">
         {puedeDarDeBaja && (
@@ -566,6 +571,57 @@ function textoDelLote(lote: { cantidad: number; fechaVencimiento: string | null 
   }`;
 }
 
+/**
+ * Cuántos días le quedan, en grande: se lee de un vistazo qué hay que
+ * sacar primero. Rojo hoy (o vencido), ámbar en 1-2 días.
+ */
+function CuentaRegresiva({ fecha }: { fecha: string }) {
+  const dias = diasHasta(fecha);
+  const tono = dias <= 0 ? 'rojo' : dias <= 2 ? 'ambar' : 'suave';
+  return (
+    <span
+      className={`cuenta-regresiva cuenta-regresiva-${tono}`}
+      aria-label={
+        dias < 0
+          ? 'Vencido'
+          : dias === 0
+            ? 'Vence hoy'
+            : `Faltan ${dias} día${dias === 1 ? '' : 's'}`
+      }
+    >
+      {dias < 0 ? (
+        <>
+          <strong>!</strong>
+          <small>venció</small>
+        </>
+      ) : dias === 0 ? (
+        <>
+          <strong className="text-[0.8rem]">HOY</strong>
+          <small>vence</small>
+        </>
+      ) : (
+        <>
+          <strong>{dias}</strong>
+          <small>{dias === 1 ? 'día' : 'días'}</small>
+        </>
+      )}
+    </span>
+  );
+}
+
+/** Cuánto queda frente al mínimo, en una barra que se ve. */
+function BarraReponer({ stock, minimo }: { stock: number; minimo: number }) {
+  const fraccion = minimo > 0 ? Math.min(1, Math.max(0, stock) / minimo) : 0;
+  return (
+    <span className="barra-reponer" aria-hidden>
+      <span
+        className={stock <= 0 ? 'barra-reponer-agotado' : ''}
+        style={{ width: `${Math.max(4, fraccion * 100)}%` }}
+      />
+    </span>
+  );
+}
+
 /** Encabezado de un grupo de alertas, con cuántas son. */
 function TituloAlerta({
   texto,
@@ -620,7 +676,7 @@ function TablaAlertas({
   );
 
   return (
-    <div className="grid gap-5 sm:grid-cols-2">
+    <div className="grid items-start gap-5 sm:grid-cols-2">
       {vencidos.length > 0 && (
         <div className="table-shell sm:col-span-2">
           <TituloAlerta texto="Vencidos en el estante" cantidad={vencidos.length} tono="rojo" />
@@ -650,23 +706,14 @@ function TablaAlertas({
                   <td className="px-4 py-3">
                     <div className="flex min-w-0 items-center gap-3">
                       <Ficha nombre={p.nombre} tamano="chica" />
-                      <div className="min-w-0">
-                        <p className="truncate text-tinta">{p.nombre}</p>
-                        <p className="mt-1 flex items-center gap-1.5">
-                          <span
-                            className={`nivel-stock ${p.stock <= 0 ? 'nivel-stock-agotado' : 'nivel-stock-bajo'}`}
-                            aria-hidden
-                          >
-                            <span
-                              style={{
-                                width: `${Math.max(4, Math.min(1, p.stock / (p.stockMinimo * 3)) * 100)}%`,
-                              }}
-                            />
-                          </span>
-                          <span className="font-ticket text-[11px] text-tinta-suave">
-                            quedan {formatearCantidad(p.stock, p.unidad)} · mín.{' '}
-                            {formatearCantidad(p.stockMinimo, p.unidad)}
-                          </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium text-tinta">{p.nombre}</p>
+                        <BarraReponer stock={p.stock} minimo={p.stockMinimo} />
+                        <p className="mt-1 text-xs text-tinta-suave">
+                          <strong className="font-ticket text-tinta">
+                            {formatearCantidad(p.stock, p.unidad)}
+                          </strong>{' '}
+                          de {formatearCantidad(p.stockMinimo, p.unidad)} que es el mínimo
                         </p>
                       </div>
                     </div>
@@ -699,9 +746,9 @@ function TablaAlertas({
                 <tr key={lote.id} className="border-t border-papel-linea">
                   <td className="px-4 py-3 text-tinta">
                     <div className="flex min-w-0 items-center gap-3">
-                      <Ficha nombre={producto.nombre} tamano="chica" />
+                      <CuentaRegresiva fecha={lote.fechaVencimiento!} />
                       <div className="min-w-0">
-                        <p className="truncate">{producto.nombre}</p>
+                        <p className="truncate font-medium">{producto.nombre}</p>
                         {/* Con varias fechas, cuántas son las que vencen. */}
                         <span className="block font-ticket text-xs text-tinta-suave">
                           {producto.stock !== lote.cantidad
@@ -712,11 +759,11 @@ function TablaAlertas({
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <span
-                      className={`status-pill status-pill-${estadoDelVencimiento(lote.fechaVencimiento!).tono}`}
-                      title={formatearFechaCorta(lote.fechaVencimiento!)}
-                    >
-                      {estadoDelVencimiento(lote.fechaVencimiento!).texto}
+                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-tinta-suave">
+                      Vence
+                    </span>
+                    <span className="font-ticket text-sm font-semibold text-tinta">
+                      {formatearFechaCorta(lote.fechaVencimiento!)}
                     </span>
                   </td>
                 </tr>
@@ -925,6 +972,28 @@ function SeccionLotes({ productos, onCambio }: { productos: Producto[]; onCambio
                   <PencilIcon className="h-3 w-3" />
                   Corregir
                 </button>
+              </div>
+              {/* El stock repartido por fecha: cada tramo, del color de su urgencia. */}
+              <div className="barra-lotes mt-3" aria-hidden>
+                {p.lotes!.map((l) => {
+                  const vencido = lotesVencidos(p).includes(l);
+                  const pronto = lotesPorVencer(p).includes(l);
+                  return (
+                    <span
+                      key={l.id}
+                      className={`tramo-lote ${
+                        vencido
+                          ? 'tramo-lote-vencido'
+                          : pronto
+                            ? 'tramo-lote-pronto'
+                            : l.fechaVencimiento
+                              ? 'tramo-lote-bien'
+                              : 'tramo-lote-sin-fecha'
+                      }`}
+                      style={{ flexGrow: Math.max(l.cantidad, 0.001) }}
+                    />
+                  );
+                })}
               </div>
               <ul className="mt-3 flex flex-wrap gap-1.5">
                 {p.lotes!.map((l) => {

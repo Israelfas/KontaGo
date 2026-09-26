@@ -21,7 +21,6 @@ import {
   ApiError,
 } from '@/lib/api';
 import type { UsuarioEquipo } from '@/lib/tipos';
-import { usePantallaChica } from '@/lib/use-pantalla-chica';
 import { useCamposTocados } from '@/lib/use-campos-tocados';
 import {
   ayudaDeLaContrasena,
@@ -256,24 +255,6 @@ function FormularioCambiarPassword({
   );
 }
 
-/** Ficha, nombre y correo de alguien del equipo. */
-function DatosDePersona({ persona, esVos }: { persona: UsuarioEquipo; esVos: boolean }) {
-  return (
-    <div className="flex min-w-0 items-center gap-3">
-      <Ficha nombre={persona.nombre} redonda />
-      <div className="min-w-0">
-        <p className="truncate font-medium text-tinta">
-          {persona.nombre}
-          {esVos && <span className="ml-1.5 text-xs font-normal text-tinta-suave">(tú)</span>}
-        </p>
-        <p className="truncate text-xs text-tinta-suave" title={persona.email}>
-          {persona.email}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 /** Si puede entrar: activa, bloqueada por intentos o desactivada. */
 function EstadoDePersona({ persona }: { persona: UsuarioEquipo }) {
   if (!persona.activo) {
@@ -282,21 +263,11 @@ function EstadoDePersona({ persona }: { persona: UsuarioEquipo }) {
   if (persona.bloqueadoHasta) {
     return <span className="status-pill status-pill-danger">Bloqueada</span>;
   }
-  return (
-    <span className="flex flex-wrap gap-1.5">
-      <span className="status-pill status-pill-ok">Activa</span>
-      {persona.dosPasos && (
-        <span className="status-pill status-pill-abierta" title="Usa la verificación en dos pasos">
-          <LockIcon className="h-3 w-3" />2 pasos
-        </span>
-      )}
-    </span>
-  );
+  return <span className="status-pill status-pill-ok">Activa</span>;
 }
 
 function ContenidoEquipo() {
   const { token, usuario } = useAuth();
-  const pantallaChica = usePantallaChica();
   const [equipo, setEquipo] = useState<UsuarioEquipo[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -551,87 +522,80 @@ function ContenidoEquipo() {
             </p>
           )}
 
-          {/* En celular la tabla cortaba el rol y las acciones: tarjetas. */}
-          {!cargando && !error && pantallaChica && (
-            <ul className="space-y-3">
+          {/* Una tarjeta por persona (en celular y en computadora): con pocas
+              personas, una tabla ancha dejaba todo lejos y repetido. */}
+          {!cargando && !error && (
+            <ul className="grid gap-4 lg:grid-cols-2">
               {equipo.map((persona) => {
                 const esVos = persona.id === usuario?.sub;
+                const estado = !persona.activo
+                  ? 'desactivada'
+                  : persona.bloqueadoHasta
+                    ? 'bloqueada'
+                    : 'activa';
                 return (
                   <li
                     key={persona.id}
-                    className={`app-card p-4 ${persona.activo ? '' : 'opacity-60'}`}
+                    data-persona={persona.email}
+                    className={`tarjeta-persona tarjeta-persona-${persona.rol} ${
+                      persona.activo ? '' : 'tarjeta-persona-apagada'
+                    }`}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <DatosDePersona persona={persona} esVos={esVos} />
-                      <span className={`status-pill ${CLASE_ROL[persona.rol]} shrink-0 text-xs`}>
-                        {ETIQUETA_ROL[persona.rol]}
+                    <div className="flex items-start gap-4">
+                      <span className="relative shrink-0">
+                        <Ficha nombre={persona.nombre} redonda tamano="grande" />
+                        <span
+                          className={`punto-estado punto-estado-${estado}`}
+                          title={estado === 'activa' ? 'Puede entrar' : undefined}
+                          aria-hidden
+                        />
                       </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate font-display text-base font-bold text-tinta">
+                              {persona.nombre}
+                              {esVos && (
+                                <span className="ml-1.5 text-xs font-normal text-tinta-suave">
+                                  (tú)
+                                </span>
+                              )}
+                            </p>
+                            <p className="truncate text-xs text-tinta-suave" title={persona.email}>
+                              {persona.email}
+                            </p>
+                          </div>
+                          <span className={`status-pill ${CLASE_ROL[persona.rol]} shrink-0`}>
+                            {ETIQUETA_ROL[persona.rol]}
+                          </span>
+                        </div>
+                        <dl className="datos-persona mt-3">
+                          <div>
+                            <dt>Estado</dt>
+                            <dd>
+                              <EstadoDePersona persona={persona} />
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Último ingreso</dt>
+                            <dd>
+                              {persona.ultimoIngreso ? haceCuanto(persona.ultimoIngreso) : 'Nunca'}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Para entrar</dt>
+                            <dd>{persona.dosPasos ? 'Clave + código' : 'Solo clave'}</dd>
+                          </div>
+                        </dl>
+                      </div>
                     </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-papel-linea pt-3">
-                      <EstadoDePersona persona={persona} />
-                      <span className="text-xs text-tinta-suave">
-                        {persona.ultimoIngreso
-                          ? `Entró ${haceCuanto(persona.ultimoIngreso)}`
-                          : 'Todavía no entró'}
-                      </span>
+                    <div className="mt-4 border-t border-papel-linea pt-3">
+                      {acciones(persona, esVos)}
                     </div>
-                    <div className="mt-3">{acciones(persona, esVos)}</div>
                   </li>
                 );
               })}
             </ul>
-          )}
-
-          {!cargando && !error && !pantallaChica && (
-            <div className="table-shell">
-              <table className="w-full table-fixed text-left text-sm">
-                <colgroup>
-                  <col />
-                  <col className="w-24" />
-                  <col className="w-40" />
-                  <col className="w-36" />
-                  <col className="w-[26rem]" />
-                </colgroup>
-                <thead>
-                  <tr className="table-header">
-                    <th className="px-4 py-3">Persona</th>
-                    <th className="px-4 py-3">Rol</th>
-                    <th className="px-4 py-3">Estado</th>
-                    <th className="px-4 py-3">Último ingreso</th>
-                    <th className="px-4 py-3">
-                      <span className="sr-only">Acciones</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {equipo.map((persona) => {
-                    const esVos = persona.id === usuario?.sub;
-                    return (
-                      <tr
-                        key={persona.id}
-                        className={`border-t border-papel-linea ${persona.activo ? '' : 'opacity-60'}`}
-                      >
-                        <td className="px-4 py-3">
-                          <DatosDePersona persona={persona} esVos={esVos} />
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`status-pill ${CLASE_ROL[persona.rol]} text-xs`}>
-                            {ETIQUETA_ROL[persona.rol]}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <EstadoDePersona persona={persona} />
-                        </td>
-                        <td className="px-4 py-3 text-xs text-tinta-suave">
-                          {persona.ultimoIngreso ? haceCuanto(persona.ultimoIngreso) : 'Nunca'}
-                        </td>
-                        <td className="px-4 py-3">{acciones(persona, esVos, 'derecha')}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
           )}
         </div>
       </Hoja>

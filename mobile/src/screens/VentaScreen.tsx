@@ -798,7 +798,7 @@ export function VentaScreen() {
 
           {sinCodigo.length > 0 && !noEncontrado && (
             <View style={{ marginTop: espaciado.md }}>
-              <Etiqueta>Sin código de barras</Etiqueta>
+              <Etiqueta>Sin código de barras · toca para agregar</Etiqueta>
               <View style={styles.chipsSinCodigo}>
                 {sinCodigo.map((p) => (
                   <Pressable
@@ -808,7 +808,13 @@ export function VentaScreen() {
                     accessibilityRole="button"
                   >
                     <Text style={styles.chipSinCodigoNombre}>{p.nombre}</Text>
-                    <Text style={styles.chipSinCodigoPrecio}>{formatearCentavos(p.precioVentaCentavos)}</Text>
+                    <Text style={styles.chipSinCodigoPrecio}>
+                      {formatearCentavos(p.precioVentaCentavos)}
+                      {precioPor(p.unidad)}
+                    </Text>
+                    <View style={styles.chipSinCodigoMas}>
+                      <Ionicons name="add" size={12} color="#9a5f14" />
+                    </View>
                   </Pressable>
                 ))}
               </View>
@@ -936,6 +942,18 @@ export function VentaScreen() {
         >
           {efectivo ? 'Confirmar venta' : fiado ? 'Anotar al fiado' : 'Cobrar por transferencia'}
         </Boton>
+        {/* Un botón apagado sin explicación no dice qué falta. */}
+        {!puedeCobrar && !procesando && (
+          <Text style={styles.faltaParaCobrar}>
+            {carrito.length === 0
+              ? 'Agrega productos para cobrar.'
+              : fiado
+                ? 'Elige a quién se le fía.'
+                : montoRecibidoCentavos === null
+                  ? 'Escribe cuánto te dio el cliente.'
+                  : 'Lo recibido no alcanza para el total.'}
+          </Text>
+        )}
 
         <Pressable
           onPress={() =>
@@ -988,7 +1006,7 @@ export function VentaScreen() {
             <EstadoVacio
               icono="cart-outline"
               titulo="El carrito está vacío"
-              descripcion="Escanea o escribe un código para empezar."
+              descripcion="Escanea un código, búscalo por nombre o toca uno de los productos sin código."
             />
           }
           renderItem={({ item }) => (
@@ -1093,10 +1111,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colores.papelLinea,
     borderRadius: 999,
-    backgroundColor: '#fff',
-    paddingHorizontal: espaciado.md,
-    paddingVertical: espaciado.sm,
+    backgroundColor: colores.superficie,
+    paddingLeft: espaciado.md,
+    paddingRight: 6,
+    paddingVertical: 6,
   },
+  chipSinCodigoMas: {
+    width: 20,
+    height: 20,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(217,140,43,0.16)',
+  },
+  faltaParaCobrar: { marginTop: 6, textAlign: 'center', fontSize: 12, color: colores.tintaSuave },
   chipSinCodigoNombre: { fontSize: 13, fontWeight: '700', color: colores.tinta },
   chipSinCodigoPrecio: { fontSize: 12, color: colores.tintaSuave, fontVariant: ['tabular-nums'] },
   metodos: { flexDirection: 'row', gap: espaciado.sm, marginBottom: espaciado.md },

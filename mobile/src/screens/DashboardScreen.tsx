@@ -9,10 +9,17 @@ import { useAuth } from '../lib/auth-context';
 import { obtenerResumen, ApiError } from '../lib/api';
 import { formatearCentavos } from '../lib/formato';
 import { EstadoCargando, EstadoError } from '../components/ui';
-import { Banda, Hoja, Mosaico, Pieza } from '../components/banda';
+import { Banda, Hoja, IconoPieza, Mosaico, Pieza } from '../components/banda';
 import { SelectorPeriodo } from '../components/selector-periodo';
 import { BotonExcel } from '../components/boton-excel';
-import { GraficoIngreso, GraficoTopProductos } from '../components/graficos';
+import {
+  Anillo,
+  GraficoIngreso,
+  GraficoPagos,
+  GraficoTopProductos,
+  Sparkline,
+  TarjetaOscura,
+} from '../components/graficos';
 import { colores, espaciado, radios } from '../theme/colores';
 import {
   esHoy,
@@ -113,6 +120,14 @@ export function DashboardScreen() {
   const diasConVentas =
     resumen?.agrupadoPor === 'dia' ? resumen.serie.filter((p) => p.centavos > 0).length : 1;
   const frente = resumen ? comparacion(resumen, anterior) : null;
+  // Qué parte de lo cobrado es IVA, y qué parte de lo vendido se anuló.
+  const ivaPorcentaje =
+    resumen && resumen.ingresoBrutoCentavos > 0
+      ? (resumen.ivaCentavos / resumen.ingresoBrutoCentavos) * 100
+      : 0;
+  const vendidoAntes = resumen ? resumen.ingresoBrutoCentavos + resumen.anuladoCentavos : 0;
+  const anuladoPorcentaje =
+    resumen && vendidoAntes > 0 ? (resumen.anuladoCentavos / vendidoAntes) * 100 : 0;
 
   return (
     <SafeAreaView style={styles.contenedor} edges={[]}>
@@ -145,6 +160,7 @@ export function DashboardScreen() {
                 <Pieza
                   etiqueta="Ingreso bruto"
                   valor={formatearCentavos(resumen.ingresoBrutoCentavos)}
+                  adorno={<IconoPieza nombre="cash-outline" />}
                   detalle={
                     diasConVentas > 1
                       ? `${resumen.cantidadVentas} ventas · ${formatearCentavos(
@@ -152,36 +168,63 @@ export function DashboardScreen() {
                         )} por día`
                       : `${resumen.cantidadVentas} venta${resumen.cantidadVentas === 1 ? '' : 's'}${hoy ? ' hoy' : ''}`
                   }
-                />
+                >
+                  <Sparkline datos={resumen.serie.map((p) => p.centavos)} />
+                </Pieza>
                 <Pieza
                   etiqueta="Ticket promedio"
                   valor={formatearCentavos(ticketPromedio)}
-                  detalle="Por cliente"
+                  adorno={<IconoPieza nombre="receipt-outline" />}
+                  detalle="Lo que gasta cada cliente"
                 />
                 <Pieza
                   etiqueta="IVA incluido"
                   valor={formatearCentavos(resumen.ivaCentavos)}
-                  detalle="Para el SRI"
+                  adorno={
+                    <Anillo
+                      porcentaje={ivaPorcentaje}
+                      color="#2f8fb0"
+                      etiqueta="Parte de lo cobrado que es IVA"
+                    />
+                  }
+                  detalle="De lo cobrado · para el SRI"
                 />
                 <Pieza
                   etiqueta={hoy ? 'Anulado hoy' : 'Anulado'}
                   valor={formatearCentavos(resumen.anuladoCentavos)}
                   tono={resumen.anuladoCentavos > 0 ? 'rojo' : 'neutro'}
+                  adorno={
+                    <Anillo
+                      porcentaje={anuladoPorcentaje}
+                      color={colores.rojoPerdida}
+                      etiqueta="Parte de lo vendido que se anuló"
+                    />
+                  }
                   detalle={resumen.anuladoCentavos > 0 ? 'Ya descontado' : 'Sin anulaciones'}
                 />
+              </Mosaico>
 
-                <Pieza
-                  etiqueta={resumen.agrupadoPor === 'hora' ? '¿A qué hora vendes?' : 'Ingreso por día'}
-                  ancho="completa"
-                >
-                  <View style={{ marginTop: espaciado.sm }}>
-                    <GraficoIngreso datos={resumen.serie} agrupadoPor={resumen.agrupadoPor} />
+              <TarjetaOscura>
+                <GraficoIngreso
+                  datos={resumen.serie}
+                  agrupadoPor={resumen.agrupadoPor}
+                  titulo={resumen.agrupadoPor === 'hora' ? '¿A qué hora vendes?' : 'Ingreso por día'}
+                />
+              </TarjetaOscura>
+
+              <Mosaico>
+                <Pieza etiqueta="Lo que más sale" ancho="completa">
+                  <View style={{ marginTop: espaciado.md }}>
+                    <GraficoTopProductos datos={resumen.topProductos} />
                   </View>
                 </Pieza>
-
-                <Pieza etiqueta="Lo que más sale" ancho="completa">
-                  <View style={{ marginTop: espaciado.sm }}>
-                    <GraficoTopProductos datos={resumen.topProductos} />
+                <Pieza etiqueta="¿Cómo te pagan?" ancho="completa">
+                  <View style={{ marginTop: espaciado.md }}>
+                    <GraficoPagos
+                      efectivoCentavos={resumen.efectivoCentavos}
+                      transferenciaCentavos={resumen.transferenciaCentavos}
+                      fiadoCentavos={resumen.fiadoCentavos}
+                    />
                   </View>
                 </Pieza>
               </Mosaico>

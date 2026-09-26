@@ -9,7 +9,9 @@ import { formatearCentavos } from '../lib/formato';
 import { horaDe, textoDiferencia, tonoDiferencia } from '../lib/caja';
 import { fechaISO, fechaLarga, periodoPredefinido } from '../lib/periodo';
 import { Boton, EstadoCargando, EstadoError, Tarjeta } from '../components/ui';
-import { Banda, Hoja, Mosaico, Pieza } from '../components/banda';
+import { Banda, Hoja } from '../components/banda';
+import { Ficha } from '../components/ficha';
+import { COLOR_PAGO } from '../components/metodo-pago';
 import {
   FormularioAbrirCaja,
   FormularioCierre,
@@ -29,10 +31,94 @@ const PERIODOS = [
 ] as const;
 
 const TONO = {
-  ok: { fondo: 'rgba(47,111,79,0.1)', texto: colores.verdeGanancia },
-  falta: { fondo: 'rgba(182,70,47,0.1)', texto: colores.rojoPerdida },
-  sobra: { fondo: 'rgba(217,140,43,0.15)', texto: '#9a5b08' },
+  ok: { fondo: 'rgba(47,111,79,0.1)', texto: colores.verdeGanancia, borde: colores.verdeGanancia },
+  falta: { fondo: 'rgba(182,70,47,0.1)', texto: colores.rojoPerdida, borde: colores.rojoPerdida },
+  sobra: { fondo: 'rgba(217,140,43,0.15)', texto: '#9a5b08', borde: colores.ambar },
 } as const;
+
+/**
+ * De dónde sale lo que tiene que haber en el cajón, como una suma:
+ * cambio inicial + ventas en efectivo + lo puesto − lo sacado. Lo cobrado
+ * por transferencia o al fiado va aparte: no entra al cajón.
+ *
+ * El cajero no ve las ventas en efectivo ni el total (conteo a ciegas:
+ * lo ve al cerrar, después de contar).
+ */
+function CuentaDelCajon({ turno }: { turno: TurnoCaja }) {
+  const ciega = turno.efectivoEsperadoCentavos === undefined;
+  const ventas = `${turno.cantidadVentas} venta${turno.cantidadVentas === 1 ? '' : 's'}`;
+  const pasos = [
+    {
+      signo: '',
+      etiqueta: 'Cambio inicial',
+      valor: formatearCentavos(turno.fondoInicialCentavos),
+      nota: `Desde las ${horaDe(turno.abiertoEn)}`,
+    },
+    {
+      signo: '+',
+      etiqueta: 'Ventas en efectivo',
+      valor: ciega ? ventas : formatearCentavos(turno.ventasEfectivoCentavos ?? 0),
+      nota: ciega ? 'El monto lo ves al cerrar' : `${ventas} en total`,
+    },
+    {
+      signo: '+',
+      etiqueta: 'Puesto',
+      valor: formatearCentavos(turno.ingresosCentavos),
+      nota: 'Cambio que trajiste',
+    },
+    {
+      signo: '−',
+      etiqueta: 'Sacado',
+      valor: formatearCentavos(turno.retirosCentavos),
+      nota: 'Pagos, depósitos',
+    },
+  ];
+  return (
+    <Tarjeta>
+      <View style={{ gap: espaciado.md }}>
+        {pasos.map((paso) => (
+          <View key={paso.etiqueta} style={styles.paso}>
+            <View style={[styles.signo, !paso.signo && { opacity: 0 }]}>
+              <Text style={styles.signoTexto}>{paso.signo || '·'}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.pasoEtiqueta}>{paso.etiqueta}</Text>
+              <Text style={styles.pasoNota}>{paso.nota}</Text>
+            </View>
+            <Text style={styles.pasoValor}>{paso.valor}</Text>
+          </View>
+        ))}
+        <View style={styles.total}>
+          <View style={[styles.signo, styles.signoTotal]}>
+            <Text style={[styles.signoTexto, { color: '#ffd08a' }]}>=</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.pasoEtiqueta, styles.totalSuave]}>En el cajón</Text>
+            <Text style={[styles.pasoNota, styles.totalSuave]}>
+              {ciega ? 'Se ve al cerrar la caja' : 'Lo que hay que contar'}
+            </Text>
+          </View>
+          <Text style={[styles.pasoValor, styles.totalValor]}>
+            {ciega ? '¿?' : formatearCentavos(turno.efectivoEsperadoCentavos ?? 0)}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.aparte}>
+        <Text style={styles.aparteTexto}>No entran al cajón:</Text>
+        <View style={[styles.aparteChip, { backgroundColor: COLOR_PAGO.transferencia.fondo }]}>
+          <Text style={[styles.aparteChipTexto, { color: COLOR_PAGO.transferencia.texto }]}>
+            Transferencias {formatearCentavos(turno.ventasTransferenciaCentavos)}
+          </Text>
+        </View>
+        <View style={[styles.aparteChip, { backgroundColor: COLOR_PAGO.fiado.fondo }]}>
+          <Text style={[styles.aparteChipTexto, { color: COLOR_PAGO.fiado.texto }]}>
+            Al fiado {formatearCentavos(turno.ventasFiadoCentavos)}
+          </Text>
+        </View>
+      </View>
+    </Tarjeta>
+  );
+}
 
 function TarjetaTurno({
   turno,
@@ -49,8 +135,11 @@ function TarjetaTurno({
   const tono = turno.diferenciaCentavos !== undefined ? TONO[tonoDiferencia(turno.diferenciaCentavos)] : null;
 
   return (
-    <Tarjeta>
+    <Tarjeta
+      style={[styles.turno, { borderLeftColor: tono ? tono.borde : COLOR_PAGO.transferencia.color }]}
+    >
       <View style={styles.turnoCabecera}>
+        <Ficha nombre={turno.cajero} tamano="chica" redonda />
         <View style={{ flex: 1 }}>
           <Text style={styles.turnoCajero}>{turno.cajero}</Text>
           <Text style={styles.turnoFecha}>
@@ -68,18 +157,27 @@ function TarjetaTurno({
         </Text>
       </View>
       <View style={styles.turnoDatos}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.turnoEtiqueta}>Ventas</Text>
           <Text style={styles.turnoValor}>{turno.cantidadVentas}</Text>
         </View>
-        <View>
-          <Text style={styles.turnoEtiqueta}>{turno.estado === 'abierto' ? 'Debería haber' : 'Debía haber'}</Text>
+        <View style={{ flex: 1.3 }}>
+          <Text style={styles.turnoEtiqueta}>
+            {turno.estado === 'abierto' ? 'Hay en el cajón' : 'Tenía que haber'}
+          </Text>
           <Text style={styles.turnoValor}>{formatearCentavos(turno.efectivoEsperadoCentavos ?? 0)}</Text>
         </View>
-        <View>
-          <Text style={styles.turnoEtiqueta}>Transferencias</Text>
-          <Text style={styles.turnoValor}>{formatearCentavos(turno.ventasTransferenciaCentavos)}</Text>
-        </View>
+        {turno.efectivoContadoCentavos !== undefined ? (
+          <View style={{ flex: 1 }}>
+            <Text style={styles.turnoEtiqueta}>Se contó</Text>
+            <Text style={styles.turnoValor}>{formatearCentavos(turno.efectivoContadoCentavos)}</Text>
+          </View>
+        ) : (
+          <View style={{ flex: 1 }}>
+            <Text style={styles.turnoEtiqueta}>Transferencias</Text>
+            <Text style={styles.turnoValor}>{formatearCentavos(turno.ventasTransferenciaCentavos)}</Text>
+          </View>
+        )}
       </View>
       <View style={styles.enlaces}>
         <Pressable
@@ -245,7 +343,7 @@ export function CajaScreen() {
           detalle={
             abierta
               ? esAdmin
-                ? `Efectivo que debería haber · empezaste con ${formatearCentavos(turno!.fondoInicialCentavos)}.`
+                ? 'Efectivo que debería haber en el cajón ahora. Abajo, de dónde sale.'
                 : `Empezaste con ${formatearCentavos(turno!.fondoInicialCentavos)}. Lo que debería haber lo ves al cerrar.`
               : cierre
                 ? 'Caja cerrada. Abre otra cuando vuelvas a vender.'
@@ -276,33 +374,7 @@ export function CajaScreen() {
 
           {abierta && (
             <>
-              <Mosaico>
-                <Pieza
-                  etiqueta="Cambio inicial"
-                  valor={formatearCentavos(turno!.fondoInicialCentavos)}
-                  detalle={`Desde las ${horaDe(turno!.abiertoEn)}`}
-                />
-                <Pieza
-                  etiqueta="Ventas"
-                  valor={String(turno!.cantidadVentas)}
-                  detalle={
-                    esAdmin ? `${formatearCentavos(turno!.ventasEfectivoCentavos ?? 0)} en efectivo` : 'En esta caja'
-                  }
-                />
-                <Pieza
-                  etiqueta="Transferencias"
-                  valor={formatearCentavos(turno!.ventasTransferenciaCentavos)}
-                  detalle="No entran al cajón"
-                />
-                <Pieza
-                  etiqueta="Efectivo sacado"
-                  valor={formatearCentavos(turno!.retirosCentavos)}
-                  tono={turno!.retirosCentavos > 0 ? 'rojo' : 'neutro'}
-                  detalle={
-                    turno!.ingresosCentavos > 0 ? `${formatearCentavos(turno!.ingresosCentavos)} puesto` : 'Pagos, depósitos'
-                  }
-                />
-              </Mosaico>
+              <CuentaDelCajon turno={turno!} />
 
               <Tarjeta>
                 <Text style={styles.seccion}>Movimientos de efectivo</Text>
@@ -394,7 +466,52 @@ const styles = StyleSheet.create({
   chipActivo: { backgroundColor: colores.tinta, borderColor: colores.tinta },
   chipTexto: { fontSize: 13, fontWeight: '700', color: colores.tinta },
   chipTextoActivo: { color: colores.papel },
-  turnoCabecera: { flexDirection: 'row', alignItems: 'flex-start', gap: espaciado.sm },
+  paso: { flexDirection: 'row', alignItems: 'center', gap: espaciado.md },
+  signo: {
+    width: 24,
+    height: 24,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(28,43,58,0.07)',
+  },
+  signoTexto: { fontSize: 14, fontWeight: '800', color: colores.tintaSuave },
+  signoTotal: { backgroundColor: 'rgba(255,208,138,0.18)' },
+  pasoEtiqueta: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    color: colores.tintaSuave,
+  },
+  pasoNota: { marginTop: 1, fontSize: 11, color: colores.tintaSuave },
+  pasoValor: { fontSize: 17, fontWeight: '800', color: colores.tinta, fontVariant: ['tabular-nums'] },
+  total: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: espaciado.md,
+    borderRadius: radios.md,
+    backgroundColor: '#1d3041',
+    padding: espaciado.md,
+  },
+  totalSuave: { color: 'rgba(246,243,236,0.68)' },
+  totalValor: { color: '#ffd08a', fontSize: 20 },
+  aparte: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: espaciado.md,
+    paddingTop: espaciado.sm,
+    borderTopWidth: 1,
+    borderTopColor: colores.papelLinea,
+    borderStyle: 'dashed',
+  },
+  aparteTexto: { fontSize: 12, fontWeight: '600', color: colores.tintaSuave },
+  aparteChip: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3 },
+  aparteChipTexto: { fontSize: 11, fontWeight: '700' },
+  turno: { borderLeftWidth: 4 },
+  turnoCabecera: { flexDirection: 'row', alignItems: 'center', gap: espaciado.sm },
   turnoCajero: { fontSize: 15, fontWeight: '700', color: colores.tinta },
   turnoFecha: { fontSize: 12, color: colores.tintaSuave, marginTop: 2 },
   pildora: {
@@ -406,8 +523,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     fontVariant: ['tabular-nums'],
   },
-  pildoraAbierta: { backgroundColor: colores.papel, color: colores.tintaSuave },
-  turnoDatos: { flexDirection: 'row', justifyContent: 'space-between', marginTop: espaciado.md },
+  pildoraAbierta: { backgroundColor: 'rgba(47,143,176,0.13)', color: '#1f6a85' },
+  turnoDatos: {
+    flexDirection: 'row',
+    gap: espaciado.sm,
+    marginTop: espaciado.md,
+    borderRadius: radios.md,
+    backgroundColor: 'rgba(28,43,58,0.035)',
+    paddingHorizontal: espaciado.md,
+    paddingVertical: espaciado.sm,
+  },
   turnoEtiqueta: { fontSize: 11, color: colores.tintaSuave },
   turnoValor: { fontSize: 14, fontWeight: '700', color: colores.tinta, fontVariant: ['tabular-nums'] },
   enlaces: { flexDirection: 'row', gap: espaciado.lg, marginTop: espaciado.md },

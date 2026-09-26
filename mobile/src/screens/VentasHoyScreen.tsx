@@ -37,13 +37,18 @@ import {
 } from '../components/ui';
 import { colores, espaciado, radios } from '../theme/colores';
 import type { PaginaDeVentas, ResumenPeriodo, VentaDelHistorial } from '../lib/tipos';
-import { Banda, LabioHoja } from '../components/banda';
+import { Banda, DatosBanda, LabioHoja } from '../components/banda';
+import { Ficha } from '../components/ficha';
+import { COLOR_PAGO, ChipMetodoPago } from '../components/metodo-pago';
+import { Pildora } from '../components/estado';
 import { formatearCantidad, importeCentavos, importeDelTramo, porPeso, redondear } from '../lib/cantidad';
 
-const ESTADO: Record<VentaDelHistorial['estado'], { texto: string; color: string; fondo: string }> = {
-  completa: { texto: 'Completa', color: colores.verdeGanancia, fondo: 'rgba(47,111,79,0.1)' },
-  parcialmente_anulada: { texto: 'Anulada en parte', color: '#9a5b08', fondo: 'rgba(217,140,43,0.14)' },
-  anulada: { texto: 'Anulada', color: colores.rojoPerdida, fondo: 'rgba(182,70,47,0.1)' },
+// Solo se marca lo que tiene algo anulado: "Completa" en cada tarjeta era
+// ruido (es lo normal).
+const ESTADO: Record<VentaDelHistorial['estado'], { texto: string; tono: 'warning' | 'danger' } | null> = {
+  completa: null,
+  parcialmente_anulada: { texto: 'Anulada en parte', tono: 'warning' },
+  anulada: { texto: 'Anulada', tono: 'danger' },
 };
 
 // De a cuántas ventas se traen en el historial (un mes pasa de mil).
@@ -206,16 +211,28 @@ function TarjetaVenta({
   const netoCentavos = venta.totalCentavos - venta.totalAnuladoCentavos;
 
   return (
-    <Tarjeta style={styles.tarjeta}>
+    // Cada venta como un ticket: una franja con el color de cómo se pagó y
+    // el corte perforado entre el encabezado y lo que se llevó.
+    <Tarjeta style={[styles.tarjeta, venta.estado === 'anulada' && styles.tarjetaAnulada]}>
+      <View
+        style={[
+          styles.franja,
+          {
+            backgroundColor:
+              venta.estado === 'anulada' ? colores.rojoPerdida : COLOR_PAGO[venta.metodoPago].color,
+          },
+        ]}
+      />
       <View style={styles.cabecera}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.hora}>
-            <Text style={{ fontWeight: '700' }}>{numeroDeTicket(venta.numero)}</Text> · {hora(venta.createdAt)} ·{' '}
-            <Text style={styles.vendedor}>{venta.vendedor}</Text>
-          </Text>
-          <View style={[styles.estadoPill, { backgroundColor: estado.fondo }]}>
-            <Text style={[styles.estadoTexto, { color: estado.color }]}>{estado.texto}</Text>
+        <Ficha nombre={venta.vendedor} tamano="chica" redonda />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <View style={styles.numeroFila}>
+            <Text style={styles.numero}>{numeroDeTicket(venta.numero)}</Text>
+            {estado && <Pildora texto={estado.texto} tono={estado.tono} />}
           </View>
+          <Text style={styles.hora} numberOfLines={1}>
+            {hora(venta.createdAt)} · <Text style={styles.vendedor}>{venta.vendedor}</Text>
+          </Text>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
           <Text style={styles.total}>{formatearCentavos(netoCentavos)}</Text>
@@ -225,11 +242,17 @@ function TarjetaVenta({
         </View>
       </View>
 
-      <View style={{ marginTop: espaciado.sm, gap: 2 }}>
+      <View style={styles.corte}>
+        <View style={[styles.muesca, { left: -11 }]} />
+        <View style={[styles.muesca, { right: -11 }]} />
+      </View>
+
+      <View style={styles.items}>
         {venta.items.map((item) => (
           <View key={item.id} style={styles.itemFila}>
             <Text style={styles.itemTexto} numberOfLines={1}>
-              {formatearCantidad(item.cantidad, item.unidad)} × {item.nombre}
+              <Text style={styles.itemCantidad}> {formatearCantidad(item.cantidad, item.unidad)} × </Text>{' '}
+              {item.nombre}
               {item.cantidadAnulada > 0 && (
                 <Text style={styles.itemAnulado}>
                   {' '}
@@ -248,13 +271,18 @@ function TarjetaVenta({
         ))}
       </View>
 
-      <Text style={styles.pago}>
-        {venta.metodoPago === 'transferencia'
-          ? 'Pagado por transferencia'
-          : venta.metodoPago === 'fiado'
-            ? `Al fiado · ${venta.cliente?.nombre ?? 'cliente'}`
-            : `Efectivo · recibido ${formatearCentavos(venta.montoRecibidoCentavos)} · vuelto ${formatearCentavos(venta.vueltoCentavos)}`}
-      </Text>
+      <View style={{ marginTop: espaciado.sm }}>
+        <ChipMetodoPago
+          metodo={venta.metodoPago}
+          detalle={
+            venta.metodoPago === 'fiado'
+              ? (venta.cliente?.nombre ?? 'cliente')
+              : venta.metodoPago === 'efectivo'
+                ? `recibió ${formatearCentavos(venta.montoRecibidoCentavos)}, vuelto ${formatearCentavos(venta.vueltoCentavos)}`
+                : undefined
+          }
+        />
+      </View>
 
       {venta.anulaciones.length > 0 && (
         <View style={styles.anulaciones}>
@@ -274,6 +302,7 @@ function TarjetaVenta({
             hitSlop={8}
             style={styles.botonAnular}
           >
+            <Ionicons name="share-outline" size={14} color={colores.tintaSuave} />
             <Text style={styles.botonAnularTexto}>Compartir ticket</Text>
           </Pressable>
           {puedeAnular && venta.estado !== 'anulada' && (
@@ -379,6 +408,31 @@ export function VentasHoyScreen() {
     ventas.reduce((acc, v) => acc + v.totalCentavos - v.totalAnuladoCentavos, 0);
   const cantidad = resumen?.cantidadVentas ?? ventas.filter((v) => v.estado !== 'anulada').length;
   const anulado = resumen?.anuladoCentavos ?? ventas.reduce((acc, v) => acc + v.totalAnuladoCentavos, 0);
+  // Lo cobrado según cómo se pagó (el cajero lo saca de las de hoy).
+  const netoDe = (metodo: VentaDelHistorial['metodoPago']) =>
+    ventas
+      .filter((v) => v.metodoPago === metodo)
+      .reduce((acc, v) => acc + v.totalCentavos - v.totalAnuladoCentavos, 0);
+  const datosDeLaFranja = [
+    {
+      etiqueta: 'Efectivo',
+      valor: formatearCentavos(resumen?.efectivoCentavos ?? netoDe('efectivo')),
+      punto: COLOR_PAGO.efectivo.color,
+    },
+    {
+      etiqueta: 'Transferencia',
+      valor: formatearCentavos(resumen?.transferenciaCentavos ?? netoDe('transferencia')),
+      punto: COLOR_PAGO.transferencia.color,
+    },
+    {
+      etiqueta: 'Al fiado',
+      valor: formatearCentavos(resumen?.fiadoCentavos ?? netoDe('fiado')),
+      punto: COLOR_PAGO.fiado.color,
+    },
+    ...(anulado > 0
+      ? [{ etiqueta: 'Anulado', valor: formatearCentavos(anulado), alerta: true }]
+      : []),
+  ];
   const porDia = new Map(
     resumen?.agrupadoPor === 'dia' ? resumen.serie.map((p) => [p.etiqueta, p.centavos]) : [],
   );
@@ -431,11 +485,14 @@ export function VentasHoyScreen() {
               eyebrow={hoy ? 'Caja · hoy' : `Ventas · ${rangoLegible(periodo)}`}
               titulo={hoy ? 'Ventas del día' : nombreDelPeriodo(periodo)}
               valor={formatearCentavos(cobrado)}
-              detalle={`Cobrado en ${cantidad} venta${cantidad === 1 ? '' : 's'}${
-                anulado > 0 ? ` · ${formatearCentavos(anulado)} anulados` : ''
-              }`}
+              detalle={`Cobrado en ${cantidad} venta${cantidad === 1 ? '' : 's'}.`}
             >
-              {esAdmin && <SelectorPeriodo periodo={periodo} onCambiar={setPeriodo} />}
+              {!cargando && cantidad + anulado > 0 && <DatosBanda datos={datosDeLaFranja} />}
+              {esAdmin && (
+                <View style={{ marginTop: espaciado.md }}>
+                  <SelectorPeriodo periodo={periodo} onCambiar={setPeriodo} />
+                </View>
+              )}
             </Banda>
             <LabioHoja />
             <Text style={[styles.descripcion, styles.fila]}>
@@ -507,9 +564,38 @@ const styles = StyleSheet.create({
   pie: { alignItems: 'center', paddingVertical: espaciado.lg },
   pieTexto: { fontSize: 12, color: colores.tintaSuave },
   error: { color: colores.rojoPerdida, fontSize: 13, marginBottom: espaciado.sm },
-  tarjeta: { paddingVertical: espaciado.md },
-  cabecera: { flexDirection: 'row', alignItems: 'flex-start', gap: espaciado.sm },
-  hora: { fontSize: 13, color: colores.tinta, fontVariant: ['tabular-nums'] },
+  tarjeta: { paddingTop: espaciado.md + 6, paddingBottom: espaciado.md, overflow: 'hidden' },
+  franja: { position: 'absolute', top: 0, left: 0, right: 0, height: 5 },
+  corte: {
+    marginTop: espaciado.md,
+    marginHorizontal: -espaciado.lg,
+    borderTopWidth: 1.5,
+    borderTopColor: colores.papelLinea,
+    borderStyle: 'dashed',
+  },
+  muesca: {
+    position: 'absolute',
+    top: -11,
+    width: 20,
+    height: 20,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colores.papelLinea,
+    backgroundColor: colores.papel,
+  },
+  itemCantidad: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colores.tintaSuave,
+    backgroundColor: 'rgba(28,43,58,0.06)',
+    fontVariant: ['tabular-nums'],
+  },
+  tarjetaAnulada: { opacity: 0.72 },
+  cabecera: { flexDirection: 'row', alignItems: 'center', gap: espaciado.md },
+  numeroFila: { flexDirection: 'row', alignItems: 'center', gap: espaciado.sm },
+  numero: { fontSize: 14, fontWeight: '800', color: colores.tinta, fontVariant: ['tabular-nums'] },
+  hora: { marginTop: 1, fontSize: 12, color: colores.tintaSuave, fontVariant: ['tabular-nums'] },
+  items: { marginTop: espaciado.md, gap: 5 },
   vendedor: { color: colores.tintaSuave },
   estadoPill: {
     alignSelf: 'flex-start',
@@ -519,7 +605,7 @@ const styles = StyleSheet.create({
     borderRadius: radios.full,
   },
   estadoTexto: { fontSize: 11, fontWeight: '700' },
-  total: { fontSize: 17, fontWeight: '700', color: colores.tinta, fontVariant: ['tabular-nums'] },
+  total: { fontSize: 20, fontWeight: '800', color: colores.tinta, fontVariant: ['tabular-nums'] },
   totalOriginal: {
     fontSize: 12,
     color: colores.tintaSuave,
@@ -539,11 +625,14 @@ const styles = StyleSheet.create({
   },
   anulacionTexto: { fontSize: 12, color: colores.tintaSuave },
   botonAnular: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     alignSelf: 'flex-start',
-    marginTop: espaciado.sm,
+    marginTop: espaciado.md,
     paddingHorizontal: espaciado.md,
     paddingVertical: 6,
-    borderRadius: radios.sm,
+    borderRadius: radios.full,
     borderWidth: 1,
     borderColor: colores.papelLinea,
   },
