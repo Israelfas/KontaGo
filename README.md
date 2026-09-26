@@ -101,21 +101,75 @@ El backend no arranca si falta algo de esto (con `NODE_ENV=production`):
 
 Además:
 
-- `TRUST_PROXY` con la cantidad de proxies delante del backend (ver
+- `TRUST_PROXY` con los proxies delante del backend (ver
   `backend/.env.example`), para que el límite de intentos de login use la
   IP real.
-- Correr `npm run migration:run` antes de cada versión nueva.
-- Web: `NEXT_PUBLIC_API_URL` con la dirección del backend. La web y el
-  backend tienen que estar en el mismo dominio (pueden ser subdominios:
-  `app.kontago.ec` y `api.kontago.ec`), por https: la sesión de la web vive
-  en una cookie httpOnly `SameSite=Strict` que el navegador no manda entre
-  dominios distintos.
+- Las migraciones (`npm run migration:run:prod`, con el código compilado)
+  antes de cada versión nueva.
+- La sesión de la web vive en una cookie httpOnly `SameSite=Strict`, que el
+  navegador no manda entre sitios distintos. O la web y el backend van en
+  el mismo dominio (`app.kontago.ec` y `api.kontago.ec`), o la web reenvía
+  `/api` al backend (`BACKEND_URL_INTERNA`, ver `web/next.config.ts`) y la
+  cookie va en `/api/auth` (`COOKIE_SESION_RUTA`).
 - Web, página de inicio: `NEXT_PUBLIC_APP_ANDROID_URL` y
   `NEXT_PUBLIC_APP_IOS_URL` con el enlace de la tienda (o del `.apk`). Si
   están, los botones de descarga se activan y aparece el QR; si no, dicen
   "Muy pronto". Se leen al compilar la web.
-- App: `EXPO_PUBLIC_API_URL`, y el contacto de soporte
+- App: `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_WEB_URL` y el contacto de soporte
   (`EXPO_PUBLIC_SOPORTE_CORREO` / `_WHATSAPP`, ver `mobile/.env.example`).
+
+### Railway
+
+Un proyecto con tres servicios: la base (PostgreSQL de Railway), el
+backend y la web, los dos desde este repo. Cada uno se arma con su
+`Dockerfile`; `backend/railway.json` corre las migraciones antes de cada
+versión y revisa `/health`.
+
+En cada servicio del repo, en **Settings**: *Root Directory* `/backend` o
+`/web`, y *Railway Config File* `/backend/railway.json` o
+`/web/railway.json` (el archivo no sigue al Root Directory). Los nombres de
+los servicios importan: las variables de abajo se refieren a `Postgres`,
+`backend` y `web`.
+
+Backend (**Variables → Raw Editor**):
+
+```bash
+NODE_ENV=production
+PORT=3000
+TZ=America/Guayaquil
+DB_HOST=${{Postgres.PGHOST}}
+DB_PORT=${{Postgres.PGPORT}}
+DB_USER=${{Postgres.PGUSER}}
+DB_PASSWORD=${{Postgres.PGPASSWORD}}
+DB_NAME=${{Postgres.PGDATABASE}}
+CORS_ORIGINS=https://${{web.RAILWAY_PUBLIC_DOMAIN}}
+COOKIE_SESION_RUTA=/api/auth
+# Los proxies de Railway (100.x) y la web por la red interna.
+TRUST_PROXY=100.0.0.0/8, uniquelocal
+JWT_ACCESS_SECRET=...
+JWT_REFRESH_SECRET=...
+CLAVE_CIFRADO=...
+CLERK_SECRET_KEY=...
+# Railway bloquea SMTP fuera del plan Pro: el correo va por la API de Brevo.
+BREVO_API_KEY=...
+CORREO_REMITENTE=KontaGo <correo-verificado-en-brevo@...>
+```
+
+Web:
+
+```bash
+PORT=3000
+NEXT_PUBLIC_API_URL=/api
+BACKEND_URL_INTERNA=http://${{backend.RAILWAY_PRIVATE_DOMAIN}}:${{backend.PORT}}
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=...
+CLERK_SECRET_KEY=...
+NEXT_PUBLIC_SOPORTE_CORREO=...
+```
+
+Las dos necesitan un dominio público (**Settings → Networking → Generate
+Domain**, puerto 3000): la web para el navegador, el backend para la app.
+Las `NEXT_PUBLIC_*` y `BACKEND_URL_INTERNA` se leen al compilar: si se
+cambian, hay que volver a publicar la web.
 
 ## Armar la app instalable (Android)
 
@@ -145,6 +199,16 @@ Al terminar, EAS da un enlace y un QR para instalarla. Ese enlace va en
 `NEXT_PUBLIC_APP_ANDROID_URL` de la web. Con una dirección `http` (la red
 local) la app permite tráfico sin cifrar; con `https`, no (ver
 `mobile/app.config.ts`).
+
+Para el APK de `produccion` (el que se instala en la tienda), lo mismo en el
+entorno `production`, con las direcciones públicas de Railway:
+
+```bash
+npx eas-cli env:push --environment production --path .env
+npx eas-cli env:create --environment production --name EXPO_PUBLIC_API_URL --value https://BACKEND.up.railway.app --visibility plaintext
+npx eas-cli env:create --environment production --name EXPO_PUBLIC_WEB_URL --value https://WEB.up.railway.app --visibility plaintext
+npx eas-cli build --platform android --profile produccion
+```
 
 Si la PC cambia de IP (otra red, o el router le dio otra), no hace falta
 volver a armar el APK: en el login de la app, abajo, **Servidor · Cambiar**

@@ -16,8 +16,15 @@ import type { Request, Response } from 'express';
 
 export const COOKIE_SESION = 'kontago_sesion';
 
-/** Solo las rutas de sesión la reciben (no viaja en cada pedido). */
-const RUTA_COOKIE = '/auth';
+/**
+ * Cómo se guarda la cookie. `ruta`: solo las rutas de sesión la reciben (no
+ * viaja en cada pedido), tal como las ve el navegador. Ver
+ * COOKIE_SESION_RUTA en configuration.ts.
+ */
+export interface OpcionesCookie {
+  segura: boolean;
+  ruta: string;
+}
 
 export function esClienteWeb(req: Request): boolean {
   return req.headers['x-cliente'] === 'web';
@@ -45,7 +52,7 @@ export function guardarSesionEnCookie(
   res: Response,
   refreshToken: string,
   duracionSegundos: number,
-  segura: boolean,
+  { segura, ruta }: OpcionesCookie,
 ): void {
   res.cookie(COOKIE_SESION, refreshToken, {
     httpOnly: true,
@@ -53,16 +60,19 @@ export function guardarSesionEnCookie(
     secure: segura,
     // No viaja en pedidos que empiezan en otro sitio (protege de CSRF).
     sameSite: 'strict',
-    path: RUTA_COOKIE,
+    path: ruta,
     maxAge: duracionSegundos * 1000,
   });
 }
 
-export function borrarCookieDeSesion(res: Response, segura: boolean): void {
+export function borrarCookieDeSesion(
+  res: Response,
+  { segura, ruta }: OpcionesCookie,
+): void {
   res.clearCookie(COOKIE_SESION, {
     httpOnly: true,
     secure: segura,
     sameSite: 'strict',
-    path: RUTA_COOKIE,
+    path: ruta,
   });
 }

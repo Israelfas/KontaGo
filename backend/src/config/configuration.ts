@@ -90,12 +90,31 @@ function parseAppWebUrl(corsOrigins: string[] | true): string {
   return valor.replace(/\/+$/, '');
 }
 
+/**
+ * COOKIE_SESION_RUTA: la ruta de la cookie de sesión de la web, tal como la
+ * ve el navegador. /auth (default) si la web llama directo al backend;
+ * /api/auth si lo llama a través de su propio reenvío de /api (así en
+ * Railway: ahí la web y el backend quedan en sitios distintos y la cookie
+ * no viajaría de uno a otro).
+ */
+function parseRutaCookie(valor: string | undefined): string {
+  const limpio = valor?.trim().replace(/\/+$/, '');
+  if (!limpio) return '/auth';
+  if (!limpio.startsWith('/')) {
+    throw new Error(
+      'COOKIE_SESION_RUTA tiene que empezar con /, ej. COOKIE_SESION_RUTA=/api/auth',
+    );
+  }
+  return limpio;
+}
+
 export default () => ({
   nodeEnv: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3000', 10),
   trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
   corsOrigins: parseCorsOrigins(process.env.CORS_ORIGINS),
   appWebUrl: parseAppWebUrl(parseCorsOrigins(process.env.CORS_ORIGINS)),
+  cookieSesionRuta: parseRutaCookie(process.env.COOKIE_SESION_RUTA),
 
   database: {
     host: process.env.DB_HOST || 'localhost',
@@ -120,7 +139,17 @@ export default () => ({
     secure: process.env.SMTP_SECURE === 'true',
     user: process.env.SMTP_USER || '',
     pass: process.env.SMTP_PASS || '',
-    from: process.env.SMTP_FROM || 'KontaGo <no-reply@kontago.local>',
+  },
+
+  correo: {
+    // Quién firma los correos. SMTP_FROM es el nombre anterior.
+    remitente:
+      process.env.CORREO_REMITENTE ||
+      process.env.SMTP_FROM ||
+      'KontaGo <no-reply@kontago.local>',
+    // API HTTPS de Brevo. Si está, gana sobre SMTP (en Railway, fuera del
+    // plan Pro, las conexiones SMTP salientes están bloqueadas).
+    brevoApiKey: process.env.BREVO_API_KEY || '',
   },
 
   alertas: {

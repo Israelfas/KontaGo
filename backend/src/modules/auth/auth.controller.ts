@@ -22,6 +22,7 @@ import {
   borrarCookieDeSesion,
   esClienteWeb,
   guardarSesionEnCookie,
+  type OpcionesCookie,
   leerCookie,
 } from '../../common/seguridad/cookie-sesion';
 import { DosPasosService } from './dos-pasos.service';
@@ -57,8 +58,11 @@ export class AuthController {
   }
 
   // La cookie solo por https en producción (en la PC es http).
-  private get cookieSegura(): boolean {
-    return this.config.get<string>('nodeEnv') === 'production';
+  private get opcionesCookie(): OpcionesCookie {
+    return {
+      segura: this.config.get<string>('nodeEnv') === 'production',
+      ruta: this.config.get<string>('cookieSesionRuta')!,
+    };
   }
 
   /**
@@ -76,7 +80,7 @@ export class AuthController {
       res,
       respuesta.refreshToken,
       this.config.get<number>('jwt.refreshExpiresInSeconds')!,
-      this.cookieSegura,
+      this.opcionesCookie,
     );
     return { accessToken: respuesta.accessToken };
   }
@@ -218,7 +222,7 @@ export class AuthController {
       );
     } catch (err) {
       // Una cookie que ya no sirve no tiene que quedar dando vueltas.
-      if (esClienteWeb(req)) borrarCookieDeSesion(res, this.cookieSegura);
+      if (esClienteWeb(req)) borrarCookieDeSesion(res, this.opcionesCookie);
       throw err;
     }
   }
@@ -239,7 +243,7 @@ export class AuthController {
     @Headers('user-agent') userAgent?: string,
   ) {
     const refreshToken = this.refreshDe(dto, req);
-    if (esClienteWeb(req)) borrarCookieDeSesion(res, this.cookieSegura);
+    if (esClienteWeb(req)) borrarCookieDeSesion(res, this.opcionesCookie);
     if (!refreshToken) return;
     await this.authService.cerrarSesion(
       refreshToken,
@@ -259,7 +263,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
     @Headers('user-agent') userAgent?: string,
   ) {
-    if (esClienteWeb(req)) borrarCookieDeSesion(res, this.cookieSegura);
+    if (esClienteWeb(req)) borrarCookieDeSesion(res, this.opcionesCookie);
     await this.authService.cerrarTodasLasSesiones(
       { id: user.usuarioId, tenantId: user.tenantId },
       this.contexto(ip, userAgent),

@@ -418,11 +418,11 @@ export class AuthService {
     );
     await this.mail.enviar({ destinatarios: [usuario.email], asunto, html });
 
-    // En desarrollo, sin SMTP configurado, el enlace queda en el log para
+    // En desarrollo, sin correo configurado, el enlace queda en el log para
     // poder probar. Nunca en producción.
     if (
       this.configService.get<string>('nodeEnv') !== 'production' &&
-      !this.configService.get<string>('smtp.host')
+      !this.mail.configurado
     ) {
       console.log(
         `[desarrollo] Enlace para cambiar la contraseña de ${usuario.email}: ${enlace}`,
