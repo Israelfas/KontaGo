@@ -61,3 +61,11 @@ export class CantidadAAnularInvalidaError extends BadRequestException {
     );
   }
 }
+
+export class CantidadSinImporteError extends BadRequestException {
+  constructor(nombre: string) {
+    super(
+      `La cantidad de ${nombre} es tan chica que no llega a un centavo. Pon una cantidad mayor.`,
+    );
+  }
+}

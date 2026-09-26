@@ -14,6 +14,7 @@ import { useAuth } from './auth-context';
 import {
   ApiError,
   RespuestaIncompletaError,
+  SesionDeOtraCuentaError,
   SinConexionError,
   crearVenta,
   listarProductos,
@@ -154,6 +155,8 @@ export function SinConexionProvider({ children }: { children: ReactNode }) {
   const pendientesRef = useRef<VentaPendiente[]>([]);
   const catalogoRef = useRef<CatalogoGuardado | null>(null);
   const enviandoRef = useRef(false);
+  // De qué cuenta es la cola cargada (cambia junto con pendientesRef).
+  const cuentaRef = useRef(archivos);
 
   const cambiarPendientes = useCallback(
     (nuevas: VentaPendiente[]) => {
@@ -176,6 +179,7 @@ export function SinConexionProvider({ children }: { children: ReactNode }) {
   // Al entrar (o cambiar de cuenta), lo guardado de esa cuenta.
   useEffect(() => {
     let vigente = true;
+    cuentaRef.current = archivos;
     pendientesRef.current = [];
     catalogoRef.current = null;
     setPendientes([]);
@@ -271,6 +275,11 @@ export function SinConexionProvider({ children }: { children: ReactNode }) {
     if (!pendientesRef.current.some((v) => !v.problema)) return;
     enviandoRef.current = true;
     setEnviando(true);
+    // Si mientras se manda entra otra cuenta, se corta sin tocar nada: la
+    // cola cargada ya es la de la otra. Lo que se alcanzó a mandar se
+    // vuelve a mandar después y el servidor lo reconoce por la clave.
+    const cuentaAlEmpezar = cuentaRef.current;
+    const otraCuenta = () => cuentaRef.current !== cuentaAlEmpezar;
     try {
       for (const venta of pendientesRef.current.filter((v) => !v.problema)) {
         try {
@@ -284,9 +293,11 @@ export function SinConexionProvider({ children }: { children: ReactNode }) {
             claveIdempotencia: venta.clave,
             vendidaEn: venta.vendidaEn,
           });
+          if (otraCuenta()) return;
           cambiarPendientes(pendientesRef.current.filter((v) => v.clave !== venta.clave));
           setSinConexion(false);
         } catch (err) {
+          if (otraCuenta() || err instanceof SesionDeOtraCuentaError) return;
           // Sigue sin red: se prueba en un rato, en el mismo orden.
           if (esFaltaDeConexion(err)) {
             setSinConexion(true);

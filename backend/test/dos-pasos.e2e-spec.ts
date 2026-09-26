@@ -1,4 +1,5 @@
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { MailService } from '../src/modules/mail/mail.service';
 import {
   codigoDelPaso,
   deBase32,
@@ -219,5 +220,41 @@ describe('Verificación en dos pasos (e2e)', () => {
     const tipos = actividad.eventos.map((e) => e.tipo);
     expect(tipos).toContain('dos_pasos_activada');
     expect(tipos).toContain('dos_pasos_quitada_por_admin');
+  });
+  it('un desafío de antes de cerrar todas las sesiones ya no sirve', async () => {
+    const { token, secreto, ingresar, conCodigo } = await cuentaConDosPasos();
+    const { desafio } = await ingresar();
+    await cliente(app, token).post('/auth/cerrar-sesiones').expect(204);
+    await conCodigo(desafio, codigoDe(secreto, 1)).expect(401);
+  });
+
+  it('un desafío de antes de restablecer la contraseña ya no sirve', async () => {
+    const correos: { destinatarios: string[]; html: string }[] = [];
+    const espia = jest
+      .spyOn(app.get(MailService), 'enviar')
+      .mockImplementation((c) => {
+        correos.push(c);
+        return Promise.resolve();
+      });
+    const { tienda, codigosRecuperacion, ingresar, conCodigo } =
+      await cuentaConDosPasos();
+    const { desafio } = await ingresar();
+
+    await cliente(app)
+      .post('/auth/olvide-password', { email: tienda.email })
+      .expect(204);
+    const enlace = /restablecer\?token=([\w-]+)/.exec(
+      correos.find((c) => c.destinatarios.includes(tienda.email))!.html,
+    )![1];
+    await cliente(app)
+      .post('/auth/restablecer-password', {
+        token: enlace,
+        password: 'otra-clave-segura-2026',
+      })
+      .expect(204);
+    espia.mockRestore();
+
+    // Con el código de recuperación (válido) y el desafío viejo: no.
+    await conCodigo(desafio, codigosRecuperacion[0]).expect(401);
   });
 });

@@ -147,4 +147,51 @@ describe('Venta por peso', () => {
     ).body as Producto;
     expect(cambiado.unidad).toBe('unidad');
   });
+  it('partir la venta en líneas mínimas no baja el precio (se cobra el total una vez)', async () => {
+    const arroz = await crearProducto(app, admin, {
+      unidad: 'libra',
+      precioVentaCentavos: 60,
+      stockInicial: 20,
+    });
+    // 125 líneas de 0,008 lb: antes cada una se redondeaba a $0.
+    const venta = (
+      await api()
+        .post('/ventas', {
+          items: Array.from({ length: 125 }, () => ({
+            productoId: arroz.id,
+            cantidad: 0.008,
+          })),
+          metodoPago: 'transferencia',
+        })
+        .expect(201)
+    ).body as Venta;
+    expect(venta.totalCentavos).toBe(60);
+    expect(venta.items).toHaveLength(1);
+    expect(venta.items[0].cantidad).toBe(1);
+    expect(await stockDe(arroz.id)).toBe(19);
+  });
+
+  it('una cantidad que no llega a un centavo no se vende', async () => {
+    const arroz = await crearProducto(app, admin, {
+      unidad: 'libra',
+      precioVentaCentavos: 60,
+      stockInicial: 5,
+    });
+    const res = await vender(arroz.id, 0.008).expect(400);
+    expect((res.body as { message: string }).message).toMatch(/un centavo/);
+    expect(await stockDe(arroz.id)).toBe(5);
+  });
+
+  it('una venta no puede traer más de 200 líneas', async () => {
+    const p = await crearProducto(app, admin, { stockInicial: 1000 });
+    await api()
+      .post('/ventas', {
+        items: Array.from({ length: 201 }, () => ({
+          productoId: p.id,
+          cantidad: 1,
+        })),
+        metodoPago: 'transferencia',
+      })
+      .expect(400);
+  });
 });

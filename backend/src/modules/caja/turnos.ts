@@ -95,26 +95,29 @@ export async function cuentasDelTurno(
   turno: TurnoCaja,
 ): Promise<CuentasDelTurno> {
   const ventas = await manager.query<
-    { metodo_pago: MetodoPago; cantidad: number; neto: number }[]
+    { metodo_pago: MetodoPago; cantidad: number; neto: string }[]
   >(
     `SELECT metodo_pago,
             count(*) FILTER (WHERE total_centavos > total_anulado_centavos)::int AS cantidad,
-            coalesce(sum(total_centavos - total_anulado_centavos), 0)::int AS neto
+            coalesce(sum(total_centavos - total_anulado_centavos), 0)::bigint AS neto
        FROM ventas WHERE turno_id = $1 GROUP BY metodo_pago`,
     [turno.id],
   );
   const movimientos = await manager.query<
-    { tipo: TipoMovimientoCaja; monto: number }[]
+    { tipo: TipoMovimientoCaja; monto: string }[]
   >(
-    `SELECT tipo, coalesce(sum(monto_centavos), 0)::int AS monto
+    `SELECT tipo, coalesce(sum(monto_centavos), 0)::bigint AS monto
        FROM movimientos_caja WHERE turno_id = $1 GROUP BY tipo`,
     [turno.id],
   );
 
+  // Sumas en bigint: con ::int, un turno con muchos ingresos pasaba de
+  // 2.147.483.647 centavos y ya no se podía cerrar ni listar. Postgres
+  // devuelve bigint como texto; en centavos cabe de sobra en un number.
   const netoDe = (metodo: MetodoPago) =>
-    ventas.find((v) => v.metodo_pago === metodo)?.neto ?? 0;
+    Number(ventas.find((v) => v.metodo_pago === metodo)?.neto ?? 0);
   const montoDe = (tipo: TipoMovimientoCaja) =>
-    movimientos.find((m) => m.tipo === tipo)?.monto ?? 0;
+    Number(movimientos.find((m) => m.tipo === tipo)?.monto ?? 0);
 
   const ventasEfectivoCentavos = netoDe(MetodoPago.EFECTIVO);
   const ingresosCentavos = montoDe(TipoMovimientoCaja.INGRESO);

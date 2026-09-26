@@ -67,6 +67,19 @@ export class SinConexionError extends Error {
  */
 export class RespuestaIncompletaError extends ApiError {}
 
+/**
+ * Al renovar la sesión volvió la de OTRA cuenta (en otra pestaña o en este
+ * mismo equipo entró otra persona). El pedido no se reenvía: haría con la
+ * cuenta nueva algo que pidió la anterior (una venta pendiente, por
+ * ejemplo, quedaría en la caja de otro).
+ */
+export class SesionDeOtraCuentaError extends Error {
+  constructor() {
+    super('La sesión cambió a otra cuenta.');
+    this.name = 'SesionDeOtraCuentaError';
+  }
+}
+
 /** fetch, pero sin red avisa con SinConexionError (y no un TypeError suelto). */
 async function pedir(url: string, opciones: RequestInit): Promise<Response> {
   try {
@@ -86,6 +99,19 @@ let refrescoEnCurso: Promise<string | null> | null = null;
 
 export function configurarRefrescoDeSesion(fn: RefrescadorDeSesion | null) {
   refrescador = fn;
+}
+
+/** De quién es un token (su `sub`), sin verificarlo; null si no se entiende. */
+function cuentaDelToken(token: string): string | null {
+  try {
+    const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, '='))) as {
+      sub?: unknown;
+    };
+    return typeof payload.sub === 'string' ? payload.sub : null;
+  } catch {
+    return null;
+  }
 }
 
 // Si varias pantallas reciben 401 a la vez, comparten un solo refresh
@@ -140,6 +166,9 @@ async function pedirConSesion(
   if (response.status === 401 && token) {
     const nuevoToken = await refrescarUnaVez();
     if (nuevoToken) {
+      if (cuentaDelToken(nuevoToken) !== cuentaDelToken(token)) {
+        throw new SesionDeOtraCuentaError();
+      }
       fetchOptions = construirOpciones(nuevoToken);
       response = await pedir(`${API_URL}${path}`, fetchOptions);
     }

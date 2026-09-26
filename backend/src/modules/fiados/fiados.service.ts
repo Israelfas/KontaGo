@@ -27,7 +27,8 @@ interface FilaDeSaldo {
   nombre: string;
   telefono: string | null;
   activo: boolean;
-  saldo: number;
+  // bigint: Postgres lo devuelve como texto.
+  saldo: string;
   ultimo: Date | null;
 }
 
@@ -37,7 +38,7 @@ interface FilaDeSaldo {
  */
 const SALDOS = `
   SELECT c.id, c.nombre, c.telefono, c.activo,
-         (coalesce(v.fiado, 0) - coalesce(a.abonado, 0))::int AS saldo,
+         (coalesce(v.fiado, 0) - coalesce(a.abonado, 0))::bigint AS saldo,
          greatest(v.ultima, a.ultima) AS ultimo
     FROM clientes c
     LEFT JOIN (
@@ -73,7 +74,7 @@ const aDto = (fila: FilaDeSaldo): ClienteConSaldoDto => ({
   nombre: fila.nombre,
   telefono: fila.telefono,
   activo: fila.activo,
-  saldoCentavos: fila.saldo,
+  saldoCentavos: Number(fila.saldo),
   ultimoMovimiento: fila.ultimo,
 });
 

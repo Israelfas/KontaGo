@@ -103,6 +103,39 @@ export class Usuario {
   })
   dosPasosCodigos?: string[] | null;
 
+  // La cuenta de Google (Clerk) vinculada. Una vez vinculada, entra por
+  // este ID y no por el correo (que puede cambiar o reutilizarse).
+  @Column({
+    name: 'clerk_user_id',
+    type: 'varchar',
+    length: 64,
+    nullable: true,
+  })
+  clerkUserId: string | null;
+
+  // Cuándo se demostró que el correo es de quien usa la cuenta: al
+  // crearla con Google o al usar un enlace de recuperación. Sin esto no se
+  // vincula Google por correo: cualquiera podría registrar el correo de
+  // otra persona y esperar a que entre con Google a una tienda ajena.
+  @Column({
+    name: 'email_verificado_en',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  emailVerificadoEn: Date | null;
+
+  // Cada vez que se cortan todas sus sesiones (cambio de contraseña,
+  // desactivación, "cerrar en todos lados") se anota el momento. Un
+  // ingreso cuya contraseña (o código) se verificó antes ya no puede crear
+  // una sesión: si no, un ingreso en curso o un desafío de dos pasos
+  // emitido antes sobrevivía al cambio.
+  @Column({
+    name: 'sesiones_validas_desde',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  sesionesValidasDesde: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

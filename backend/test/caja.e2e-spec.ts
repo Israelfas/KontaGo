@@ -280,4 +280,33 @@ describe('Caja (turnos y arqueo)', () => {
       .post('/caja/cerrar', { efectivoContadoCentavos: 'mucho' })
       .expect(400);
   });
+  it('un turno con más de 2.147.483.647 centavos en ingresos se cierra y se lista igual', async () => {
+    const admin = (await crearTienda(app)).accessToken;
+    const cajero = await crearCajero(app, admin);
+    await abrirCaja(app, cajero.accessToken, 0);
+    // 215 ingresos de $100.000: la suma pasa el máximo de un entero de 32 bits.
+    for (let i = 0; i < 215; i++) {
+      await cliente(app, cajero.accessToken)
+        .post('/caja/movimientos', {
+          tipo: 'ingreso',
+          montoCentavos: 10_000_000,
+          motivo: 'prueba de sumas grandes',
+        })
+        .expect(201);
+    }
+    const cierre = (
+      await cliente(app, cajero.accessToken)
+        .post('/caja/cerrar', { efectivoContadoCentavos: 0 })
+        .expect(200)
+    ).body as Turno;
+    expect(cierre.ingresosCentavos).toBe(2_150_000_000);
+    expect(cierre.efectivoEsperadoCentavos).toBe(2_150_000_000);
+
+    const turnos = (await cliente(app, admin).get('/caja/turnos').expect(200))
+      .body as Turno[];
+    expect(turnos.find((t) => t.id === cierre.id)?.ingresosCentavos).toBe(
+      2_150_000_000,
+    );
+    await cliente(app, admin).get('/reportes/excel').expect(200);
+  });
 });

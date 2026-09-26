@@ -10,6 +10,7 @@ import { useAuth as useClerkAuth } from '@clerk/expo';
 import * as api from './api';
 import type { RegistroInput } from './api';
 import type { TokenPair } from './tipos';
+import { decodificarBase64 } from './jwt';
 
 const STORAGE_KEY = 'kontago.accessToken';
 const REFRESH_STORAGE_KEY = 'kontago.refreshToken';
@@ -19,30 +20,6 @@ interface JwtPayload {
   tenantId: string;
   rol: 'admin' | 'cajero';
   exp: number;
-}
-
-// RN/Hermes moderno trae atob global, pero no en todos los engines JS que
-// puede usar Expo (JSC en algunos builds no lo expone) — decodificamos
-// base64 a mano para no depender de eso.
-const BASE64_CHARS =
-  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-
-function decodificarBase64(input: string): string {
-  let str = input.replace(/=+$/, '');
-  let output = '';
-  let buffer = 0;
-  let bits = 0;
-  for (const char of str) {
-    const val = BASE64_CHARS.indexOf(char);
-    if (val === -1) continue;
-    buffer = (buffer << 6) | val;
-    bits += 6;
-    if (bits >= 8) {
-      bits -= 8;
-      output += String.fromCharCode((buffer >> bits) & 0xff);
-    }
-  }
-  return output;
 }
 
 function decodificarPayload(token: string): JwtPayload | null {

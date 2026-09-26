@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsEnum,
@@ -22,8 +23,11 @@ export class VentaItemDto {
 }
 
 export class CrearVentaDto {
+  // Un ticket de tienda no pasa de unas decenas de productos; el tope evita
+  // pedidos con miles de líneas (cada una bloquea y carga filas).
   @IsArray()
   @ArrayMinSize(1)
+  @ArrayMaxSize(200)
   @ValidateNested({ each: true })
   @Type(() => VentaItemDto)
   items: VentaItemDto[];

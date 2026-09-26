@@ -10,7 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
-import { verifyToken } from '@clerk/backend';
+import { createClerkClient, verifyToken } from '@clerk/backend';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import {
   DataSource,
@@ -77,6 +77,10 @@ interface PayloadDesafio {
   sub: string;
   tipo: 'dos-pasos';
   metodo: 'password' | 'google';
+  // Cuándo se verificó el primer factor (ms). Si después se cortaron las
+  // sesiones de la cuenta, el desafío ya no sirve.
+  verificadoEn?: number;
+  iat?: number;
 }
 const MINUTOS_DE_BLOQUEO = 15;
 
@@ -191,6 +195,9 @@ export class AuthService {
     password: string,
     contexto: ContextoPedido = {},
   ): Promise<RespuestaIngreso> {
+    // Antes de leer la cuenta: si mientras se verifica la contraseña se la
+    // cambian (o se cierran sus sesiones), este ingreso ya no vale.
+    const verificadoEn = new Date();
     const usuario = await this.usuarioRepo.findOne({
       where: { email, activo: true },
     });
@@ -241,10 +248,11 @@ export class AuthService {
       await this.usuarioRepo.update(usuario.id, cambios);
     }
 
-    if (pideCodigo) return this.desafio(usuario, 'password');
+    if (pideCodigo) return this.desafio(usuario, 'password', verificadoEn);
 
+    const tokens = await this.emitirTokens(usuario, contexto, verificadoEn);
     await this.seguridad.registrar('ingreso', { usuario, contexto });
-    return this.emitirTokens(usuario, contexto);
+    return tokens;
   }
 
   // --- Verificación en dos pasos al ingresar ---
@@ -252,11 +260,13 @@ export class AuthService {
   private desafio(
     usuario: Usuario,
     metodo: PayloadDesafio['metodo'],
+    verificadoEn: Date,
   ): DesafioDosPasos {
     const payload: PayloadDesafio = {
       sub: usuario.id,
       tipo: 'dos-pasos',
       metodo,
+      verificadoEn: verificadoEn.getTime(),
     };
     return {
       requiereCodigo: true,
@@ -337,11 +347,16 @@ export class AuthService {
         contexto,
       });
     }
+    // La contraseña (o Google) se verificó cuando se emitió el desafío.
+    const verificadoEn = new Date(
+      payload.verificadoEn ?? (payload.iat ?? 0) * 1000,
+    );
+    const tokens = await this.emitirTokens(usuario, contexto, verificadoEn);
     await this.seguridad.registrar(
       payload.metodo === 'google' ? 'ingreso_google' : 'ingreso',
       { usuario, contexto },
     );
-    return this.emitirTokens(usuario, contexto);
+    return tokens;
   }
 
   private async anotarIntentoFallido(
@@ -492,6 +507,8 @@ export class AuthService {
         passwordHash,
         intentosFallidos: 0,
         bloqueadoHasta: null,
+        // El enlace llegó a su correo: el correo es suyo.
+        emailVerificadoEn: cuenta.emailVerificadoEn ?? new Date(),
       });
       await manager
         .getRepository(RecuperacionPassword)
@@ -553,6 +570,7 @@ export class AuthService {
     clerkToken: string,
     contexto: ContextoPedido = {},
   ): Promise<RespuestaIngreso> {
+    const verificadoEn = new Date();
     const secretKey = this.configService.get<string>('clerk.secretKey');
     if (!secretKey) {
       throw new UnauthorizedException(
@@ -570,7 +588,6 @@ export class AuthService {
     // El JWT de Clerk no trae el email en un campo fijo entre planes/
     // configuraciones — lo más confiable es pedirle el usuario completo
     // a la API de Clerk con el ID verificado (claims.sub).
-    const { createClerkClient } = await import('@clerk/backend');
     const clerkClient = createClerkClient({ secretKey });
     const clerkUsuario = await clerkClient.users.getUser(claims.sub);
     const emailPrimario = clerkUsuario.emailAddresses.find(
@@ -590,9 +607,20 @@ export class AuthService {
       );
     }
 
+    // 1) Ya vinculada: por el ID de Google, no por el correo.
     let usuario = await this.usuarioRepo.findOne({
-      where: { email, activo: true },
+      where: { clerkUserId: claims.sub, activo: true },
     });
+    // 2) Una cuenta con ese correo: se vincula solo si su correo ya se
+    //    demostró; si no, podría ser de otra persona que lo registró.
+    if (!usuario) {
+      const conEseCorreo = await this.usuarioRepo.findOne({
+        where: { email, activo: true },
+      });
+      if (conEseCorreo) {
+        usuario = await this.vincularConGoogle(conEseCorreo, claims.sub);
+      }
+    }
 
     if (!usuario) {
       const nombre =
@@ -613,7 +641,7 @@ export class AuthService {
           if (!yaCreado.activo) {
             throw new UnauthorizedException('Usuario desactivado');
           }
-          return yaCreado;
+          return this.vincularConGoogle(yaCreado, claims.sub, manager);
         }
 
         const tenant = tenantRepo.create({
@@ -633,6 +661,9 @@ export class AuthService {
           // la base solo por este caso.
           passwordHash: await this.hashPassword(randomUUID()),
           rol: Rol.ADMIN,
+          // Google ya verificó el correo; la cuenta queda atada a su ID.
+          clerkUserId: claims.sub,
+          emailVerificadoEn: new Date(),
           // Al lado de "Continuar con Google" se avisa que continuar es
           // aceptar los términos y la política de privacidad.
           terminosAceptadosEn: new Date(),
@@ -642,10 +673,13 @@ export class AuthService {
     }
 
     // Con Google también: la verificación en dos pasos es de la cuenta.
-    if (usuario.dosPasosActivoDesde) return this.desafio(usuario, 'google');
+    if (usuario.dosPasosActivoDesde) {
+      return this.desafio(usuario, 'google', verificadoEn);
+    }
 
+    const tokens = await this.emitirTokens(usuario, contexto, verificadoEn);
     await this.seguridad.registrar('ingreso_google', { usuario, contexto });
-    return this.emitirTokens(usuario, contexto);
+    return tokens;
   }
 
   /**
@@ -773,6 +807,34 @@ export class AuthService {
   }
 
   /**
+   * Vincula una cuenta existente con la cuenta de Google que acaba de
+   * entrar, solo si el correo de la cuenta ya se demostró. Si no, quien
+   * entra con Google tiene que entrar con la contraseña o recuperarla (el
+   * enlace llega a su correo y deja afuera a quien la haya registrado).
+   */
+  private async vincularConGoogle(
+    usuario: Usuario,
+    clerkUserId: string,
+    manager: EntityManager = this.dataSource.manager,
+  ): Promise<Usuario> {
+    if (usuario.clerkUserId && usuario.clerkUserId !== clerkUserId) {
+      throw new ConflictException(
+        'Esta cuenta ya está vinculada a otra cuenta de Google.',
+      );
+    }
+    if (!usuario.emailVerificadoEn) {
+      throw new ConflictException(
+        'Ya hay una cuenta de KontaGo con este correo. Entra con tu contraseña; si no la creaste tú o no la recuerdas, usa "¿Olvidaste tu contraseña?" y después podrás entrar con Google.',
+      );
+    }
+    if (!usuario.clerkUserId) {
+      await manager.getRepository(Usuario).update(usuario.id, { clerkUserId });
+      usuario.clerkUserId = clerkUserId;
+    }
+    return usuario;
+  }
+
+  /**
    * Corta todas las sesiones de un usuario (lo desactivaron, le cambiaron
    * la contraseña). Sus tokens dejan de servir en el próximo pedido.
    */
@@ -781,11 +843,18 @@ export class AuthService {
     motivo: MotivoRevocacion,
     manager: EntityManager = this.dataSource.manager,
   ): Promise<void> {
+    // Primero la marca (toma la fila del usuario): un ingreso que ya había
+    // verificado la contraseña espera, o encuentra la marca y se rechaza.
+    // Después se cortan las sesiones que ya existían.
+    const ahora = new Date();
+    await manager
+      .getRepository(Usuario)
+      .update(usuarioId, { sesionesValidasDesde: ahora });
     await manager
       .getRepository(Sesion)
       .update(
         { usuarioId, revocadaEn: IsNull() },
-        { revocadaEn: new Date(), motivoRevocacion: motivo },
+        { revocadaEn: ahora, motivoRevocacion: motivo },
       );
   }
 
@@ -810,22 +879,46 @@ export class AuthService {
     return new Date(Date.now() + segundos * 1000);
   }
 
-  /** Inicio de sesión: una sesión nueva y su primer par de tokens. */
+  /**
+   * Inicio de sesión: una sesión nueva y su primer par de tokens.
+   *
+   * `verificadoEn`: cuándo se comprobó la contraseña (o Google). Si desde
+   * entonces se cortaron las sesiones de la cuenta (le cambiaron la
+   * contraseña, la desactivaron), no se crea: quien la conocía queda
+   * afuera aunque su ingreso ya estuviera en curso. Se lee la cuenta con
+   * bloqueo compartido, así un cambio concurrente espera o ya se ve.
+   */
   private async emitirTokens(
     usuario: Usuario,
     contexto: ContextoPedido = {},
+    verificadoEn: Date = new Date(),
   ): Promise<TokenPair> {
-    const sesionRepo = this.dataSource.getRepository(Sesion);
-    const sesion = await sesionRepo.save(
-      sesionRepo.create({
-        usuarioId: usuario.id,
-        tenantId: usuario.tenantId,
-        jtiActual: randomUUID(),
-        expiraEn: this.vencimientoDeSesion(),
-        ip: contexto.ip?.slice(0, 64) ?? null,
-        userAgent: contexto.userAgent?.slice(0, 200) ?? null,
-      }),
-    );
+    const sesion = await this.dataSource.transaction(async (manager) => {
+      const cuenta = await manager.getRepository(Usuario).findOne({
+        where: { id: usuario.id, activo: true },
+        lock: { mode: 'pessimistic_read' },
+      });
+      if (!cuenta) throw new UnauthorizedException('Usuario desactivado');
+      if (
+        cuenta.sesionesValidasDesde &&
+        cuenta.sesionesValidasDesde > verificadoEn
+      ) {
+        throw new UnauthorizedException(
+          'Tu contraseña o tu acceso cambió mientras ingresabas. Vuelve a ingresar.',
+        );
+      }
+      const sesionRepo = manager.getRepository(Sesion);
+      return sesionRepo.save(
+        sesionRepo.create({
+          usuarioId: usuario.id,
+          tenantId: usuario.tenantId,
+          jtiActual: randomUUID(),
+          expiraEn: this.vencimientoDeSesion(),
+          ip: contexto.ip?.slice(0, 64) ?? null,
+          userAgent: contexto.userAgent?.slice(0, 200) ?? null,
+        }),
+      );
+    });
     return this.firmarTokens(usuario, sesion);
   }
 

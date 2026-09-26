@@ -43,6 +43,7 @@ import {
 import { revisarCantidad } from '../productos/cantidad-del-producto';
 import {
   CantidadAAnularInvalidaError,
+  CantidadSinImporteError,
   FaltaMontoRecibidoError,
   LineaDeOtraVentaError,
   MontoRecibidoInsuficienteError,
@@ -197,8 +198,13 @@ export class VentasService {
       // otra (deadlock) y Postgres aborta una de las dos. Con orden fijo
       // la segunda simplemente espera. Además cada producto se bloquea
       // una sola vez aunque aparezca en varias líneas.
+      // Una línea por producto: si llega repetido se suman las cantidades
+      // y se cobra el total una sola vez. Redondear cada pedacito por
+      // separado dejaba cobrar $0 partiendo una venta por peso en muchas
+      // líneas mínimas (cada una redondeada a cero centavos).
+      const lineas = juntarPorProducto(dto.items);
       const idsOrdenados = [
-        ...new Set(dto.items.map((linea) => linea.productoId)),
+        ...new Set(lineas.map((linea) => linea.productoId)),
       ].sort();
       const productos = new Map<string, Producto>();
       for (const id of idsOrdenados) {
@@ -215,7 +221,7 @@ export class VentasService {
         productos.set(id, producto);
       }
 
-      for (const linea of dto.items) {
+      for (const linea of lineas) {
         const producto = productos.get(linea.productoId)!;
         // Lo que va por unidad, en enteros; lo que va por peso, con decimales.
         revisarCantidad(producto, linea.cantidad);
@@ -241,6 +247,10 @@ export class VentasService {
           producto.precioVentaCentavos,
           linea.cantidad,
         );
+        // Tan poco que no llega a un centavo: no se regala mercadería.
+        if (subtotalCentavos === 0 && producto.precioVentaCentavos > 0) {
+          throw new CantidadSinImporteError(producto.nombre);
+        }
         totalCentavos += subtotalCentavos;
 
         const item = new VentaItem();
@@ -844,6 +854,23 @@ function serieDiaria(
     serie.push({ etiqueta, centavos: porDia.get(etiqueta) ?? 0 });
   }
   return serie;
+}
+
+/** Las líneas del pedido con cada producto una sola vez (cantidades sumadas). */
+function juntarPorProducto(
+  items: { productoId: string; cantidad: number }[],
+): { productoId: string; cantidad: number }[] {
+  const porProducto = new Map<string, number>();
+  for (const { productoId, cantidad } of items) {
+    porProducto.set(
+      productoId,
+      sumar(porProducto.get(productoId) ?? 0, cantidad),
+    );
+  }
+  return [...porProducto].map(([productoId, cantidad]) => ({
+    productoId,
+    cantidad,
+  }));
 }
 
 /**

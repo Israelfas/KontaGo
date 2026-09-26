@@ -2,6 +2,11 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { DataSource } from 'typeorm';
+// El módulo real (no la copia del import): así el espía llega al servicio.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const bcryptModulo = require('bcrypt') as {
+  compare: (a: string, b: string) => Promise<boolean>;
+};
 import {
   CLAVE,
   cliente,
@@ -204,5 +209,41 @@ describe('Sesiones (login, renovación y cierre)', () => {
     const tienda = await crearTienda(app);
     await renovar(tienda.accessToken).expect(401);
     await perfil(tienda.refreshToken).expect(401);
+  });
+  it('un ingreso en curso cuando el admin cambia la contraseña no queda con sesión', async () => {
+    const tienda = await crearTienda(app);
+    const cajero = await crearCajero(app, tienda.accessToken);
+
+    // El ingreso del cajero se detiene justo al comparar la contraseña
+    // vieja (el momento en que ya leyó la cuenta).
+    let avisarQueLlego!: () => void;
+    const llego = new Promise<void>((r) => (avisarQueLlego = r));
+    let soltar!: () => void;
+    const pausa = new Promise<void>((r) => (soltar = r));
+    const original = bcryptModulo.compare.bind(bcryptModulo) as (
+      a: string,
+      b: string,
+    ) => Promise<boolean>;
+    const espia = jest
+      .spyOn(bcryptModulo, 'compare')
+      .mockImplementationOnce(async (a: string, b: string) => {
+        avisarQueLlego();
+        await pausa;
+        return original(a, b);
+      });
+
+    const ingreso = cliente(app)
+      .post('/auth/login', { email: cajero.email, password: CLAVE })
+      .then((r) => r);
+    await llego;
+    // Mientras tanto, el admin le cambia la contraseña.
+    await cliente(app, tienda.accessToken)
+      .patch(`/usuarios/${cajero.id}/password`, { password: 'nueva-clave-123' })
+      .expect(200);
+    soltar();
+
+    const res = await ingreso;
+    espia.mockRestore();
+    expect(res.status).toBe(401);
   });
 });

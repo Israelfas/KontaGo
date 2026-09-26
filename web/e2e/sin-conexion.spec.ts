@@ -1,5 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
-import { API, consultar, entrarComo, monto, type Sesion } from './ayudas';
+import {
+  API,
+  consultar,
+  entrarComo,
+  monto,
+  ponerCookieDeSesion,
+  tokensDe,
+  type Sesion,
+} from './ayudas';
 
 /*
  * Vender sin internet: se corta la red con la caja abierta, se sigue
@@ -115,5 +123,39 @@ test.describe('Vender sin internet', () => {
     expect(await ventasDeHoy(sesion)).toBe(antes);
 
     await abrirCajaSiHaceFalta(sesion);
+  });
+  test('si entra otra cuenta, las ventas pendientes no se mandan con ella', async ({ page }) => {
+    const admin = await tokensDe('admin');
+    const { turno } = await consultar<{ turno: unknown }>('/caja/actual', admin);
+    // Con la caja del admin abierta, una venta mandada con su cuenta pasaría.
+    if (!turno) await pedir('/caja/abrir', admin, { fondoInicialCentavos: 0 });
+    try {
+      const antes = await ventasDeHoy(admin);
+      await venderSinRed(page);
+      await cobrarCoca(page, coca);
+
+      // Sin red, se corta la sesión del cajero y en este navegador queda
+      // la del admin (entró otra persona).
+      await pedir('/auth/cerrar-sesiones', sesion, {});
+      const nueva = await fetch(`${API}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'demo@kontago.test', password: 'demo1234' }),
+      });
+      await ponerCookieDeSesion(page.context(), ((await nueva.json()) as Sesion).refreshToken);
+
+      await page.context().setOffline(false);
+      // La venta del cajero sigue guardada para él y no entró como del admin.
+      await page.waitForTimeout(2500);
+      expect(await ventasDeHoy(admin)).toBe(antes);
+      const guardadas = await page.evaluate(() =>
+        Object.entries(localStorage)
+          .filter(([k]) => k.startsWith('kontago-pendientes-'))
+          .map(([, v]) => (JSON.parse(v) as unknown[]).length),
+      );
+      expect(guardadas).toContain(1);
+    } finally {
+      if (!turno) await pedir('/caja/cerrar', admin, { efectivoContadoCentavos: 0 });
+    }
   });
 });

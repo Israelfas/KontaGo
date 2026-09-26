@@ -26,6 +26,7 @@ import type {
 import type { UnidadDeVenta } from './cantidad';
 import type { ActividadDeCuenta } from './actividad';
 import { Directory, File, Paths } from 'expo-file-system';
+import { cuentaDelToken } from './jwt';
 
 // El celular no puede usar "localhost" — eso apuntaría al propio
 // celular, no a la PC. Antes esto se configuraba a mano en
@@ -197,6 +198,19 @@ export class SinConexionError extends Error {
  */
 export class RespuestaIncompletaError extends ApiError {}
 
+/**
+ * Al renovar la sesión volvió la de OTRA cuenta (en otra pestaña o en este
+ * mismo equipo entró otra persona). El pedido no se reenvía: haría con la
+ * cuenta nueva algo que pidió la anterior (una venta pendiente, por
+ * ejemplo, quedaría en la caja de otro).
+ */
+export class SesionDeOtraCuentaError extends Error {
+  constructor() {
+    super('La sesión cambió a otra cuenta.');
+    this.name = 'SesionDeOtraCuentaError';
+  }
+}
+
 /** fetch, pero sin red avisa con SinConexionError (y no un TypeError suelto). */
 async function pedir(url: string, opciones: RequestInit): Promise<Response> {
   try {
@@ -234,6 +248,9 @@ async function apiFetch<T>(
   if (response.status === 401 && token) {
     const nuevoToken = await refrescarUnaVez();
     if (nuevoToken) {
+      if (cuentaDelToken(nuevoToken) !== cuentaDelToken(token)) {
+        throw new SesionDeOtraCuentaError();
+      }
       fetchOptions = construirOpciones(nuevoToken);
       response = await pedir(`${API_URL}${path}`, fetchOptions);
     }
@@ -681,6 +698,9 @@ export async function descargarReporteExcel(token: string, rango: RangoDeFechas)
     if (!/\b401\b/.test(String(err))) throw errorDeDescarga(err);
     const nuevoToken = await refrescarUnaVez();
     if (!nuevoToken) throw new ApiError('Tu sesión venció. Vuelve a entrar.', 401);
+    if (cuentaDelToken(nuevoToken) !== cuentaDelToken(token)) {
+      throw new SesionDeOtraCuentaError();
+    }
     try {
       return await bajar(nuevoToken);
     } catch (reintento) {

@@ -69,17 +69,27 @@ export class TurnoCaja {
 
   // Congelados al cerrar: lo que el sistema dice que tiene que haber y lo
   // que se contó. La diferencia es contado − esperado (negativa = falta).
+  // bigint: una suma de efectivo no tiene techo de 32 bits. Postgres lo
+  // devuelve como texto; en centavos cabe de sobra en un number.
   @Column({
     name: 'efectivo_esperado_centavos',
-    type: 'integer',
+    type: 'bigint',
     nullable: true,
+    transformer: {
+      to: (v: number | null | undefined) => v,
+      from: (v: string | null) => (v === null ? null : Number(v)),
+    },
   })
   efectivoEsperadoCentavos: number | null;
 
   @Column({
     name: 'efectivo_contado_centavos',
-    type: 'integer',
+    type: 'bigint',
     nullable: true,
+    transformer: {
+      to: (v: number | null | undefined) => v,
+      from: (v: string | null) => (v === null ? null : Number(v)),
+    },
   })
   efectivoContadoCentavos: number | null;
 
