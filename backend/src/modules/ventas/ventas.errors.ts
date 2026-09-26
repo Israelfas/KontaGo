@@ -62,6 +62,14 @@ export class CantidadAAnularInvalidaError extends BadRequestException {
   }
 }
 
+export class PeriodoMuyGrandeError extends BadRequestException {
+  constructor() {
+    super(
+      'Este período tiene demasiadas ventas para un solo Excel. Elige menos días (por ejemplo, un mes).',
+    );
+  }
+}
+
 export class CantidadSinImporteError extends BadRequestException {
   constructor(nombre: string) {
     super(

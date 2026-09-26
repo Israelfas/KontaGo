@@ -15,13 +15,15 @@ export class NotificacionesController {
   /**
    * Dispara manualmente el correo de vencimientos para el tenant actual,
    * sin esperar al cron de las 8am. Pensado para probar la configuración
-   * de SMTP durante desarrollo/deploy, no para uso operativo diario.
+   * de SMTP durante desarrollo/deploy, no para uso operativo diario: le
+   * llega solo a quien lo pide, y una vez por hora por tienda.
    */
   @Post('vencimientos/enviar-ahora')
   @Roles(Rol.ADMIN)
   enviarAhora(@CurrentUser() user: AuthenticatedUser) {
-    return this.notificacionesService.enviarNotificacionesDeVencimiento(
+    return this.notificacionesService.enviarPrueba(
       user.tenantId,
+      user.usuarioId,
     );
   }
 }

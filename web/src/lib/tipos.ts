@@ -11,6 +11,7 @@ export interface Producto {
   codigoBarras: string;
   nombre: string;
   categoria: string | null;
+  // Costo y proveedor: solo le llegan al admin (el cajero no los recibe).
   proveedor: string | null;
   precioVentaCentavos: number;
   costoUnitarioCentavos: number;

@@ -14,7 +14,13 @@ import {
   TurnoNoEncontradoError,
   TurnoYaCerradoError,
 } from './caja.errors';
-import { cuentasDelTurno, registrarMovimiento, turnoAbiertoDe } from './turnos';
+import {
+  cuentasDeTurnos,
+  cuentasDelTurno,
+  registrarMovimiento,
+  turnoAbiertoDe,
+  type CuentasDelTurno,
+} from './turnos';
 import { Rol } from '../../common/enums/rol.enum';
 import type { AuthenticatedUser } from '../auth/interfaces/jwt-payload.interface';
 import type { RangoFechas } from '../ventas/rango-fechas';
@@ -145,9 +151,7 @@ export class CajaService {
       )
       .orderBy('turno.abiertoEn', 'DESC')
       .getMany();
-    return Promise.all(
-      turnos.map((turno) => this.aDto(this.dataSource.manager, turno, user)),
-    );
+    return this.aDtos(this.dataSource.manager, turnos, user);
   }
 
   private async cerrar(
@@ -173,15 +177,56 @@ export class CajaService {
     turno: TurnoCaja,
     user: AuthenticatedUser,
   ): Promise<TurnoDto> {
-    const [cuentas, movimientos, nombres] = await Promise.all([
-      cuentasDelTurno(manager, turno),
-      manager.getRepository(MovimientoCaja).find({
-        where: { turnoId: turno.id },
-        relations: { usuario: true },
-        order: { createdAt: 'ASC' },
-      }),
-      this.nombres(manager, [turno.usuarioId, turno.cerradoPorId]),
-    ]);
+    return (await this.aDtos(manager, [turno], user))[0];
+  }
+
+  /**
+   * Varios turnos con sus cuentas, movimientos y nombres: tres consultas
+   * en total, las haya o no muchos (ver cuentasDeTurnos).
+   */
+  private async aDtos(
+    manager: EntityManager,
+    turnos: TurnoCaja[],
+    user: AuthenticatedUser,
+  ): Promise<TurnoDto[]> {
+    if (turnos.length === 0) return [];
+    const ids = turnos.map((turno) => turno.id);
+    const cuentas = await cuentasDeTurnos(manager, turnos);
+    const movimientos = await manager
+      .getRepository(MovimientoCaja)
+      .createQueryBuilder('movimiento')
+      .leftJoinAndSelect('movimiento.usuario', 'usuario')
+      .where('movimiento.turnoId = ANY(:ids)', { ids })
+      .orderBy('movimiento.createdAt', 'ASC')
+      .getMany();
+    const nombres = await this.nombres(
+      manager,
+      turnos.flatMap((turno) => [turno.usuarioId, turno.cerradoPorId]),
+    );
+    const movimientosPorTurno = new Map<string, MovimientoCaja[]>();
+    for (const movimiento of movimientos) {
+      const lista = movimientosPorTurno.get(movimiento.turnoId) ?? [];
+      lista.push(movimiento);
+      movimientosPorTurno.set(movimiento.turnoId, lista);
+    }
+    return turnos.map((turno) =>
+      this.armarDto(
+        turno,
+        cuentas.get(turno.id)!,
+        movimientosPorTurno.get(turno.id) ?? [],
+        nombres,
+        user,
+      ),
+    );
+  }
+
+  private armarDto(
+    turno: TurnoCaja,
+    cuentas: CuentasDelTurno,
+    movimientos: MovimientoCaja[],
+    nombres: Map<string, string>,
+    user: AuthenticatedUser,
+  ): TurnoDto {
     const cerrado = turno.cerradoEn !== null;
     // Conteo a ciegas: con el turno abierto, el cajero no ve cuánto
     // efectivo debería haber. El admin sí, siempre.

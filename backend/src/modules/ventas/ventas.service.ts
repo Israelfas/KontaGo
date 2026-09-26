@@ -47,6 +47,7 @@ import {
   FaltaMontoRecibidoError,
   LineaDeOtraVentaError,
   MontoRecibidoInsuficienteError,
+  PeriodoMuyGrandeError,
   ProductoNoEncontradoError,
   StockInsuficienteError,
   VentaDeOtroDiaError,
@@ -401,65 +402,114 @@ export class VentasService {
    *
    * Se calcula en vivo sobre las ventas del período, reutilizando la misma
    * fórmula de ganancia e IVA que el resto (una sola fuente de verdad).
-   * Para un minimarket, 92 días son unos pocos miles de ventas: liviano.
-   * Si el volumen crece mucho (cadenas, multi-sucursal), el paso siguiente
-   * es una tabla agregada por día (riesgo #4 del spec), no subir el tope.
+   * Las ventas se leen por tandas y se van sumando: aunque el período
+   * tenga cientos de miles de líneas, en memoria hay solo una tanda (antes
+   * se cargaba todo junto en el único servidor, el de todas las tiendas).
    */
   async obtenerResumen(
     tenantId: string,
     rango: RangoFechas,
   ): Promise<ResumenPeriodoDto> {
-    const ventas = await this.dataSource
-      .getRepository(Venta)
-      .createQueryBuilder('venta')
-      .leftJoinAndSelect('venta.items', 'item')
-      .leftJoinAndSelect('item.producto', 'producto')
-      .where('venta.tenantId = :tenantId', { tenantId })
-      .andWhere('venta.createdAt >= :inicio', { inicio: rango.inicio })
-      .andWhere('venta.createdAt < :fin', { fin: rango.finExclusivo })
-      .getMany();
-
     const neto = (venta: Venta) =>
       venta.totalCentavos - venta.totalAnuladoCentavos;
     const agrupadoPor = rango.dias === 1 ? 'hora' : 'dia';
+
+    const suma = {
+      cantidadVentas: 0,
+      ingresoBrutoCentavos: 0,
+      gananciaCentavos: 0,
+      ivaCentavos: 0,
+      anuladoCentavos: 0,
+      efectivoCentavos: 0,
+      transferenciaCentavos: 0,
+      fiadoCentavos: 0,
+    };
+    const porHora = new Map<number, number>();
+    const porDia = new Map<string, number>();
+    const porProducto = new Map<string, ProductoVendido>();
+
+    for await (const ventas of this.ventasPorTandas(tenantId, rango)) {
+      for (const venta of ventas) {
+        const cobrado = neto(venta);
+        if (cobrado > 0) suma.cantidadVentas++;
+        suma.ingresoBrutoCentavos += cobrado;
+        suma.gananciaCentavos += this.calcularGananciaCentavos(venta);
+        suma.ivaCentavos += this.calcularIvaCentavos(venta);
+        suma.anuladoCentavos += venta.totalAnuladoCentavos;
+        // Lo cobrado, separado por cómo se pagó (el fiado: vendido pero
+        // no cobrado todavía).
+        if (venta.metodoPago === MetodoPago.EFECTIVO) {
+          suma.efectivoCentavos += cobrado;
+        } else if (venta.metodoPago === MetodoPago.TRANSFERENCIA) {
+          suma.transferenciaCentavos += cobrado;
+        } else if (venta.metodoPago === MetodoPago.FIADO) {
+          suma.fiadoCentavos += cobrado;
+        }
+        const hora = venta.createdAt.getHours();
+        porHora.set(hora, (porHora.get(hora) ?? 0) + cobrado);
+        const dia = fechaLocal(venta.createdAt);
+        porDia.set(dia, (porDia.get(dia) ?? 0) + cobrado);
+        sumarVendidos(porProducto, venta);
+      }
+    }
 
     return {
       fecha: rango.desde,
       desde: rango.desde,
       hasta: rango.hasta,
       dias: rango.dias,
-      cantidadVentas: ventas.filter((venta) => neto(venta) > 0).length,
-      ingresoBrutoCentavos: ventas.reduce((acc, venta) => acc + neto(venta), 0),
-      gananciaCentavos: ventas.reduce(
-        (acc, venta) => acc + this.calcularGananciaCentavos(venta),
-        0,
-      ),
-      ivaCentavos: ventas.reduce(
-        (acc, venta) => acc + this.calcularIvaCentavos(venta),
-        0,
-      ),
-      anuladoCentavos: ventas.reduce(
-        (acc, venta) => acc + venta.totalAnuladoCentavos,
-        0,
-      ),
-      // Lo cobrado, separado por cómo se pagó.
-      efectivoCentavos: ventas
-        .filter((venta) => venta.metodoPago === MetodoPago.EFECTIVO)
-        .reduce((acc, venta) => acc + neto(venta), 0),
-      transferenciaCentavos: ventas
-        .filter((venta) => venta.metodoPago === MetodoPago.TRANSFERENCIA)
-        .reduce((acc, venta) => acc + neto(venta), 0),
-      // Vendido pero no cobrado todavía.
-      fiadoCentavos: ventas
-        .filter((venta) => venta.metodoPago === MetodoPago.FIADO)
-        .reduce((acc, venta) => acc + neto(venta), 0),
+      ...suma,
       agrupadoPor,
       serie:
         agrupadoPor === 'hora'
-          ? serieHoraria(ventas, neto)
-          : serieDiaria(ventas, neto, rango),
-      topProductos: masVendidos(ventas),
+          ? serieHoraria(porHora)
+          : serieDiaria(porDia, rango),
+      topProductos: masVendidos(porProducto),
     };
+  }
+
+  /**
+   * Las ventas del período con sus líneas (y el producto de cada una), de a
+   * VENTAS_POR_TANDA. En el orden de sus ids: para sumar no importa el
+   * orden, y el id sirve para seguir desde la última sin repetir ninguna.
+   */
+  private async *ventasPorTandas(
+    tenantId: string,
+    rango: RangoFechas,
+  ): AsyncGenerator<Venta[]> {
+    let ultimoId: string | null = null;
+    for (;;) {
+      const consulta = this.dataSource
+        .getRepository(Venta)
+        .createQueryBuilder('venta')
+        .where('venta.tenantId = :tenantId', { tenantId })
+        .andWhere('venta.createdAt >= :inicio', { inicio: rango.inicio })
+        .andWhere('venta.createdAt < :fin', { fin: rango.finExclusivo });
+      if (ultimoId) consulta.andWhere('venta.id > :ultimoId', { ultimoId });
+      const ventas = await consulta
+        .orderBy('venta.id', 'ASC')
+        .take(VENTAS_POR_TANDA)
+        .getMany();
+      if (ventas.length === 0) return;
+
+      const items = await this.dataSource
+        .getRepository(VentaItem)
+        .createQueryBuilder('item')
+        .leftJoinAndSelect('item.producto', 'producto')
+        .where('item.ventaId = ANY(:ids)', { ids: ventas.map((v) => v.id) })
+        .getMany();
+      const porVenta = new Map<string, VentaItem[]>();
+      for (const item of items) {
+        const lista = porVenta.get(item.ventaId) ?? [];
+        lista.push(item);
+        porVenta.set(item.ventaId, lista);
+      }
+      for (const venta of ventas) venta.items = porVenta.get(venta.id) ?? [];
+
+      yield ventas;
+      if (ventas.length < VENTAS_POR_TANDA) return;
+      ultimoId = ventas[ventas.length - 1].id;
+    }
   }
 
   /** Resumen de hoy (lo que usa /ventas/resumen-dia). */
@@ -509,13 +559,25 @@ export class VentasService {
 
   /**
    * Todas las ventas de un período, de la más vieja a la más nueva, con su
-   * vendedor y sus productos: lo que necesita el reporte en Excel. Sin
-   * paginar: 92 días de un minimarket son unos pocos miles de ventas.
+   * vendedor y sus productos: lo que necesita el reporte en Excel. El
+   * archivo se arma entero en memoria, así que hay un tope de líneas: 92
+   * días de un minimarket son unos pocos miles; más de LINEAS_POR_EXCEL es
+   * mejor pedirlo por partes que dejar sin memoria al servidor de todos.
    */
   async ventasDelPeriodo(
     tenantId: string,
     rango: RangoFechas,
   ): Promise<Venta[]> {
+    const lineas = await this.dataSource
+      .getRepository(VentaItem)
+      .createQueryBuilder('item')
+      .innerJoin('item.venta', 'venta')
+      .where('venta.tenantId = :tenantId', { tenantId })
+      .andWhere('venta.createdAt >= :inicio', { inicio: rango.inicio })
+      .andWhere('venta.createdAt < :fin', { fin: rango.finExclusivo })
+      .getCount();
+    if (lineas > LINEAS_POR_EXCEL) throw new PeriodoMuyGrandeError();
+
     return this.dataSource
       .getRepository(Venta)
       .createQueryBuilder('venta')
@@ -601,7 +663,20 @@ export class VentasService {
   async obtenerHistorialDelDia(
     tenantId: string,
   ): Promise<VentaDelHistorialDto[]> {
-    const ventas = await this.dataSource
+    // Las más recientes: la caja busca la que acaba de cobrar. Las demás
+    // del día están en el historial del admin (paginado).
+    const ventas = await this.consultaDelHistorial(tenantId)
+      .andWhere('venta.createdAt >= :inicio', { inicio: inicioDelDia() })
+      .orderBy('venta.createdAt', 'DESC')
+      .addOrderBy('anulacion.createdAt', 'ASC')
+      .take(VENTAS_DEL_DIA)
+      .getMany();
+
+    return ventas.map(aVentaDelHistorial);
+  }
+
+  private consultaDelHistorial(tenantId: string) {
+    return this.dataSource
       .getRepository(Venta)
       .createQueryBuilder('venta')
       .leftJoinAndSelect('venta.usuario', 'vendedor')
@@ -610,13 +685,7 @@ export class VentasService {
       .leftJoinAndSelect('item.producto', 'producto')
       .leftJoinAndSelect('venta.anulaciones', 'anulacion')
       .leftJoinAndSelect('anulacion.usuario', 'anuladoPor')
-      .where('venta.tenantId = :tenantId', { tenantId })
-      .andWhere('venta.createdAt >= :inicio', { inicio: inicioDelDia() })
-      .orderBy('venta.createdAt', 'DESC')
-      .addOrderBy('anulacion.createdAt', 'ASC')
-      .getMany();
-
-    return ventas.map(aVentaDelHistorial);
+      .where('venta.tenantId = :tenantId', { tenantId });
   }
 
   /**
@@ -805,8 +874,11 @@ export class VentasService {
       );
     });
 
-    const historial = await this.obtenerHistorialDelDia(tenantId);
-    return historial.find((venta) => venta.id === ventaId)!;
+    const venta = await this.consultaDelHistorial(tenantId)
+      .andWhere('venta.id = :ventaId', { ventaId })
+      .orderBy('anulacion.createdAt', 'ASC')
+      .getOneOrFail();
+    return aVentaDelHistorial(venta);
   }
 }
 
@@ -814,16 +886,8 @@ export class VentasService {
  * Por hora, de la primera a la última hora con ventas. Las horas del medio
  * sin ventas van con 0: un hueco es un dato (a esa hora no se vendió).
  */
-function serieHoraria(
-  ventas: Venta[],
-  neto: (v: Venta) => number,
-): PuntoSerie[] {
-  if (ventas.length === 0) return [];
-  const porHora = new Map<number, number>();
-  for (const venta of ventas) {
-    const hora = venta.createdAt.getHours();
-    porHora.set(hora, (porHora.get(hora) ?? 0) + neto(venta));
-  }
+function serieHoraria(porHora: Map<number, number>): PuntoSerie[] {
+  if (porHora.size === 0) return [];
   const horas = [...porHora.keys()];
   const desde = Math.min(...horas);
   const hasta = Math.max(...horas);
@@ -835,15 +899,9 @@ function serieHoraria(
 
 /** Por día, todos los días del rango (con 0 los que no tuvieron ventas). */
 function serieDiaria(
-  ventas: Venta[],
-  neto: (v: Venta) => number,
+  porDia: Map<string, number>,
   rango: RangoFechas,
 ): PuntoSerie[] {
-  const porDia = new Map<string, number>();
-  for (const venta of ventas) {
-    const dia = fechaLocal(venta.createdAt);
-    porDia.set(dia, (porDia.get(dia) ?? 0) + neto(venta));
-  }
   const serie: PuntoSerie[] = [];
   for (
     const d = new Date(rango.inicio);
@@ -884,28 +942,40 @@ function importeVendido(item: VentaItem): number {
   );
 }
 
-/** Los 5 productos con más unidades vendidas (descontando lo anulado). */
-function masVendidos(ventas: Venta[]): ProductoVendido[] {
-  const porProducto = new Map<string, ProductoVendido>();
-  for (const venta of ventas) {
-    for (const item of venta.items) {
-      const unidades = restar(item.cantidad, item.cantidadAnulada);
-      if (unidades <= 0) continue;
-      const previo = porProducto.get(item.productoId) ?? {
-        nombre: item.producto?.nombre ?? 'Producto',
-        unidad: item.producto?.unidad ?? UnidadDeVenta.UNIDAD,
-        unidades: 0,
-        centavos: 0,
-      };
-      previo.unidades = sumar(previo.unidades, unidades);
-      previo.centavos += importeVendido(item);
-      porProducto.set(item.productoId, previo);
-    }
+/** Suma lo vendido de cada producto de la venta (descontando lo anulado). */
+function sumarVendidos(
+  porProducto: Map<string, ProductoVendido>,
+  venta: Venta,
+): void {
+  for (const item of venta.items) {
+    const unidades = restar(item.cantidad, item.cantidadAnulada);
+    if (unidades <= 0) continue;
+    const previo = porProducto.get(item.productoId) ?? {
+      nombre: item.producto?.nombre ?? 'Producto',
+      unidad: item.producto?.unidad ?? UnidadDeVenta.UNIDAD,
+      unidades: 0,
+      centavos: 0,
+    };
+    previo.unidades = sumar(previo.unidades, unidades);
+    previo.centavos += importeVendido(item);
+    porProducto.set(item.productoId, previo);
   }
+}
+
+/** Los 5 productos con más unidades vendidas. */
+function masVendidos(
+  porProducto: Map<string, ProductoVendido>,
+): ProductoVendido[] {
   return [...porProducto.values()]
     .sort((a, b) => b.unidades - a.unidades || b.centavos - a.centavos)
     .slice(0, 5);
 }
+
+// Topes de lo que se carga en memoria de una vez (ver obtenerResumen,
+// ventasDelPeriodo y obtenerHistorialDelDia).
+const VENTAS_POR_TANDA = 500;
+const LINEAS_POR_EXCEL = 50_000;
+const VENTAS_DEL_DIA = 500;
 
 function inicioDelDia(): Date {
   const inicio = new Date();

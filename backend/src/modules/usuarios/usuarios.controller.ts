@@ -10,6 +10,8 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { limiteDeIntentos } from '../../common/seguridad/limite-de-intentos';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -32,7 +34,11 @@ export class UsuariosController {
     return this.usuariosService.listar(user.tenantId);
   }
 
+  // Crear una cuenta o cambiarle la contraseña calcula un hash lento a
+  // propósito (bcrypt): con límite, nadie ocupa el servidor con eso.
   @Post()
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: limiteDeIntentos(10), ttl: 60_000 } })
   crear(@CurrentUser() user: AuthenticatedUser, @Body() dto: CrearUsuarioDto) {
     return this.usuariosService.crear(user.tenantId, dto);
   }
@@ -91,6 +97,8 @@ export class UsuariosController {
   }
 
   @Patch(':id/password')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: limiteDeIntentos(10), ttl: 60_000 } })
   cambiarPassword(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,

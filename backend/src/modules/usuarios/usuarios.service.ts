@@ -128,6 +128,12 @@ export class UsuariosService {
   }
 
   async crear(tenantId: string, dto: CrearUsuarioDto): Promise<UsuarioPublico> {
+    // El correo repetido se rechaza antes del hash: cada hash ocupa un
+    // hilo que también atiende los ingresos de todas las tiendas. (Adentro
+    // se vuelve a revisar, con el correo bloqueado.)
+    if (await this.usuarioRepo.exists({ where: { email: dto.email } })) {
+      throw new ConflictException('Ese email ya está registrado');
+    }
     const passwordHash = await this.authService.hashPassword(dto.password);
 
     const usuario = await this.dataSource.transaction(async (manager) => {

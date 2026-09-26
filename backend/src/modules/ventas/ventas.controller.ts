@@ -21,6 +21,7 @@ import { CrearVentaDto } from './dto/crear-venta.dto';
 import { AnularVentaDto } from './dto/anular-venta.dto';
 import { ListarVentasDto, RangoFechasDto } from './dto/consulta-ventas.dto';
 import { armarRango } from './rango-fechas';
+import { paraElRol } from '../productos/para-el-rol';
 
 @Controller('ventas')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -28,8 +29,20 @@ export class VentasController {
   constructor(private readonly ventasService: VentasService) {}
 
   @Post()
-  crear(@CurrentUser() user: AuthenticatedUser, @Body() dto: CrearVentaDto) {
-    return this.ventasService.crearVenta(user.tenantId, user.usuarioId, dto);
+  async crear(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CrearVentaDto,
+  ) {
+    const venta = await this.ventasService.crearVenta(
+      user.tenantId,
+      user.usuarioId,
+      dto,
+    );
+    // Cada línea guarda el costo del momento: el cajero no lo ve.
+    return {
+      ...venta,
+      items: venta.items.map((item) => paraElRol(user.rol, item)),
+    };
   }
 
   // Ingreso, ganancia e IVA del día: información del dueño, no del cajero.

@@ -673,7 +673,11 @@ const TIPO_EXCEL = 'application/vnd.openxmlformats-officedocument.spreadsheetml.
 /** downloadFileAsync solo trae el código HTTP en el mensaje: se traduce acá. */
 function errorDeDescarga(err: unknown): ApiError {
   const codigo = Number(/\b([45]\d\d)\b/.exec(String(err))?.[1] ?? 0);
-  if (codigo === 400) return new ApiError('Se pueden bajar hasta 92 días de una vez.', 400);
+  // El sistema no deja leer el motivo: puede ser el tope de días o que el
+  // período tenga demasiadas ventas para un solo archivo.
+  if (codigo === 400) {
+    return new ApiError('Elige menos días: se pueden bajar hasta 92, y menos si hay muchas ventas.', 400);
+  }
   if (codigo === 403) return new ApiError('Solo el administrador puede bajar el reporte.', 403);
   return new ApiError('No se pudo preparar el Excel. Revisa tu conexión y prueba de nuevo.', codigo);
 }

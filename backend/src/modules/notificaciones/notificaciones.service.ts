@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
@@ -22,9 +22,17 @@ function escaparHtml(texto: string): string {
     .replace(/'/g, '&#39;');
 }
 
+// Entre dos envíos de prueba de la misma tienda. Sin tope, una tienda
+// (crear una es gratis) podía mandar correos sin fin con el correo de
+// KontaGo, el mismo que manda los de recuperar contraseña de todos.
+const ESPERA_ENTRE_PRUEBAS_MS = 60 * 60_000;
+
 @Injectable()
 export class NotificacionesService {
   private readonly logger = new Logger(NotificacionesService.name);
+  // Última prueba por tienda. En memoria alcanza con una sola instancia
+  // del backend (igual que el límite de intentos de /auth).
+  private readonly ultimaPrueba = new Map<string, number>();
 
   constructor(
     @InjectRepository(Tenant)
@@ -56,8 +64,27 @@ export class NotificacionesService {
    * tenant puntual. Separado del cron para poder disparar manualmente
    * desde el endpoint de prueba sin esperar a las 8am.
    */
+  /** El correo de vencimientos de ahora, solo para el admin que lo pide. */
+  async enviarPrueba(
+    tenantId: string,
+    usuarioId: string,
+  ): Promise<{ enviado: boolean; cantidadProductos: number }> {
+    const ahora = Date.now();
+    const ultima = this.ultimaPrueba.get(tenantId);
+    if (ultima !== undefined && ahora - ultima < ESPERA_ENTRE_PRUEBAS_MS) {
+      throw new HttpException(
+        'Ya se envió una prueba hace poco. Puedes mandar otra dentro de una hora.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    // Se anota antes de enviar: dos pedidos juntos no pasan los dos.
+    this.ultimaPrueba.set(tenantId, ahora);
+    return this.enviarNotificacionesDeVencimiento(tenantId, usuarioId);
+  }
+
   async enviarNotificacionesDeVencimiento(
     tenantId: string,
+    soloParaUsuarioId?: string,
   ): Promise<{ enviado: boolean; cantidadProductos: number }> {
     const dias = this.config.get<number>('alertas.diasVencimientoDefault')!;
     const { porVencer } = await this.productosService.obtenerAlertas(
@@ -70,7 +97,12 @@ export class NotificacionesService {
     }
 
     const admins = await this.usuarioRepo.find({
-      where: { tenantId, rol: Rol.ADMIN, activo: true },
+      where: {
+        tenantId,
+        rol: Rol.ADMIN,
+        activo: true,
+        ...(soloParaUsuarioId ? { id: soloParaUsuarioId } : {}),
+      },
     });
     const destinatarios = admins.map((a) => a.email);
 

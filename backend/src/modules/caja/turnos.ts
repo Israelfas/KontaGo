@@ -94,23 +94,74 @@ export async function cuentasDelTurno(
   manager: EntityManager,
   turno: TurnoCaja,
 ): Promise<CuentasDelTurno> {
+  return (await cuentasDeTurnos(manager, [turno])).get(turno.id)!;
+}
+
+/**
+ * Lo mismo para muchos turnos (el listado, el Excel): dos consultas en
+ * total, no dos por turno. Con miles de turnos en el período, una consulta
+ * por turno ocupaba todas las conexiones a la base, que son de todas las
+ * tiendas.
+ */
+export async function cuentasDeTurnos(
+  manager: EntityManager,
+  turnos: TurnoCaja[],
+): Promise<Map<string, CuentasDelTurno>> {
+  const ids = turnos.map((turno) => turno.id);
+  if (ids.length === 0) return new Map();
   const ventas = await manager.query<
-    { metodo_pago: MetodoPago; cantidad: number; neto: string }[]
+    {
+      turno_id: string;
+      metodo_pago: MetodoPago;
+      cantidad: number;
+      neto: string;
+    }[]
   >(
-    `SELECT metodo_pago,
+    `SELECT turno_id, metodo_pago,
             count(*) FILTER (WHERE total_centavos > total_anulado_centavos)::int AS cantidad,
             coalesce(sum(total_centavos - total_anulado_centavos), 0)::bigint AS neto
-       FROM ventas WHERE turno_id = $1 GROUP BY metodo_pago`,
-    [turno.id],
+       FROM ventas WHERE turno_id = ANY($1) GROUP BY turno_id, metodo_pago`,
+    [ids],
   );
   const movimientos = await manager.query<
-    { tipo: TipoMovimientoCaja; monto: string }[]
+    { turno_id: string; tipo: TipoMovimientoCaja; monto: string }[]
   >(
-    `SELECT tipo, coalesce(sum(monto_centavos), 0)::bigint AS monto
-       FROM movimientos_caja WHERE turno_id = $1 GROUP BY tipo`,
-    [turno.id],
+    `SELECT turno_id, tipo, coalesce(sum(monto_centavos), 0)::bigint AS monto
+       FROM movimientos_caja WHERE turno_id = ANY($1) GROUP BY turno_id, tipo`,
+    [ids],
   );
 
+  const ventasPorTurno = agruparPorTurno(ventas);
+  const movimientosPorTurno = agruparPorTurno(movimientos);
+  return new Map(
+    turnos.map((turno) => [
+      turno.id,
+      armarCuentas(
+        turno,
+        ventasPorTurno.get(turno.id) ?? [],
+        movimientosPorTurno.get(turno.id) ?? [],
+      ),
+    ]),
+  );
+}
+
+function agruparPorTurno<T extends { turno_id: string }>(
+  filas: T[],
+): Map<string, T[]> {
+  const porTurno = new Map<string, T[]>();
+  for (const fila of filas) {
+    const lista = porTurno.get(fila.turno_id) ?? [];
+    lista.push(fila);
+    porTurno.set(fila.turno_id, lista);
+  }
+  return porTurno;
+}
+
+function armarCuentas(
+  turno: TurnoCaja,
+  ventas: { metodo_pago: MetodoPago; cantidad: number; neto: string }[],
+  movimientos: { tipo: TipoMovimientoCaja; monto: string }[],
+): CuentasDelTurno {
   // Sumas en bigint: con ::int, un turno con muchos ingresos pasaba de
   // 2.147.483.647 centavos y ya no se podía cerrar ni listar. Postgres
   // devuelve bigint como texto; en centavos cabe de sobra en un number.

@@ -20,6 +20,7 @@ import type { AuthenticatedUser } from '../auth/interfaces/jwt-payload.interface
 import { ProductosService } from './productos.service';
 import { CrearProductoDto } from './dto/crear-producto.dto';
 import { ActualizarProductoDto } from './dto/actualizar-producto.dto';
+import { paraElRol } from './para-el-rol';
 
 @Controller('productos')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -60,9 +61,11 @@ export class ProductosController {
     return this.productosService.reactivar(user.tenantId, id);
   }
 
+  // El cajero también consulta productos, pero sin costo ni proveedor.
   @Get()
-  listar(@CurrentUser() user: AuthenticatedUser) {
-    return this.productosService.listar(user.tenantId);
+  async listar(@CurrentUser() user: AuthenticatedUser) {
+    const productos = await this.productosService.listar(user.tenantId);
+    return productos.map((p) => paraElRol(user.rol, p));
   }
 
   @Get('dados-de-baja')
@@ -89,11 +92,11 @@ export class ProductosController {
         `No hay ningún producto con el código ${codigoBarras} en esta tienda`,
       );
     }
-    return producto;
+    return paraElRol(user.rol, producto);
   }
 
   @Get('alertas')
-  alertas(
+  async alertas(
     @CurrentUser() user: AuthenticatedUser,
     @Query('diasVencimiento') diasVencimientoRaw?: string,
   ) {
@@ -110,6 +113,14 @@ export class ProductosController {
         );
       }
     }
-    return this.productosService.obtenerAlertas(user.tenantId, dias);
+    const alertas = await this.productosService.obtenerAlertas(
+      user.tenantId,
+      dias,
+    );
+    return {
+      stockBajo: alertas.stockBajo.map((p) => paraElRol(user.rol, p)),
+      porVencer: alertas.porVencer.map((p) => paraElRol(user.rol, p)),
+      vencidos: alertas.vencidos.map((p) => paraElRol(user.rol, p)),
+    };
   }
 }
